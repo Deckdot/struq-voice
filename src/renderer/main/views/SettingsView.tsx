@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
-import { Plus, Trash2, KeyRound, Check, X, Keyboard } from "lucide-react";
+import { Plus, Trash2, KeyRound, Check, X, Keyboard, Mic } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { DictionaryEntry, Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
@@ -51,6 +51,15 @@ export function SettingsView(): JSX.Element {
   const [capturingPtt, setCapturingPtt] = useState(false);
   const [capturingToggle, setCapturingToggle] = useState(false);
   const [hotkeyMessage, setHotkeyMessage] = useState<string | null>(null);
+  const [devices, setDevices] = useState<readonly { deviceId: string; label: string }[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api.devices.list().then((result) => {
+      setDevices(result.devices);
+      setSelectedDeviceId(result.currentDeviceId ?? result.devices[0]?.deviceId ?? null);
+    });
+  }, [api]);
 
   useEffect(() => {
     void api.settings.get().then(({ settings: loaded }) => {
@@ -235,6 +244,32 @@ export function SettingsView(): JSX.Element {
             {keyMessage !== null && (
               <p className="text-xs text-text-muted">{keyMessage}</p>
             )}
+          </Section>
+
+          <Section title="Microphone">
+            <label className="flex items-center gap-2">
+              <Mic className="h-4 w-4 shrink-0 text-accent-text" aria-hidden="true" />
+              <select
+                value={selectedDeviceId ?? ""}
+                onChange={(event) => {
+                  const deviceId = event.target.value;
+                  setSelectedDeviceId(deviceId);
+                  api.devices.setDevice(deviceId);
+                }}
+                className="w-full rounded-md border border-border bg-bg-sunken px-3 py-1.5 text-sm text-text focus:border-border-focus focus:outline-none"
+              >
+                {devices.length === 0 && <option value="">No microphones found</option>}
+                {devices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs text-text-muted">
+              Persisted by device. Windows rotates device IDs across reboots, so a
+              label fallback keeps the choice stable.
+            </p>
           </Section>
 
           <Section title="Capture hotkey">

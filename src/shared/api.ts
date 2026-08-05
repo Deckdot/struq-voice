@@ -56,6 +56,10 @@ export interface MainWindowApi {
     set: (key: string) => Promise<{ ok: boolean; message?: string }>;
     clear: () => Promise<{ ok: boolean; message?: string }>;
   };
+  readonly devices: {
+    list: () => Promise<{ devices: readonly RecorderDevice[]; currentDeviceId: string | null }>;
+    setDevice: (deviceId: string) => void;
+  };
 }
 
 export interface OverlayWindowApi {
@@ -80,6 +84,14 @@ export interface RecorderWindowApi {
   }) => void;
   readonly sendLevels: (data: { bands: readonly number[]; level: number }) => void;
   readonly sendStreamState: (data: { live: boolean; reason?: string }) => void;
+  readonly onSetDevice: (callback: (deviceId: string) => void) => () => void;
+  readonly onGetDevices: (callback: () => void) => () => void;
+  readonly sendDevices: (devices: readonly RecorderDevice[]) => void;
+}
+
+export interface RecorderDevice {
+  readonly deviceId: string;
+  readonly label: string;
 }
 
 export type WindowApi = MainWindowApi | OverlayWindowApi | RecorderWindowApi;

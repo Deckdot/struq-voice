@@ -130,6 +130,16 @@ const api: MainWindowApi = {
         ok: boolean;
         message?: string;
       }>
+  },
+  devices: {
+    list: () =>
+      ipcRenderer.invoke(channels.devices.list) as Promise<{
+        devices: readonly { deviceId: string; label: string }[];
+        currentDeviceId: string | null;
+      }>,
+    setDevice: (deviceId: string) => {
+      ipcRenderer.send(channels.recorder.setDevice, { deviceId });
+    }
   }
 };
 

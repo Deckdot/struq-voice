@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { RecorderWindowApi } from "../shared/api";
+import type { RecorderDevice, RecorderWindowApi } from "../shared/api";
 import type { PreloadChannels } from "../shared/ipc";
 
 /**
@@ -47,6 +47,27 @@ const api: RecorderWindowApi = {
   },
   sendStreamState: (data: { live: boolean; reason?: string }) => {
     ipcRenderer.send(channels.recorder.streamState, data);
+  },
+  onSetDevice: (callback: (deviceId: string) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, deviceId: string): void => {
+      callback(deviceId);
+    };
+    ipcRenderer.on(channels.recorder.setDevice, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.recorder.setDevice, wrapped);
+    };
+  },
+  onGetDevices: (callback: () => void) => {
+    const wrapped = (): void => {
+      callback();
+    };
+    ipcRenderer.on(channels.recorder.getDevices, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.recorder.getDevices, wrapped);
+    };
+  },
+  sendDevices: (devices: readonly RecorderDevice[]) => {
+    ipcRenderer.send(channels.recorder.devices, devices);
   }
 };
 

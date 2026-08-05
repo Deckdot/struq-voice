@@ -52,6 +52,37 @@ export interface RecorderStreamState {
   readonly reason?: string;
 }
 
+/** Main to recorder: switch the microphone to another device. */
+export const recorderSetDeviceChannel = "recorder:set-device" as const;
+
+export interface RecorderSetDeviceRequest {
+  readonly deviceId: string;
+}
+
+/** Main to recorder: ask for the current audio input device list. */
+export const recorderGetDevicesChannel = "recorder:get-devices" as const;
+
+/** Recorder to main: the reply to the get-devices request. */
+export const recorderDevicesChannel = "recorder:devices" as const;
+
+export interface RecorderDevice {
+  readonly deviceId: string;
+  readonly label: string;
+}
+
+export interface RecorderDevicesEvent {
+  readonly devices: readonly RecorderDevice[];
+}
+
+/** Main window to main: request the current audio input device list. */
+export const devicesListChannel = "devices:list" as const;
+
+export interface DevicesListResult {
+  readonly devices: readonly RecorderDevice[];
+  /** The persisted deviceId, or null when the default is in use. */
+  readonly currentDeviceId: string | null;
+}
+
 /** Push channel: live capture levels, relayed to the overlay at 60Hz. */
 export const captureLevelsChangedChannel = "capture:levels-changed" as const;
 
@@ -202,7 +233,10 @@ export const PRELOAD_CHANNELS = {
     end: recorderEndCaptureChannel,
     data: recorderCaptureDataChannel,
     levels: recorderLevelsChannel,
-    streamState: recorderStreamStateChannel
+    streamState: recorderStreamStateChannel,
+    setDevice: recorderSetDeviceChannel,
+    getDevices: recorderGetDevicesChannel,
+    devices: recorderDevicesChannel
   },
   history: {
     list: historyListChannel,
@@ -217,6 +251,9 @@ export const PRELOAD_CHANNELS = {
     get: settingsGetChannel,
     update: settingsUpdateChannel,
     changed: settingsChangedChannel
+  },
+  devices: {
+    list: devicesListChannel
   },
   openRouterKey: {
     status: openRouterKeyStatusChannel,

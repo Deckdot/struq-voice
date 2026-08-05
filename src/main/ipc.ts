@@ -5,16 +5,19 @@ import type { SecretsStore } from "./store/secrets";
 import type { SettingsStore } from "./store/settings-store";
 import { migrateSettings } from "../shared/settings";
 import type {
+  DevicesListResult,
   HistoryDeleteRequest,
   HistoryListRequest,
   HistorySearchRequest,
   ModelsModelRequest,
   OpenRouterKeySetRequest,
+  RecorderDevice,
   SettingsUpdateRequest
 } from "../shared/ipc";
 import {
   appGetVersionChannel,
   clipboardCopyChannel,
+  devicesListChannel,
   historyClearChannel,
   historyDeleteChannel,
   historyListChannel,
@@ -27,6 +30,9 @@ import {
   openRouterKeyClearChannel,
   openRouterKeySetChannel,
   openRouterKeyStatusChannel,
+  recorderDevicesChannel,
+  recorderGetDevicesChannel,
+  recorderSetDeviceChannel,
   settingsChangedChannel,
   settingsGetChannel,
   settingsUpdateChannel,
@@ -117,6 +123,44 @@ export const registerIpcHandlers = (
   ipcMain.on(clipboardCopyChannel, (_event, text: string) => {
     clipboard.writeText(text);
   });
+
+  // Device list and selection relay through the recorder window, which owns
+  // the microphone and therefore the enumerated device labels.
+  const findRecorderWindow = (): BrowserWindow | undefined =>
+    BrowserWindow.getAllWindows().find((candidate) =>
+      candidate.webContents.getURL().includes("recorder/index.html"),
+    );
+
+  ipcMain.handle(devicesListChannel, async (): Promise<DevicesListResult> => {
+    const recorder = findRecorderWindow();
+    if (recorder === undefined) return { devices: [], currentDeviceId: null };
+    const devices = await new Promise<RecorderDevice[]>((resolve) => {
+      let settled = false;
+      const finish = (listed: RecorderDevice[]): void => {
+        if (!settled) {
+          settled = true;
+          ipcMain.removeListener(recorderDevicesChannel, onDevices);
+          resolve(listed);
+        }
+      };
+      const onDevices = (_event: Electron.IpcMainEvent, payload: { devices: readonly RecorderDevice[] }): void => {
+        finish([...payload.devices]);
+      };
+      ipcMain.on(recorderDevicesChannel, onDevices);
+      recorder.webContents.send(recorderGetDevicesChannel);
+      setTimeout(() => {
+        finish([]);
+      }, 1500);
+    });
+    return { devices, currentDeviceId: null };
+  });
+
+  ipcMain.on(
+    recorderSetDeviceChannel,
+    (_event, request: { deviceId: string }) => {
+      findRecorderWindow()?.webContents.send(recorderSetDeviceChannel, request.deviceId);
+    }
+  );
 
   ipcMain.handle(modelsListChannel, () => {
     const listed = models?.list();

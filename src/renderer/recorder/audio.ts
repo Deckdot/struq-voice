@@ -8,7 +8,7 @@
  * and not MediaRecorder (Opus/WebM that would need decoding).
  */
 
-import type { RecorderWindowApi } from "../../shared/api";
+import type { RecorderDevice, RecorderWindowApi } from "../../shared/api";
 import workletUrl from "./pcm-collector.worklet.js?url";
 
 const TARGET_SAMPLE_RATE = 16_000;
@@ -31,8 +31,49 @@ let current: AudioPipeline | null = null;
 let levelsTimer: ReturnType<typeof setInterval> | null = null;
 let monitorTimer: ReturnType<typeof setInterval> | null = null;
 let deviceChangeListenerAttached = false;
+let deviceListListenerAttached = false;
 
 export const initRecorderAudio = (api: RecorderWindowApi): void => {
+  // Device list requests: enumerate and reply through the bridge. Handled
+  // once per session, not per pipeline build.
+  if (!deviceListListenerAttached) {
+    deviceListListenerAttached = true;
+    api.onGetDevices(() => {
+      void listAudioDevices().then((devices) => {
+        api.sendDevices(devices);
+      });
+    });
+    api.onSetDevice((deviceId) => {
+      switchDevice(api, deviceId);
+    });
+  }
+  void buildPipeline(api);
+};
+
+const currentDeviceId = (): string | null =>
+  localStorage.getItem("struq.audio.deviceId");
+
+const persistDeviceId = (deviceId: string): void => {
+  localStorage.setItem("struq.audio.deviceId", deviceId);
+};
+
+/** Enumerate audio input devices, labels included once a stream exists. */
+export const listAudioDevices = async (): Promise<RecorderDevice[]> => {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return devices
+    .filter((device) => device.kind === "audioinput")
+    .map((device) => ({
+      deviceId: device.deviceId,
+      label: device.label.length > 0 ? device.label : device.deviceId
+    }));
+};
+
+/** Switch to another microphone and re-acquire the warm stream. */
+const switchDevice = (api: RecorderWindowApi, deviceId: string): void => {
+  if (currentDeviceId() === deviceId && current !== null) return;
+  persistDeviceId(deviceId);
+  api.sendStreamState({ live: false, reason: "Microphone device changed" });
+  teardown();
   void buildPipeline(api);
 };
 

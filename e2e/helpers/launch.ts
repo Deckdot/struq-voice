@@ -49,9 +49,17 @@ export async function launchApp(
   // Fresh userData per launch: tests never touch the real profile.
   const userData = mkdtempSync(join(tmpdir(), "struq-voice-e2e-"));
 
-  const args = [...(options.headless === false ? [] : ["--headless"]), "out/main/index.cjs"];
+  // When STRUQ_VOICE_PACKAGED is set, run against the packaged build
+  // (release/win-unpacked/Struq Voice.exe) instead of the dev output. This is
+  // the Phase 7 acceptance: the suite green against the packaged app, not
+  // just `electron-vite build`.
+  const packagedExe = process.env["STRUQ_VOICE_PACKAGED"];
+  const args = packagedExe !== undefined
+    ? [...(options.headless === false ? [] : ["--headless"])]
+    : [...(options.headless === false ? [] : ["--headless"]), "out/main/index.cjs"];
 
   const app = await _electron.launch({
+    ...(packagedExe !== undefined ? { executablePath: packagedExe } : {}),
     args,
     env: {
       ...(parentEnv as Record<string, string>),

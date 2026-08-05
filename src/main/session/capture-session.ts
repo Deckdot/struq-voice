@@ -20,6 +20,7 @@
 import type { CaptureState } from "../../shared/capture";
 import { INITIAL_CAPTURE_STATE } from "../../shared/capture";
 import { MOCK_ENGINE_ID } from "../../shared/engines";
+import type { CaptureAudio, CaptureAudioSource } from "./audio-source";
 
 export const SIMULATED_TRANSCRIPT =
   "This is a simulated transcript. Hold the hotkey anywhere in Windows and speak.";
@@ -35,6 +36,10 @@ export interface CaptureSessionOptions {
   readonly deliverHoldMs: number;
   /** How long error stays on screen before returning to idle (ms). */
   readonly errorHoldMs: number;
+  /** The audio source. Omitted in Phase 1, real or simulated from Phase 2. */
+  readonly source?: CaptureAudioSource;
+  /** Called with the captured audio before delivering. */
+  readonly onAudio?: (audio: CaptureAudio) => void;
 }
 
 export const DEFAULT_CAPTURE_OPTIONS: CaptureSessionOptions = {
@@ -84,6 +89,11 @@ export const createCaptureSession = (
     timers.clear();
   };
 
+  const delay = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
   const toIdle = (): void => {
     startedAt = null;
     clearTimers();
@@ -96,6 +106,13 @@ export const createCaptureSession = (
     schedule(0, () => {
       startedAt = Date.now();
       setState({ phase: "listening", startedAtMs: startedAt });
+      try {
+        options.source?.beginCapture();
+      } catch (error) {
+        fail("Microphone unavailable. Check the device and try again.");
+        void error;
+        return;
+      }
       // Stuck-key watchdog: if the keyup is eaten (sleep, alt-tab, crash),
       // force-stop instead of recording forever.
       schedule(options.maxCaptureMs, () => {
@@ -114,16 +131,45 @@ export const createCaptureSession = (
       toIdle();
       return;
     }
+    void finishCapture(startedAt);
+  };
+
+  // A function so the type checker cannot narrow: the phase CAN change
+  // while we await (listeners call cancel or fail), even though the
+  // control flow in this function looks sequential.
+  const currentPhase = (): CaptureState["phase"] => state.phase;
+
+  const finishCapture = async (captureStartedAt: number): Promise<void> => {
     setState({
       phase: "transcribing",
       engineId: MOCK_ENGINE_ID,
-      startedAtMs: startedAt
+      startedAtMs: captureStartedAt
     });
-    schedule(options.simulatedInferenceMs, () => {
-      setState({ phase: "delivering", text: SIMULATED_TRANSCRIPT, inserted: false });
-      schedule(options.deliverHoldMs, () => {
-        toIdle();
-      });
+
+    let audio: CaptureAudio | null = null;
+    if (options.source !== undefined) {
+      try {
+        audio = await options.source.endCapture();
+      } catch (error) {
+        fail("Microphone lost. Check the device connection and try again.", null);
+        void error;
+        return;
+      }
+    }
+
+    // The capture may have been cancelled or failed while we waited.
+    if (currentPhase() !== "transcribing") return;
+
+    if (audio !== null) {
+      options.onAudio?.(audio);
+    }
+
+    await delay(options.simulatedInferenceMs);
+    if (currentPhase() !== "transcribing") return;
+
+    setState({ phase: "delivering", text: SIMULATED_TRANSCRIPT, inserted: false });
+    schedule(options.deliverHoldMs, () => {
+      toIdle();
     });
   };
 

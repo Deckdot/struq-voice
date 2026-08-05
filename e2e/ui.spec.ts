@@ -170,6 +170,35 @@ test("models lists the full whisper catalog and filters by size", async () => {
   }
 });
 
+test("settings shows the update panel and the running version", async () => {
+  const { window, consoleErrors, close } = await launchApp();
+
+  try {
+    await dismissFirstRun(window);
+    await goTo(window, "Settings");
+
+    const updates = window
+      .locator("section")
+      .filter({ has: window.getByRole("heading", { name: "Updates" }) });
+    await expect(updates).toBeVisible();
+
+    // The running version comes from the main process, so an empty string here
+    // means the IPC never answered.
+    await expect(updates.getByText(/^Version \d/)).toBeVisible();
+
+    // Under e2e there is no updater, so the check is a no-op that must still
+    // leave the button usable rather than spinning forever.
+    const check = updates.getByRole("button", { name: "Check for updates" });
+    await expect(check).toBeVisible();
+    await check.click();
+    await expect(check).toBeEnabled({ timeout: 10_000 });
+
+    expect(consoleErrors).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
 test("the command palette opens and navigates", async () => {
   const { window, consoleErrors, close } = await launchApp();
 

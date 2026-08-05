@@ -8,6 +8,7 @@ import type { CaptureState } from "./capture";
 import type { TranscriptRecord } from "./ipc";
 import type { ModelsListResult, ModelsModelResult } from "./ipc";
 import type { Settings } from "./settings";
+import type { UpdateState } from "./updates";
 
 export interface MainWindowApi {
   readonly windowKind: "main";
@@ -70,6 +71,12 @@ export interface MainWindowApi {
   readonly devices: {
     list: () => Promise<{ devices: readonly RecorderDevice[]; currentDeviceId: string | null }>;
     setDevice: (deviceId: string) => void;
+  };
+  readonly updates: {
+    get: () => Promise<{ state: UpdateState; currentVersion: string }>;
+    check: () => Promise<{ state: UpdateState; currentVersion: string }>;
+    install: () => Promise<{ started: boolean }>;
+    onChange: (listener: (state: UpdateState) => void) => () => void;
   };
 }
 

@@ -1,21 +1,48 @@
 appId: com.struq.voice
 productName: Struq Voice
+copyright: Copyright (c) 2026 Struq
 directories:
   buildResources: resources
+  # Overridden by scripts/lib/release-dir.mjs at build time. electron-builder
+  # renames win-unpacked.tmp into place, and under Documents that rename can
+  # fail with EPERM, so the release scripts build to a temp directory.
   output: release
 files:
   - out/**
+  - "!**/*.map"
+
+# Where installed copies look for updates, and what makes latest.yml get
+# written at all. The signature in struq-voice-release.json is what actually
+# authorises an update; this only says where to look.
+publish:
+  - provider: github
+    owner: Deckdot
+    repo: DeckVoice
+    releaseType: release
+
 win:
   icon: resources/icon.png
+  artifactName: ${name}-${version}-setup.${ext}
+  executableName: Struq Voice
   target:
     - target: nsis
       arch:
         - x64
+
 nsis:
-  oneClick: true
+  # Assisted rather than one-click: choosing a directory and reading what the
+  # app is are reasonable to ask once. Updates install silently (/S), so this
+  # wizard is only the first install.
+  oneClick: false
   perMachine: false
-  allowToChangeInstallationDirectory: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Struq Voice
+  uninstallDisplayName: Struq Voice
+  artifactName: ${name}-${version}-setup.${ext}
+  runAfterFinish: true
+  # Differential updates need the blockmap beside the installer.
+  differentialPackage: true

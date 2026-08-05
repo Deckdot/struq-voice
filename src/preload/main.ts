@@ -14,10 +14,13 @@ import type {
   ModelsDownloadProgressEvent,
   SettingsGetResult,
   SettingsUpdateResult,
-  SettingsChangedEvent
+  SettingsChangedEvent,
+  UpdatesInstallResult,
+  UpdatesStateResult
 } from "../shared/ipc";
 import type { PreloadChannels } from "../shared/ipc";
 import type { Settings } from "../shared/settings";
+import type { UpdateState } from "../shared/updates";
 
 /**
  * Sandboxed preloads cannot load shared modules (the bundle must be one
@@ -164,6 +167,21 @@ const api: MainWindowApi = {
       }>,
     setDevice: (deviceId: string) => {
       ipcRenderer.send(channels.recorder.setDevice, { deviceId });
+    }
+  },
+  updates: {
+    get: () => ipcRenderer.invoke(channels.updates.get) as Promise<UpdatesStateResult>,
+    check: () => ipcRenderer.invoke(channels.updates.check) as Promise<UpdatesStateResult>,
+    install: () =>
+      ipcRenderer.invoke(channels.updates.install) as Promise<UpdatesInstallResult>,
+    onChange: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: UpdateState): void => {
+        listener(state);
+      };
+      ipcRenderer.on(channels.updates.changed, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.updates.changed, handler);
+      };
     }
   }
 };

@@ -1,11 +1,23 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
-import { Plus, Trash2, KeyRound, Check, X, Keyboard, Mic, Sparkles } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  KeyRound,
+  Check,
+  X,
+  Keyboard,
+  Mic,
+  Sparkles,
+  RefreshCw
+} from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { DictionaryEntry, Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
 import { MODEL_CATALOG } from "../../../shared/models";
 import { domEventToAccelerator } from "../../../shared/hotkeys";
+import type { UpdateState } from "../../../shared/updates";
+import { INITIAL_UPDATE_STATE, describeUpdateState } from "../../../shared/updates";
 
 const WHISPER_MODELS = MODEL_CATALOG.filter((model) => model.engine === "whisper-cpp");
 
@@ -61,6 +73,20 @@ export function SettingsView(): JSX.Element {
   const [hotkeyMessage, setHotkeyMessage] = useState<string | null>(null);
   const [devices, setDevices] = useState<readonly { deviceId: string; label: string }[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [updateState, setUpdateState] = useState<UpdateState>(INITIAL_UPDATE_STATE);
+  const [currentVersion, setCurrentVersion] = useState("");
+
+  useEffect(() => {
+    void api.updates.get().then(({ state, currentVersion: version }) => {
+      setUpdateState(state);
+      setCurrentVersion(version);
+    });
+    // Downloads report progress from main, so the panel follows the broadcast
+    // rather than polling.
+    return api.updates.onChange((state) => {
+      setUpdateState(state);
+    });
+  }, [api]);
 
   useEffect(() => {
     void api.devices.list().then((result) => {
@@ -437,6 +463,68 @@ export function SettingsView(): JSX.Element {
               />
               <span className="text-sm text-text">Add trailing punctuation</span>
             </label>
+          </Section>
+
+          <Section title="Updates">
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-2 text-sm text-text">
+                <RefreshCw
+                  className={`h-4 w-4 shrink-0 text-accent-text ${
+                    updateState.phase === "checking" || updateState.phase === "downloading"
+                      ? "animate-spin"
+                      : ""
+                  }`}
+                  aria-hidden="true"
+                />
+                Version {currentVersion}
+              </span>
+              <div className="flex shrink-0 gap-2">
+                {updateState.phase === "ready" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void api.updates.install();
+                    }}
+                    className="rounded-md bg-accent-solid px-3 py-1.5 text-sm font-medium text-text-inverse transition-colors duration-fast hover:bg-accent-solid-hover"
+                  >
+                    Restart and install
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={updateState.phase === "checking" || updateState.phase === "downloading"}
+                    onClick={() => {
+                      void api.updates.check().then(({ state }) => {
+                        setUpdateState(state);
+                      });
+                    }}
+                    className="rounded-md border border-border px-3 py-1.5 text-sm text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text disabled:opacity-50"
+                  >
+                    Check for updates
+                  </button>
+                )}
+              </div>
+            </div>
+            <p
+              className={`text-xs ${
+                updateState.phase === "refused" ? "text-danger" : "text-text-muted"
+              }`}
+            >
+              {describeUpdateState(updateState)}
+            </p>
+            {updateState.phase === "refused" && (
+              // A refused update is not a quiet morning: someone served bytes
+              // that did not come from the release key. Say so plainly.
+              <p className="text-xs text-danger">
+                Nothing was installed. The download did not match the release
+                signature, so it was discarded.
+              </p>
+            )}
+            {updateState.phase === "ready" && (
+              <p className="text-xs text-text-muted">
+                Struq Voice restarts to finish. It takes a few seconds.
+              </p>
+            )}
           </Section>
 
           <Section title="Dictionary">

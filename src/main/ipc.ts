@@ -12,7 +12,9 @@ import type {
   ModelsModelRequest,
   OpenRouterKeySetRequest,
   RecorderDevice,
-  SettingsUpdateRequest
+  SettingsUpdateRequest,
+  UpdatesInstallResult,
+  UpdatesStateResult
 } from "../shared/ipc";
 import {
   appGetVersionChannel,
@@ -39,10 +41,15 @@ import {
   settingsChangedChannel,
   settingsGetChannel,
   settingsUpdateChannel,
+  updatesCheckChannel,
+  updatesGetChannel,
+  updatesInstallChannel,
   windowCloseChannel,
   windowMinimizeChannel,
   windowToggleMaximizeChannel
 } from "../shared/ipc";
+import { INITIAL_UPDATE_STATE } from "../shared/updates";
+import type { UpdaterController } from "./updater";
 
 /**
  * Thin typed dispatch only. All channel names and payload types come from
@@ -53,8 +60,31 @@ export const registerIpcHandlers = (
   history: HistoryStore | null,
   models: ModelsService | null,
   settingsStore: SettingsStore | null,
-  secrets: SecretsStore | null
+  secrets: SecretsStore | null,
+  updater: UpdaterController | null = null
 ): void => {
+  const currentVersion = app.getVersion();
+
+  ipcMain.handle(
+    updatesGetChannel,
+    (): UpdatesStateResult => ({
+      state: updater?.getState() ?? INITIAL_UPDATE_STATE,
+      currentVersion
+    })
+  );
+
+  ipcMain.handle(updatesCheckChannel, async (): Promise<UpdatesStateResult> => {
+    if (updater === null) {
+      return { state: INITIAL_UPDATE_STATE, currentVersion };
+    }
+    return { state: await updater.check(), currentVersion };
+  });
+
+  ipcMain.handle(
+    updatesInstallChannel,
+    (): UpdatesInstallResult => ({ started: updater?.install() ?? false })
+  );
+
   ipcMain.handle(appGetVersionChannel, () => app.getVersion());
 
   ipcMain.handle(openRouterKeyStatusChannel, async () => {

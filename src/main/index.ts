@@ -21,6 +21,12 @@ import type { TranscriptionEngine } from "./engines/types";
 import { createHotkeys } from "./hotkeys";
 import { registerIpcHandlers } from "./ipc";
 import { createModelsService } from "./models";
+import electronUpdater from "electron-updater";
+import { createUpdater, type AutoUpdaterLike } from "./updater";
+import { updatesChangedChannel } from "../shared/ipc";
+
+// electron-updater ships CommonJS, so the named exports hang off the default.
+const { autoUpdater } = electronUpdater as unknown as { autoUpdater: AutoUpdaterLike };
 import { cleanupTranscript } from "./post/text-cleanup";
 import { insertTextIntoActiveApp } from "./platform/win32/paste";
 import { createRecorderBridge } from "./audio/recorder-bridge";
@@ -117,7 +123,28 @@ if (!gotLock) {
       autostart.setEnabled(settings.autostart);
     });
 
-    registerIpcHandlers(history, models, settingsStore, secrets);
+    // The update channel. Nothing installs without passing the signature gate
+    // in updater.ts, and nothing restarts without a click in Settings. Skipped
+    // under e2e so the suite never reaches the network.
+    const updater = e2e
+      ? null
+      : createUpdater({ autoUpdater, isPackaged: app.isPackaged });
+
+    registerIpcHandlers(history, models, settingsStore, secrets, updater);
+
+    updater?.subscribe((state) => {
+      // The window is created on demand and can be closed while a download is
+      // in flight, so send only to a live one.
+      if (mainWindow !== null && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(updatesChangedChannel, state);
+      }
+    });
+
+    // One check at boot, best effort. An unreachable feed is not something to
+    // interrupt anyone about; a refused signature surfaces in Settings.
+    if (updater !== null && app.isPackaged) {
+      void updater.check();
+    }
 
     const recorderWindow = createRecorderWindow({ e2e });
     const bridge = createRecorderBridge();

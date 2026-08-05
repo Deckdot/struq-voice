@@ -7,6 +7,7 @@
 import type { CaptureState } from "./capture";
 import type { ModelStatus } from "./models";
 import type { Settings } from "./settings";
+import type { UpdateState } from "./updates";
 
 export const appGetVersionChannel = "app:get-version" as const;
 
@@ -143,6 +144,23 @@ export const metricsMeasuredRtfChannel = "metrics:measured-rtf" as const;
 
 export interface MetricsMeasuredRtfResult {
   readonly byEngine: Record<string, number>;
+}
+
+/** Update channel: check, install, and the state broadcast behind both. */
+export const updatesGetChannel = "updates:get" as const;
+export const updatesCheckChannel = "updates:check" as const;
+export const updatesInstallChannel = "updates:install" as const;
+export const updatesChangedChannel = "updates:changed" as const;
+
+export interface UpdatesStateResult {
+  readonly state: UpdateState;
+  /** The running version, so Settings can show it beside the update state. */
+  readonly currentVersion: string;
+}
+
+export interface UpdatesInstallResult {
+  /** False when nothing is ready to install, so the click is a no-op. */
+  readonly started: boolean;
 }
 
 /** Tray recent-transcript re-copy and the History reader's copy action. */
@@ -294,6 +312,12 @@ export const PRELOAD_CHANNELS = {
     import: modelsImportChannel,
     installRuntime: modelsInstallRuntimeChannel,
     downloadProgress: modelsDownloadProgressChannel
+  },
+  updates: {
+    get: updatesGetChannel,
+    check: updatesCheckChannel,
+    install: updatesInstallChannel,
+    changed: updatesChangedChannel
   }
 } as const;
 

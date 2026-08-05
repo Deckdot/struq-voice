@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { launchApp } from "./helpers/launch";
+import { launchApp, testHook } from "./helpers/launch";
 
 test("boots to the main window with zero console errors", async () => {
   const { app, window, consoleErrors, close } = await launchApp();
@@ -11,14 +11,18 @@ test("boots to the main window with zero console errors", async () => {
     const ready = await app.evaluate(({ app }) => app.isReady());
     expect(ready).toBe(true);
 
-    // The skeleton has exactly one window: the main window.
-    expect(app.windows()).toHaveLength(1);
+    // Two windows at boot: the main window and the hidden recorder window.
+    // The overlay is created lazily on the first capture.
+    expect(app.windows()).toHaveLength(2);
+
+    // The recorder window exists but is never visible.
+    expect(await testHook.recorder.isVisible(app)).toBe(false);
 
     // The theme is actually applied: the wordmark renders and the body uses
     // the linen background, not the white browser default.
     await expect(window.locator("h1")).toHaveText("Struq Voice");
     const bodyBackground = await window.evaluate(
-      () => getComputedStyle(document.body).backgroundColor,
+      () => getComputedStyle(document.body).backgroundColor
     );
     expect(bodyBackground).not.toBe("rgba(0, 0, 0, 0)");
     expect(bodyBackground).not.toBe("rgb(255, 255, 255)");

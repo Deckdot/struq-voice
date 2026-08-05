@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { Mic, Sparkles, Keyboard, ArrowRight, X } from "lucide-react";
+import type { MainWindowApi } from "../../../shared/api";
 import type { Route } from "../store/use-main-store";
 
 const FIRST_RUN_DISMISSED_KEY = "struq-voice.first-run-dismissed";
@@ -12,10 +13,13 @@ export interface FirstRunProps {
 
 /**
  * First run: three skippable, non-blocking steps (microphone, engine, hotkey)
- * that route into the surfaces they describe. Seen once; dismissing persists.
+ * that route into the surfaces they describe. The microphone step shows a
+ * live level meter so the permission visibly worked. Seen once; dismissing
+ * persists.
  */
 export function FirstRun({ onNavigate, onDismissed }: FirstRunProps): JSX.Element {
   const [visible, setVisible] = useState(false);
+  const [level, setLevel] = useState(0);
 
   useEffect(() => {
     let dismissed = false;
@@ -25,6 +29,15 @@ export function FirstRun({ onNavigate, onDismissed }: FirstRunProps): JSX.Elemen
       // Storage unavailable; show it.
     }
     setVisible(!dismissed);
+  }, []);
+
+  useEffect(() => {
+    const api = window.struqVoice as MainWindowApi;
+    return api.onCaptureLevelsChanged(({ level: next }) => {
+      // Smooth the 60Hz stream into a readable meter and let it decay
+      // between events so silence reads as silence.
+      setLevel((current) => Math.max(current * 0.6, next * 0.4));
+    });
   }, []);
 
   if (!visible) return <></>;
@@ -94,6 +107,18 @@ export function FirstRun({ onNavigate, onDismissed }: FirstRunProps): JSX.Elemen
                   {step.title}
                 </span>
                 <span className="text-xs leading-snug text-text-muted">{step.detail}</span>
+                {step.title === "1. Microphone" && (
+                  <span
+                    className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-bg-sunken"
+                    aria-label="Microphone level"
+                    data-numeric
+                  >
+                    <span
+                      className="h-full rounded-full bg-accent transition-[width] duration-75"
+                      style={{ width: `${String(Math.round(level * 100))}%` }}
+                    />
+                  </span>
+                )}
                 <span className="mt-1 inline-flex items-center gap-1 text-xs text-accent-text">
                   Open {step.action} <ArrowRight className="h-3 w-3" aria-hidden="true" />
                 </span>

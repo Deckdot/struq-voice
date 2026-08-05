@@ -20,6 +20,9 @@ export interface MainWindowApi {
   readonly onCaptureStateChanged: (
     listener: (state: CaptureState) => void
   ) => () => void;
+  readonly onCaptureLevelsChanged: (
+    listener: (data: { bands: readonly number[]; level: number }) => void
+  ) => () => void;
   readonly history: {
     list: (request: { limit?: number; offset?: number }) => Promise<{
       items: readonly TranscriptRecord[];

@@ -16,6 +16,7 @@ import {
 } from "./engines/parakeet";
 import { createOpenRouterEngine, OPENROUTER_ENGINE_ID } from "./engines/openrouter";
 import { createWhisperCppEngine } from "./engines/whisper-cpp";
+import { slicePcm, trimSilence } from "./audio/wav";
 import type { TranscriptionEngine } from "./engines/types";
 import { createHotkeys } from "./hotkeys";
 import { registerIpcHandlers } from "./ipc";
@@ -174,10 +175,18 @@ if (!gotLock) {
       },
       transcribingEngineId: primaryEngineId,
       transcribe: async (audio) => {
+        // Trim leading and trailing silence before inference: shorter audio
+        // is faster, and the engines want the speech, not the room noise.
+        // The whole-capture duration is still reported for history.
+        const trimmed = trimSilence(audio.pcm, 16000);
+        const pcm = slicePcm(audio.pcm, trimmed.start, trimmed.end);
+        const trimmedDurationMs = Math.round(
+          (pcm.length / 16000) * 1000
+        );
         const outcome = await router.transcribe(
           {
-            pcm: audio.pcm,
-            durationMs: audio.durationMs,
+            pcm,
+            durationMs: Math.max(trimmedDurationMs, 1),
           },
           primaryEngineId,
           settingsStore.get().engine.fallback,

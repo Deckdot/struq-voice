@@ -57,6 +57,18 @@ const api: MainWindowApi = {
       ipcRenderer.removeListener(channels.captureStateChanged, handler);
     };
   },
+  onCaptureLevelsChanged: (listener) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      data: { bands: readonly number[]; level: number }
+    ): void => {
+      listener(data);
+    };
+    ipcRenderer.on(channels.captureLevelsChanged, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.captureLevelsChanged, handler);
+    };
+  },
   history: {
     list: (request: HistoryListRequest) =>
       ipcRenderer.invoke(channels.history.list, request) as Promise<HistoryListResult>,

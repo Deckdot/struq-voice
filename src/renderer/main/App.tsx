@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { Rail } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
+import { CommandPalette } from "./components/CommandPalette";
+import { FirstRun } from "./components/FirstRun";
 import { useMainStore } from "./store/use-main-store";
 import { DictateView } from "./views/DictateView";
 import { HistoryView } from "./views/HistoryView";
@@ -10,6 +13,21 @@ import { SettingsView } from "./views/SettingsView";
 export function App(): JSX.Element {
   const route = useMainStore((state) => state.route);
   const setRoute = useMainStore((state) => state.setRoute);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [showFirstRun, setShowFirstRun] = useState(true);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   return (
     <div className="flex h-full flex-col bg-bg text-text">
@@ -23,6 +41,19 @@ export function App(): JSX.Element {
           {route === "settings" && <SettingsView />}
         </main>
       </div>
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onNavigate={setRoute}
+      />
+      {showFirstRun && (
+        <FirstRun
+          onNavigate={setRoute}
+          onDismissed={() => {
+            setShowFirstRun(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
   <title id="title">Struq Voice app icon</title>
   <rect width="512" height="512" rx="104" fill="#F6F4EB" />
-  <g transform="translate(58 72) scale(.77)" fill="#294638">
+  <!--
+    The mark occupies 336x304 starting at (60,112) in this viewBox. Scaled to
+    66% of the tile and centred on the true bounding box, not the viewBox: the
+    art is not centred in its own 512 square, so centring the square would
+    leave the mark visibly high and to the left.
+  -->
+  <g transform="translate(27 -10) scale(1.0057)" fill="#294638">
     <circle cx="76" cy="264" r="16" />
     <rect x="116" y="222" width="32" height="84" rx="16" />
     <rect x="178" y="190" width="32" height="148" rx="16" />

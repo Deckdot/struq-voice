@@ -19,5 +19,10 @@ playwright-report/
 *.gguf
 *.enc
 
+# Release signing keys. The private half lives in ~/.struq and never here;
+# this is the second lock, not the first.
+*.pem
+*.key
+
 .DS_Store
 Thumbs.db

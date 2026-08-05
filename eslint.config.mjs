@@ -59,6 +59,8 @@ export default tseslint.config(
         require: "readonly",
         module: "readonly",
         __dirname: "readonly",
+        // Node 18+ ships fetch; the release scripts read published manifests.
+        fetch: "readonly",
         // The pcm-collector worklet runs in the AudioWorklet global scope.
         AudioWorkletProcessor: "readonly",
         registerProcessor: "readonly"

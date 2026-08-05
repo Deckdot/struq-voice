@@ -1,0 +1,58 @@
+/* Overlay-only animations. Everything else comes from theme.css tokens. */
+
+/* The transcribing shimmer: a centre line with one sweep, then rest. */
+.shimmer-line {
+  position: relative;
+  width: 180px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-state-transcribing);
+  opacity: 0.35;
+  overflow: hidden;
+}
+
+.shimmer-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-surface) 45%,
+    var(--color-surface) 55%,
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: shimmer-sweep 600ms var(--ease-in-out) 1 both;
+}
+
+@keyframes shimmer-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* The delivering checkmark draws itself in. */
+.checkmark-draw {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: checkmark-draw 240ms var(--ease-out-quart) 1 forwards;
+}
+
+@keyframes checkmark-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-line::after {
+    animation: none;
+    opacity: 0;
+  }
+
+  .checkmark-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

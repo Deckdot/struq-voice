@@ -27,13 +27,9 @@ export interface RailProps {
 export function Rail({ route, onSelect }: RailProps): JSX.Element {
   return (
     <nav
-      className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-border bg-bg-sunken p-2"
+      className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-border bg-bg-sunken p-2 pt-3"
       aria-label="Struq Voice"
     >
-      <div className="flex items-center gap-2 px-2 pb-3 pt-1">
-        <span className="h-2 w-2 rounded-full bg-accent" aria-hidden="true" />
-        <span className="font-serif text-base tracking-tight text-text">Struq Voice</span>
-      </div>
       {ROUTE_ORDER.map((item) => {
         const Icon = ROUTE_ICONS[item];
         const active = item === route;

@@ -1,6 +1,7 @@
 import type { CSSProperties, JSX } from "react";
 import { Minus, Square, X } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
+import { BrandLockup } from "./Brand";
 
 /**
  * The custom title bar of the frameless main window. Draggable via the
@@ -14,7 +15,7 @@ export function TitleBar(): JSX.Element {
       className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-bg px-2"
       style={{ WebkitAppRegion: "drag" } as CSSProperties}
     >
-      <div className="w-44" />
+      <BrandLockup className="w-44 px-2" />
       <div className="flex items-center gap-1" style={{ WebkitAppRegion: "no-drag" } as CSSProperties}>
         <button
           type="button"

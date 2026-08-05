@@ -21,7 +21,7 @@ publish:
     releaseType: release
 
 win:
-  icon: resources/icon.png
+  icon: resources/icon.ico
   artifactName: ${name}-${version}-setup.${ext}
   executableName: Struq Voice
   target:

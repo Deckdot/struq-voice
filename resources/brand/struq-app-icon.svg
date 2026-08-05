@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Struq Voice app icon</title>
+  <rect width="512" height="512" rx="104" fill="#F6F4EB" />
+  <g transform="translate(58 72) scale(.77)" fill="#294638">
+    <circle cx="76" cy="264" r="16" />
+    <rect x="116" y="222" width="32" height="84" rx="16" />
+    <rect x="178" y="190" width="32" height="148" rx="16" />
+    <rect x="240" y="158" width="32" height="212" rx="16" />
+    <rect x="302" y="112" width="36" height="304" rx="18" />
+    <path d="M336 244c10 3 15 11 22 20-7 9-12 17-22 20z" />
+    <circle cx="376" cy="264" r="20" fill="#A65332" />
+  </g>
+</svg>

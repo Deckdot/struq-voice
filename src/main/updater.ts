@@ -50,7 +50,7 @@ import { INITIAL_UPDATE_STATE, type UpdateState } from "../shared/updates";
  */
 export const DEFAULT_FEED_URL =
   process.env["STRUQ_VOICE_FEED_URL"] ??
-  "https://github.com/Deckdot/DeckVoice/releases/latest/download";
+  "https://github.com/Deckdot/struq-voice/releases/latest/download";
 
 export interface UpdaterDeps {
   /** Fetch the manifest that rides beside the installer. */

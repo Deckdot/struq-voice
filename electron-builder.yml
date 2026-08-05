@@ -17,7 +17,7 @@ files:
 publish:
   - provider: github
     owner: Deckdot
-    repo: DeckVoice
+    repo: struq-voice
     releaseType: release
 
 win:

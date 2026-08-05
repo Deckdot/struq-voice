@@ -9,6 +9,11 @@ import { app, BrowserWindow, clipboard, Menu } from "electron";
 import { openDatabase } from "./db/client";
 import { createEngineRouter } from "./engines/router";
 import { createMockEngine } from "./engines/mock";
+import {
+  createParakeetEngine,
+  PARAKEET_DEFAULT_MODEL_ID,
+  PARAKEET_ENGINE_ID
+} from "./engines/parakeet";
 import { createOpenRouterEngine, OPENROUTER_ENGINE_ID } from "./engines/openrouter";
 import type { TranscriptionEngine } from "./engines/types";
 import { createHotkeys } from "./hotkeys";
@@ -98,13 +103,19 @@ if (!gotLock) {
       : createRecorderAudioSource(recorderWindow, bridge);
 
     // Engines: cloud first per the plan, mock as the bootstrap default.
+    const modelsRoot = join(app.getPath("userData"), "models");
     const mockEngine = createMockEngine();
+    const parakeetEngine = createParakeetEngine({
+      modelsRoot,
+      modelId: PARAKEET_DEFAULT_MODEL_ID
+    });
     const openrouterEngine = createOpenRouterEngine({
-      getApiKey: () => secrets.readOpenRouterKey(),
+      getApiKey: () => secrets.readOpenRouterKey()
     });
     const engines = new Map<string, TranscriptionEngine>([
       [mockEngine.id, mockEngine],
-      [openrouterEngine.id, openrouterEngine],
+      [parakeetEngine.id, parakeetEngine],
+      [openrouterEngine.id, openrouterEngine]
     ]);
     const router = createEngineRouter({
       getEngine: (id) => engines.get(id),
@@ -113,7 +124,21 @@ if (!gotLock) {
 
     const envEngineOverride = process.env["STRUQ_VOICE_ENGINE"];
     const settings = settingsStore.get();
-    // Bootstrap: once a key exists, the cloud engine becomes the primary.
+    // Bootstrap promotion: Parakeet becomes the primary once its model is
+    // downloaded; otherwise OpenRouter once a key exists; otherwise the mock
+    // stays until the user chooses in Settings. Skipped in test modes: the
+    // readiness check loads the sherpa native module, which is exactly the
+    // native interference the hook spec isolates against.
+    if (!e2e && !hookTest) {
+      void parakeetEngine.readiness().then((readiness) => {
+        const latest = settingsStore.get();
+        if (readiness.ready && latest.engine.primary === MOCK_ENGINE_ID) {
+          settingsStore.update({
+            engine: { ...latest.engine, primary: PARAKEET_ENGINE_ID },
+          });
+        }
+      });
+    }
     void secrets.readOpenRouterKey().then((key) => {
       const latest = settingsStore.get();
       if (key !== null && key.length > 0 && latest.engine.primary === MOCK_ENGINE_ID) {
@@ -169,6 +194,9 @@ if (!gotLock) {
         }
       },
       deliver: async (text) => {
+        // Tests must never synthesize keystrokes into the real desktop.
+        // A stray Ctrl+V landing in the user's focused window is hostile.
+        if (e2e || hookTest) return { inserted: false };
         const outcome = await insertTextIntoActiveApp(text, {
           // Read at delivery time: the user may have changed the setting
           // since this capture started.
@@ -256,6 +284,15 @@ if (!gotLock) {
       }
     });
     setTimeout(maybeStartHotkeys, 5000);
+
+    // Parakeet warmup: loading the int8 encoder takes 1-3 seconds, and it
+    // must never land in the user's first capture. Background at app start,
+    // before the first hotkey press. Skipped in test modes: the sherpa
+    // native load is exactly the kind of native interference the hook spec
+    // isolates against. Fails silently; the engine reports readiness itself.
+    if (!e2e && !hookTest) {
+      void parakeetEngine.warmup();
+    }
 
     mainWindow = createMainWindow();
     mainWindow.on("close", (event) => {

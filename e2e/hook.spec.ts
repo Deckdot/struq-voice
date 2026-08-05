@@ -14,10 +14,15 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 test("the keyboard hook survives ten capture cycles after getUserMedia", async () => {
-  const { app, consoleErrors, close } = await launchApp({
-    STRUQ_VOICE_E2E: "0",
-    STRUQ_VOICE_HOOK_TEST: "1"
-  });
+  const { app, consoleErrors, close } = await launchApp(
+    {
+      STRUQ_VOICE_E2E: "0",
+      STRUQ_VOICE_HOOK_TEST: "1"
+    },
+    // This spec proves the hook survives real focus and real key events;
+    // headless mode has neither.
+    { headless: false }
+  );
 
   try {
     // The recorder window acquires the microphone at boot (real getUserMedia,

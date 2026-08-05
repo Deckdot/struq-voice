@@ -19,15 +19,29 @@ export interface LaunchOverrides {
   readonly [key: string]: string;
 }
 
+/** Overrides that change how the app is launched, not its env. */
+export interface LaunchOptions {
+  /** Default true. The hook spec needs real OS focus and key events. */
+  readonly headless?: boolean;
+}
+
 /**
  * Launch the built app under test. Requires `electron-vite build` first, so
  * e2e always runs as: `electron-vite build && playwright test`.
+ *
+ * Runs headless (`--headless`): no windows pop up while the suite runs.
+ * Headless caveat: BrowserWindow.isVisible() reports false for every window,
+ * so specs must not assert visible=true; they assert properties and state
+ * transitions instead (a visible=false assertion still holds).
  *
  * VS Code leaks ELECTRON_RUN_AS_NODE=1 into every terminal it spawns, which
  * turns electron.exe into plain Node and rejects Playwright's Chromium switch
  * with an opaque "Process failed to launch!" error. Strip it here.
  */
-export async function launchApp(overrides: LaunchOverrides = {}): Promise<Harness> {
+export async function launchApp(
+  overrides: LaunchOverrides = {},
+  options: LaunchOptions = {}
+): Promise<Harness> {
   const consoleErrors: string[] = [];
 
   const { ELECTRON_RUN_AS_NODE: _drop, ...parentEnv } = process.env;
@@ -35,8 +49,10 @@ export async function launchApp(overrides: LaunchOverrides = {}): Promise<Harnes
   // Fresh userData per launch: tests never touch the real profile.
   const userData = mkdtempSync(join(tmpdir(), "struq-voice-e2e-"));
 
+  const args = [...(options.headless === false ? [] : ["--headless"]), "out/main/index.cjs"];
+
   const app = await _electron.launch({
-    args: ["out/main/index.cjs"],
+    args,
     env: {
       ...(parentEnv as Record<string, string>),
       STRUQ_VOICE_E2E: "1",

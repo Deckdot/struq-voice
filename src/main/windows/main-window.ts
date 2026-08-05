@@ -39,7 +39,9 @@ export const createMainWindow = (): BrowserWindow => {
 
   const rendererUrl = process.env["ELECTRON_RENDERER_URL"];
   if (rendererUrl !== undefined) {
-    void window.loadURL(rendererUrl);
+    // The dev server root is src/renderer, so every window must ask for its
+    // own entry. Loading the bare origin serves a 404 page, not the app.
+    void window.loadURL(`${rendererUrl}/main/index.html`);
   } else {
     void window.loadFile(join(__dirname, "../renderer/main/index.html"));
   }

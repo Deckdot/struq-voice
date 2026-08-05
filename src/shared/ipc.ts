@@ -139,6 +139,12 @@ export interface HistoryClearResult {
   readonly ok: boolean;
 }
 
+export const metricsMeasuredRtfChannel = "metrics:measured-rtf" as const;
+
+export interface MetricsMeasuredRtfResult {
+  readonly byEngine: Record<string, number>;
+}
+
 /** Tray recent-transcript re-copy and the History reader's copy action. */
 export const clipboardCopyChannel = "clipboard:copy" as const;
 
@@ -260,6 +266,9 @@ export const PRELOAD_CHANNELS = {
     search: historySearchChannel,
     delete: historyDeleteChannel,
     clear: historyClearChannel
+  },
+  metrics: {
+    measuredRtf: metricsMeasuredRtfChannel
   },
   clipboard: {
     copy: clipboardCopyChannel

@@ -29,6 +29,7 @@ import {
   modelsInstallRuntimeChannel,
   modelsListChannel,
   modelsImportChannel,
+  metricsMeasuredRtfChannel,
   openRouterKeyClearChannel,
   openRouterKeySetChannel,
   openRouterKeyStatusChannel,
@@ -120,6 +121,10 @@ export const registerIpcHandlers = (
   ipcMain.handle(historyClearChannel, () => {
     history?.removeAll();
     return { ok: true };
+  });
+
+  ipcMain.handle(metricsMeasuredRtfChannel, () => {
+    return { byEngine: history?.measuredRtf() ?? {} };
   });
 
   ipcMain.on(clipboardCopyChannel, (_event, text: string) => {

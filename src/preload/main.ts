@@ -101,6 +101,12 @@ const api: MainWindowApi = {
       ipcRenderer.send(channels.clipboard.copy, text);
     }
   },
+  metrics: {
+    measuredRtf: () =>
+      ipcRenderer.invoke(channels.metrics.measuredRtf) as Promise<{
+        byEngine: Record<string, number>;
+      }>
+  },
   settings: {
     get: () =>
       ipcRenderer.invoke(channels.settings.get) as Promise<SettingsGetResult>,

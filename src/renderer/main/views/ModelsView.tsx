@@ -27,12 +27,16 @@ export function ModelsView(): JSX.Element {
   const [statuses, setStatuses] = useState<readonly ModelStatus[]>([]);
   const [diskUsed, setDiskUsed] = useState<number | null>(null);
   const [runtime, setRuntime] = useState<ModelsListResult["whisperRuntime"]>({ state: "idle" });
+  const [measuredRtf, setMeasuredRtf] = useState<Record<string, number>>({});
 
   const refresh = (): void => {
     void api.models.list().then(({ items, totalDiskUsed, whisperRuntime }) => {
       setStatuses(items);
       setDiskUsed(totalDiskUsed);
       setRuntime(whisperRuntime);
+    });
+    void api.metrics.measuredRtf().then(({ byEngine }) => {
+      setMeasuredRtf(byEngine);
     });
   };
 
@@ -45,6 +49,9 @@ export function ModelsView(): JSX.Element {
           setDiskUsed(totalDiskUsed);
           setRuntime(whisperRuntime);
         }
+      });
+      void api.metrics.measuredRtf().then(({ byEngine }) => {
+        if (!cancelled) setMeasuredRtf(byEngine);
       });
     };
     initialRefresh();
@@ -134,6 +141,7 @@ export function ModelsView(): JSX.Element {
               status.download.state === "downloading"
                 ? formatPercent(status.download.receivedBytes, status.download.totalBytes)
                 : null;
+            const measured = measuredRtf[status.model.engine];
             return (
               <article
                 key={status.model.id}
@@ -145,6 +153,11 @@ export function ModelsView(): JSX.Element {
                     <p className="mt-0.5 text-sm text-text-muted">{status.model.whenToUse}</p>
                     <p className="mt-1 text-2xs uppercase tracking-wide text-text-muted">
                       {status.model.languages} &middot; {formatBytes(status.model.bytes)}
+                      {measured !== undefined && (
+                        <>
+                          {" "}&middot; measured RTF {measured.toFixed(2)}x
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">

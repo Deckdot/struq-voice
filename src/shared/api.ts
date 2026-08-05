@@ -48,6 +48,9 @@ export interface MainWindowApi {
       }) => void
     ) => () => void;
   };
+  readonly metrics: {
+    measuredRtf: () => Promise<{ byEngine: Record<string, number> }>;
+  };
   readonly clipboard: {
     copy: (text: string) => void;
   };

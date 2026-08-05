@@ -9,6 +9,8 @@ export interface HistoryStore {
   search: (query: string, limit: number) => TranscriptRecord[];
   remove: (id: number) => boolean;
   removeAll: () => void;
+  /** Measured realtime factor per engine id, from real captures. */
+  measuredRtf: () => Record<string, number>;
 }
 
 interface TranscriptRow {
@@ -89,10 +91,37 @@ export const createHistoryStore = (db: Database.Database): HistoryStore => {
     return rows.map(toRecord);
   };
 
+  const measuredRtf = (): Record<string, number> => {
+    const rows = db
+      .prepare(
+        `SELECT engine_id, inference_ms, duration_ms FROM transcripts
+         WHERE engine_id != 'mock' AND inference_ms IS NOT NULL AND duration_ms > 0
+         ORDER BY created_at DESC, id DESC LIMIT 200`
+      )
+      .all() as unknown as Array<{
+      engine_id: string;
+      inference_ms: number;
+      duration_ms: number;
+    }>;
+    const sums = new Map<string, { total: number; count: number }>();
+    for (const row of rows) {
+      const entry = sums.get(row.engine_id) ?? { total: 0, count: 0 };
+      entry.total += row.inference_ms / row.duration_ms;
+      entry.count += 1;
+      sums.set(row.engine_id, entry);
+    }
+    const result: Record<string, number> = {};
+    for (const [engineId, entry] of sums) {
+      result[engineId] = entry.total / entry.count;
+    }
+    return result;
+  };
+
   return {
     insert,
     listRecent,
     search,
+    measuredRtf,
     remove: (id: number): boolean => {
       const result = db.prepare("DELETE FROM transcripts WHERE id = ?").run(id);
       return result.changes > 0;

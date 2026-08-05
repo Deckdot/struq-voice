@@ -1,0 +1,59 @@
+/**
+ * The pcm-collector AudioWorklet processor.
+ *
+ * Plain JS, no imports: worklets are loaded with addModule and must be
+ * self-contained. It keeps a 30-second rolling ring buffer of the live
+ * stream (pre-roll for captures) and, while armed, appends every sample to
+ * the active capture buffer.
+ */
+
+const SAMPLE_RATE = 16000;
+const RING_SECONDS = 30;
+const ring = new Float32Array(SAMPLE_RATE * RING_SECONDS);
+let ringPos = 0;
+let armed = false;
+let active = [];
+
+class PcmCollectorProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.port.onmessage = (event) => {
+      const message = event.data;
+      if (message.type === "arm") {
+        armed = true;
+        active = [];
+        const preroll = Math.max(0, Math.min(SAMPLE_RATE * RING_SECONDS, message.prerollSamples));
+        if (preroll > 0) {
+          const start = (ringPos - preroll + ring.length) % ring.length;
+          for (let i = 0; i < preroll; i++) {
+            active.push(ring[(start + i) % ring.length]);
+          }
+        }
+      } else if (message.type === "disarm") {
+        armed = false;
+        const samples = Float32Array.from(active);
+        active = [];
+        this.port.postMessage({ type: "capture", samples }, [samples.buffer]);
+      }
+    };
+  }
+
+  process(inputs) {
+    const input = inputs[0];
+    if (input === undefined || input.length === 0) return true;
+    const channel = input[0];
+    if (channel === undefined) return true;
+
+    for (let i = 0; i < channel.length; i++) {
+      const sample = channel[i] ?? 0;
+      ring[ringPos] = sample;
+      ringPos = (ringPos + 1) % ring.length;
+      if (armed) {
+        active.push(sample);
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor("pcm-collector", PcmCollectorProcessor);

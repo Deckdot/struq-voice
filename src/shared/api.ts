@@ -21,10 +21,23 @@ export interface OverlayWindowApi {
   readonly onCaptureStateChanged: (
     listener: (state: CaptureState) => void
   ) => () => void;
+  readonly onCaptureLevelsChanged: (
+    listener: (data: { bands: readonly number[]; level: number }) => void
+  ) => () => void;
 }
 
 export interface RecorderWindowApi {
   readonly windowKind: "recorder";
+  readonly isE2E: boolean;
+  readonly onBeginCapture: (callback: () => void) => () => void;
+  readonly onEndCapture: (callback: () => void) => () => void;
+  readonly sendCaptureData: (data: {
+    pcm: ArrayBuffer;
+    durationMs: number;
+    sampleRate: number;
+  }) => void;
+  readonly sendLevels: (data: { bands: readonly number[]; level: number }) => void;
+  readonly sendStreamState: (data: { live: boolean; reason?: string }) => void;
 }
 
 export type WindowApi = MainWindowApi | OverlayWindowApi | RecorderWindowApi;

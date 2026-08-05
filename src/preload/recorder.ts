@@ -1,8 +1,53 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 import type { RecorderWindowApi } from "../shared/api";
+import type { PreloadChannels } from "../shared/ipc";
+
+/**
+ * Sandboxed preloads cannot load shared modules (the bundle must be one
+ * self-contained file), so main serialises the channel names from
+ * src/shared/ipc.ts into the window's additionalArguments. Read them here.
+ */
+const readChannels = (argv: readonly string[]): PreloadChannels => {
+  const arg = argv.find((entry) => entry.startsWith("--struq-channels="));
+  if (arg === undefined) {
+    throw new Error("missing --struq-channels argument in preload argv");
+  }
+  return JSON.parse(arg.slice("--struq-channels=".length)) as PreloadChannels;
+};
+
+const channels = readChannels(process.argv);
+const e2e = process.argv.includes("--struq-e2e");
 
 const api: RecorderWindowApi = {
-  windowKind: "recorder"
+  windowKind: "recorder",
+  isE2E: e2e,
+  onBeginCapture: (callback: () => void) => {
+    const wrapped = (): void => { callback(); };
+    ipcRenderer.on(channels.recorder.begin, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.recorder.begin, wrapped);
+    };
+  },
+  onEndCapture: (callback: () => void) => {
+    const wrapped = (): void => { callback(); };
+    ipcRenderer.on(channels.recorder.end, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.recorder.end, wrapped);
+    };
+  },
+  sendCaptureData: (data: {
+    pcm: ArrayBuffer;
+    durationMs: number;
+    sampleRate: number;
+  }) => {
+    ipcRenderer.send(channels.recorder.data, data, [data.pcm]);
+  },
+  sendLevels: (data: { bands: readonly number[]; level: number }) => {
+    ipcRenderer.send(channels.recorder.levels, data);
+  },
+  sendStreamState: (data: { live: boolean; reason?: string }) => {
+    ipcRenderer.send(channels.recorder.streamState, data);
+  }
 };
 
 contextBridge.exposeInMainWorld("struqVoice", api);

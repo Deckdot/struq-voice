@@ -50,6 +50,9 @@ export default defineConfig({
       },
     },
     build: {
+      // The pcm-collector worklet is loaded via audioWorklet.addModule, which
+      // cannot load data: URLs. Force every asset to a real file.
+      assetsInlineLimit: 0,
       rollupOptions: {
         // Multi-page Vite build. Three windows, three entries. Output lands
         // at out/renderer/<name>/index.html and is loaded by each window.

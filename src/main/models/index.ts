@@ -17,12 +17,17 @@ export interface ModelProgressEvent {
   totalBytes: number;
 }
 
+export interface ModelList {
+  readonly items: ModelStatus[];
+  readonly totalDiskUsed: number;
+}
+
 export interface ModelsService {
-  list: () => ModelStatus[];
+  list: () => ModelList;
   startDownload: (modelId: string) => boolean;
   cancelDownload: (modelId: string) => boolean;
   deleteModel: (modelId: string) => Promise<boolean>;
-  subscribe: (listener: (statuses: ModelStatus[]) => void) => () => void;
+  subscribe: (listener: (listed: ModelList) => void) => () => void;
   dispose: () => void;
 }
 
@@ -31,20 +36,22 @@ export const createModelsService = (
   deps?: { emitProgress?: (event: ModelProgressEvent) => void }
 ): ModelsService => {
   const installer: ModelInstaller = createModelInstaller(modelsRoot);
-  const listeners = new Set<(statuses: ModelStatus[]) => void>();
+  const listeners = new Set<(listed: ModelList) => void>();
 
-  const list = (): ModelStatus[] =>
-    MODEL_CATALOG.map((model) => ({
+  const list = (): ModelList => ({
+    items: MODEL_CATALOG.map((model) => ({
       model,
       installed: installer.isInstalled(model),
       installedBytes: installer.installedBytes(model),
       download: downloader.state(model.id)
-    }));
+    })),
+    totalDiskUsed: installer.totalDiskUsed()
+  });
 
   const notifyListeners = (): void => {
-    const statuses = list();
+    const listed = list();
     for (const listener of listeners) {
-      listener(statuses);
+      listener(listed);
     }
   };
 
@@ -98,7 +105,7 @@ export const createModelsService = (
   };
 
   const subscribe = (
-    listener: (statuses: ModelStatus[]) => void
+    listener: (listed: ModelList) => void
   ): (() => void) => {
     listeners.add(listener);
     return () => {

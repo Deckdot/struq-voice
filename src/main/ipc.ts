@@ -80,7 +80,10 @@ export const registerIpcHandlers = (
   });
 
   ipcMain.handle(modelsListChannel, () => {
-    return { items: models?.list() ?? [] };
+    const listed = models?.list();
+    return listed === undefined
+      ? { items: [], totalDiskUsed: 0 }
+      : { items: listed.items, totalDiskUsed: listed.totalDiskUsed };
   });
 
   ipcMain.handle(modelsDownloadChannel, (_event, request: ModelsModelRequest) => {
@@ -99,12 +102,12 @@ export const registerIpcHandlers = (
   );
 
   if (models !== null) {
-    models.subscribe((statuses) => {
+    models.subscribe((listed) => {
       const window = BrowserWindow.getAllWindows().find((candidate) =>
         candidate.webContents.getURL().includes("main/index.html"),
       );
       if (window === undefined) return;
-      for (const status of statuses) {
+      for (const status of listed.items) {
         if (status.download.state === "downloading") {
           window.webContents.send(modelsDownloadProgressChannel, {
             modelId: status.model.id,

@@ -130,6 +130,8 @@ export interface ModelsModelResult {
 
 export interface ModelsListResult {
   readonly items: readonly ModelStatus[];
+  /** Total bytes used by every installed model, for the Models view. */
+  readonly totalDiskUsed: number;
 }
 
 /** Main to renderer: download progress for one model, unthrottled. */

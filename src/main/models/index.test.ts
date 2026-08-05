@@ -33,7 +33,7 @@ describe("model service", () => {
     withRoot((root) => {
       const service = createModelsService(root);
 
-      const empty = service.list();
+      const empty = service.list().items;
       expect(empty).toHaveLength(MODEL_CATALOG.length);
       for (const status of empty) {
         expect(status.installed).toBe(false);
@@ -45,7 +45,7 @@ describe("model service", () => {
         installFile(root, target.id, file.path, "fake-content");
       }
 
-      const after = service.list();
+      const after = service.list().items;
       const installed = after.find((status) => status.model.id === target.id);
       expect(installed?.installed).toBe(true);
       expect(installed?.installedBytes).toBeGreaterThan(0);
@@ -67,12 +67,12 @@ describe("model service", () => {
       for (const file of target.files) {
         installFile(root, target.id, file.path, "fake-content");
       }
-      expect(service.list().find((s) => s.model.id === target.id)?.installed).toBe(true);
+      expect(service.list().items.find((s) => s.model.id === target.id)?.installed).toBe(true);
 
       const deleted = await service.deleteModel(target.id);
 
       expect(deleted).toBe(true);
-      expect(service.list().find((s) => s.model.id === target.id)?.installed).toBe(false);
+      expect(service.list().items.find((s) => s.model.id === target.id)?.installed).toBe(false);
     });
   });
 

@@ -6,7 +6,7 @@
 
 import type { CaptureState } from "./capture";
 import type { TranscriptRecord } from "./ipc";
-import type { ModelStatus } from "./models";
+import type { ModelsListResult, ModelsModelResult } from "./ipc";
 
 export interface MainWindowApi {
   readonly windowKind: "main";
@@ -30,10 +30,10 @@ export interface MainWindowApi {
     clear: () => Promise<{ ok: boolean }>;
   };
   readonly models: {
-    list: () => Promise<{ items: readonly ModelStatus[] }>;
-    download: (request: { modelId: string }) => Promise<{ ok: boolean }>;
-    cancel: (request: { modelId: string }) => Promise<{ ok: boolean }>;
-    remove: (request: { modelId: string }) => Promise<{ ok: boolean }>;
+    list: () => Promise<ModelsListResult>;
+    download: (request: { modelId: string }) => Promise<ModelsModelResult>;
+    cancel: (request: { modelId: string }) => Promise<ModelsModelResult>;
+    remove: (request: { modelId: string }) => Promise<ModelsModelResult>;
     onDownloadProgress: (
       listener: (event: {
         modelId: string;

@@ -13,16 +13,17 @@ import { createOpenRouterEngine, OPENROUTER_ENGINE_ID } from "./engines/openrout
 import type { TranscriptionEngine } from "./engines/types";
 import { createHotkeys } from "./hotkeys";
 import { registerIpcHandlers } from "./ipc";
+import { insertTextIntoActiveApp } from "./platform/win32/paste";
 import { createRecorderBridge } from "./audio/recorder-bridge";
 import {
   createRecorderAudioSource,
   createSimulatedAudioSource,
-  type CaptureAudio
+  type CaptureAudio,
 } from "./session/audio-source";
 import {
   DEFAULT_CAPTURE_OPTIONS,
   createCaptureSession,
-  type TranscriptMeta
+  type TranscriptMeta,
 } from "./session/capture-session";
 import { createSecretsStore } from "./store/secrets";
 import { createSettingsStore } from "./store/settings-store";
@@ -82,9 +83,7 @@ if (!gotLock) {
     // The app draws its own chrome, so suppress Electron's default menu.
     Menu.setApplicationMenu(null);
 
-    const settingsStore = createSettingsStore(
-      join(app.getPath("userData"), "settings.json")
-    );
+    const settingsStore = createSettingsStore(join(app.getPath("userData"), "settings.json"));
     const secrets = createSecretsStore();
     const history = openDatabase(app.getPath("userData"));
 
@@ -99,15 +98,15 @@ if (!gotLock) {
     // Engines: cloud first per the plan, mock as the bootstrap default.
     const mockEngine = createMockEngine();
     const openrouterEngine = createOpenRouterEngine({
-      getApiKey: () => secrets.readOpenRouterKey()
+      getApiKey: () => secrets.readOpenRouterKey(),
     });
     const engines = new Map<string, TranscriptionEngine>([
       [mockEngine.id, mockEngine],
-      [openrouterEngine.id, openrouterEngine]
+      [openrouterEngine.id, openrouterEngine],
     ]);
     const router = createEngineRouter({
       getEngine: (id) => engines.get(id),
-      cloudFallbackOptIn: () => settingsStore.get().engine.fallback === "openrouter"
+      cloudFallbackOptIn: () => settingsStore.get().engine.fallback === "openrouter",
     });
 
     const envEngineOverride = process.env["STRUQ_VOICE_ENGINE"];
@@ -115,13 +114,9 @@ if (!gotLock) {
     // Bootstrap: once a key exists, the cloud engine becomes the primary.
     void secrets.readOpenRouterKey().then((key) => {
       const latest = settingsStore.get();
-      if (
-        key !== null &&
-        key.length > 0 &&
-        latest.engine.primary === MOCK_ENGINE_ID
-      ) {
+      if (key !== null && key.length > 0 && latest.engine.primary === MOCK_ENGINE_ID) {
         settingsStore.update({
-          engine: { ...latest.engine, primary: OPENROUTER_ENGINE_ID }
+          engine: { ...latest.engine, primary: OPENROUTER_ENGINE_ID },
         });
       }
     });
@@ -138,10 +133,10 @@ if (!gotLock) {
         const outcome = await router.transcribe(
           {
             pcm: audio.pcm,
-            durationMs: audio.durationMs
+            durationMs: audio.durationMs,
           },
           primaryEngineId,
-          settingsStore.get().engine.fallback
+          settingsStore.get().engine.fallback,
         );
         if (!outcome.ok) {
           throw new Error(outcome.error.message);
@@ -153,7 +148,7 @@ if (!gotLock) {
           language: result.language,
           inferenceMs: result.inferenceMs,
           costUsd: result.costUsd,
-          durationMs: audio.durationMs
+          durationMs: audio.durationMs,
         };
         return { text: result.text, meta };
       },
@@ -166,11 +161,20 @@ if (!gotLock) {
             durationMs: meta.durationMs,
             inferenceMs: meta.inferenceMs,
             costUsd: meta.costUsd,
-            language: meta.language
+            language: meta.language,
           });
           refreshRecentTranscripts();
         }
-      }
+      },
+      deliver: async (text) => {
+        const outcome = await insertTextIntoActiveApp(text, {
+          // Read at delivery time: the user may have changed the setting
+          // since this capture started.
+          restoreClipboard: settingsStore.get().restoreClipboard,
+          restoreClipboardDelayMs: settingsStore.get().restoreClipboardDelayMs,
+        });
+        return outcome.ok ? outcome.value : { inserted: false };
+      },
     });
 
     overlay = createOverlayWindowController({ e2e });
@@ -188,27 +192,32 @@ if (!gotLock) {
       onToggleCapture: toggleCapture,
       onOpenMainWindow: showMainWindow,
       onSetHotkeysPaused: (paused) => hotkeys?.setPaused(paused),
-      onQuit: () => { app.quit(); },
+      onQuit: () => {
+        app.quit();
+      },
       onCopyTranscript: (text) => {
         clipboard.writeText(text);
       },
-      engineDisplayName: () =>
-        engines.get(primaryEngineId)?.displayName ?? MOCK_ENGINE.displayName
+      engineDisplayName: () => engines.get(primaryEngineId)?.displayName ?? MOCK_ENGINE.displayName,
     });
 
     const refreshRecentTranscripts = (): void => {
       if (history === null) return;
       tray.setRecentTranscripts(
-        history.listRecent(5).map((item) => ({ id: item.id, text: item.text }))
+        history.listRecent(5).map((item) => ({ id: item.id, text: item.text })),
       );
     };
     refreshRecentTranscripts();
 
     hotkeys = createHotkeys({
       e2e,
-      onPttStart: () => { session.start(); },
-      onPttStop: () => { session.stop(); },
-      onToggle: toggleCapture
+      onPttStart: () => {
+        session.start();
+      },
+      onPttStop: () => {
+        session.stop();
+      },
+      onToggle: toggleCapture,
     });
 
     session.subscribe((state) => {
@@ -217,7 +226,9 @@ if (!gotLock) {
       if (state.phase === "listening") {
         // Escape cancels a capture. Registered only for the duration of the
         // capture, since the overlay cannot receive key events.
-        hotkeys?.registerEscape(() => { session.cancel(); });
+        hotkeys?.registerEscape(() => {
+          session.cancel();
+        });
       } else {
         hotkeys?.unregisterEscape();
       }
@@ -239,9 +250,7 @@ if (!gotLock) {
       }
       // A dead microphone must never silently produce empty transcripts.
       if (!streamState.live && session.state.phase === "listening") {
-        session.fail(
-          "Microphone lost. Check the device connection and try again."
-        );
+        session.fail("Microphone lost. Check the device connection and try again.");
       }
     });
     setTimeout(maybeStartHotkeys, 5000);
@@ -264,7 +273,7 @@ if (!gotLock) {
         recorderWindow,
         bridge,
         history,
-        getLastCaptureAudio: () => lastCaptureAudio
+        getLastCaptureAudio: () => lastCaptureAudio,
       });
     }
 

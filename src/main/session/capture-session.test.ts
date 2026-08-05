@@ -4,7 +4,7 @@ import type { CaptureAudio, CaptureAudioSource } from "./audio-source";
 import {
   DEFAULT_CAPTURE_OPTIONS,
   SIMULATED_TRANSCRIPT,
-  createCaptureSession
+  createCaptureSession,
 } from "./capture-session";
 
 const OPTIONS = { ...DEFAULT_CAPTURE_OPTIONS };
@@ -15,10 +15,10 @@ const stubSource = (overrides: Partial<CaptureAudioSource> = {}): CaptureAudioSo
     Promise.resolve({
       pcm: new Int16Array([0, 100, 0]),
       durationMs: 100,
-      sampleRate: 16_000
+      sampleRate: 16_000,
     }),
   isLive: () => true,
-  ...overrides
+  ...overrides,
 });
 
 describe("capture session", () => {
@@ -136,18 +136,18 @@ describe("capture session", () => {
     const audio: CaptureAudio = {
       pcm: new Int16Array([1, 2, 3]),
       durationMs: 250,
-      sampleRate: 16_000
+      sampleRate: 16_000,
     };
     const captured: CaptureAudio[] = [];
     const session = createCaptureSession({
       ...OPTIONS,
       source: stubSource({
         endCapture: () => Promise.resolve(audio),
-        beginCapture: () => {}
+        beginCapture: () => {},
       }),
       onAudio: (a) => {
         captured.push(a);
-      }
+      },
     });
 
     session.start();
@@ -165,8 +165,8 @@ describe("capture session", () => {
     const session = createCaptureSession({
       ...OPTIONS,
       source: stubSource({
-        endCapture: () => Promise.reject(new Error("device gone"))
-      })
+        endCapture: () => Promise.reject(new Error("device gone")),
+      }),
     });
 
     session.start();
@@ -178,6 +178,39 @@ describe("capture session", () => {
     expect(session.state.phase).toBe("error");
     if (session.state.phase === "error") {
       expect(session.state.message).toContain("Microphone");
+    }
+  });
+
+  it("delivers the transcript and reports the outcome as inserted", async () => {
+    const deliver = vi.fn(() => Promise.resolve({ inserted: true }));
+    const session = createCaptureSession({ ...OPTIONS, deliver });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(500);
+    session.stop();
+
+    await vi.advanceTimersByTimeAsync(OPTIONS.simulatedInferenceMs);
+    expect(session.state.phase).toBe("delivering");
+    if (session.state.phase === "delivering") {
+      expect(session.state.inserted).toBe(true);
+    }
+    expect(deliver).toHaveBeenCalledWith(SIMULATED_TRANSCRIPT);
+  });
+
+  it("keeps inserted false when delivery fails", async () => {
+    const deliver = vi.fn(() => Promise.reject(new Error("paste failed")));
+    const session = createCaptureSession({ ...OPTIONS, deliver });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(500);
+    session.stop();
+
+    await vi.advanceTimersByTimeAsync(OPTIONS.simulatedInferenceMs);
+    expect(session.state.phase).toBe("delivering");
+    if (session.state.phase === "delivering") {
+      expect(session.state.inserted).toBe(false);
     }
   });
 });

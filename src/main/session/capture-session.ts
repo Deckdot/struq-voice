@@ -20,6 +20,7 @@
 import type { CaptureState } from "../../shared/capture";
 import { INITIAL_CAPTURE_STATE } from "../../shared/capture";
 import { MOCK_ENGINE_ID } from "../../shared/engines";
+import type { PasteOutcome } from "../platform/win32/paste";
 import type { CaptureAudio, CaptureAudioSource } from "./audio-source";
 
 export const SIMULATED_TRANSCRIPT =
@@ -50,13 +51,13 @@ export interface CaptureSessionOptions {
   /** Called with the captured audio before delivering. */
   readonly onAudio?: (audio: CaptureAudio) => void;
   /** Transcribe the captured audio; replaces the simulated transcript. */
-  readonly transcribe?: (
-    audio: CaptureAudio
-  ) => Promise<{ text: string; meta: TranscriptMeta }>;
+  readonly transcribe?: (audio: CaptureAudio) => Promise<{ text: string; meta: TranscriptMeta }>;
   /** Engine shown in the transcribing state while inference runs. */
   readonly transcribingEngineId?: string;
   /** Called once the transcript exists, before delivering. */
   readonly onTranscript?: (text: string, meta: TranscriptMeta) => void;
+  /** Deliver the transcript into the focused window. Omitted in tests. */
+  readonly deliver?: (text: string) => Promise<PasteOutcome>;
 }
 
 export const DEFAULT_CAPTURE_OPTIONS: CaptureSessionOptions = {
@@ -64,7 +65,7 @@ export const DEFAULT_CAPTURE_OPTIONS: CaptureSessionOptions = {
   maxCaptureMs: 120_000,
   simulatedInferenceMs: 300,
   deliverHoldMs: 900,
-  errorHoldMs: 4000
+  errorHoldMs: 4000,
 };
 
 export interface CaptureSession {
@@ -76,9 +77,7 @@ export interface CaptureSession {
   subscribe: (listener: (state: CaptureState) => void) => () => void;
 }
 
-export const createCaptureSession = (
-  options: CaptureSessionOptions
-): CaptureSession => {
+export const createCaptureSession = (options: CaptureSessionOptions): CaptureSession => {
   let state: CaptureState = INITIAL_CAPTURE_STATE;
   const listeners = new Set<(state: CaptureState) => void>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -160,7 +159,7 @@ export const createCaptureSession = (
     setState({
       phase: "transcribing",
       engineId: options.transcribingEngineId ?? MOCK_ENGINE_ID,
-      startedAtMs: captureStartedAt
+      startedAtMs: captureStartedAt,
     });
 
     let audio: CaptureAudio | null = null;
@@ -189,9 +188,7 @@ export const createCaptureSession = (
           meta = outcome.meta;
         } catch (error) {
           const message =
-            error instanceof Error
-              ? error.message
-              : "Transcription failed. Try again.";
+            error instanceof Error ? error.message : "Transcription failed. Try again.";
           fail(message, null);
           void error;
           return;
@@ -211,6 +208,24 @@ export const createCaptureSession = (
     }
 
     setState({ phase: "delivering", text, inserted: false });
+    if (options.deliver !== undefined) {
+      // Fire-and-forget: the paste must not delay the delivering hold or
+      // the return to idle. keyTap completes in ~2ms; the state updates
+      // when it settles, and only if we are still in the same delivering
+      // state (a new capture may have replaced it meanwhile).
+      void options
+        .deliver(text)
+        .then((outcome) => {
+          if (state.phase === "delivering" && state.text === text) {
+            setState({ phase: "delivering", text, inserted: outcome.inserted });
+          }
+        })
+        .catch(() => {
+          if (state.phase === "delivering" && state.text === text) {
+            setState({ phase: "delivering", text, inserted: false });
+          }
+        });
+    }
     schedule(options.deliverHoldMs, () => {
       toIdle();
     });
@@ -246,6 +261,6 @@ export const createCaptureSession = (
     stop,
     cancel,
     fail,
-    subscribe
+    subscribe,
   };
 };

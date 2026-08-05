@@ -41,6 +41,9 @@ export function App(): JSX.Element {
           {route === "settings" && <SettingsView />}
         </main>
       </div>
+      {/* The first-run banner is fixed to the bottom, so it would cover the
+          last controls of a scrolling view. Reserve the space it occupies. */}
+      {showFirstRun && <div aria-hidden="true" className="h-[168px] shrink-0" />}
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}

@@ -22,7 +22,10 @@
     "release:verify": "node scripts/verify-release.mjs",
     "release:publish": "node scripts/publish-release.mjs",
     "release:cut": "node scripts/release-cut.mjs",
+    "release:auto": "node scripts/release-auto.mjs",
+    "release:dry": "node scripts/release-auto.mjs --dry-run",
     "ship": "pnpm release && pnpm release:publish",
+    "ship:auto": "node scripts/release-auto.mjs",
     "postinstall": "node scripts/rebuild-native-modules.mjs"
   },
   "dependencies": {

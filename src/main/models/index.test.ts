@@ -31,7 +31,7 @@ const withRoot = async (fn: (root: string) => void | Promise<void>): Promise<voi
 describe("model service", () => {
   it("reflects catalog installation state from disk", () =>
     withRoot((root) => {
-      const service = createModelsService(root);
+      const service = createModelsService(root, join(root, "..", "runtimes"));
 
       const empty = service.list().items;
       expect(empty).toHaveLength(MODEL_CATALOG.length);
@@ -54,7 +54,7 @@ describe("model service", () => {
 
   it("rejects startDownload for an unknown model id", () =>
     withRoot((root) => {
-      const service = createModelsService(root);
+      const service = createModelsService(root, join(root, "..", "runtimes"));
 
       expect(service.startDownload("does-not-exist")).toBe(false);
     })
@@ -62,7 +62,7 @@ describe("model service", () => {
 
   it("deletes an installed model and reports it as uninstalled", async () => {
     await withRoot(async (root) => {
-      const service = createModelsService(root);
+      const service = createModelsService(root, join(root, "..", "runtimes"));
       const target = MODEL_CATALOG[1]!;
       for (const file of target.files) {
         installFile(root, target.id, file.path, "fake-content");
@@ -78,7 +78,7 @@ describe("model service", () => {
 
   it("notifies subscribers on a download state change", () =>
     withRoot((root) => {
-      const service = createModelsService(root);
+      const service = createModelsService(root, join(root, "..", "runtimes"));
       const target = MODEL_CATALOG[0]!;
       let calls = 0;
       const unsubscribe = service.subscribe(() => {

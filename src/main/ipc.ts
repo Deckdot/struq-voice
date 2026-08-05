@@ -26,6 +26,7 @@ import {
   modelsDeleteChannel,
   modelsDownloadChannel,
   modelsDownloadProgressChannel,
+  modelsInstallRuntimeChannel,
   modelsListChannel,
   openRouterKeyClearChannel,
   openRouterKeySetChannel,
@@ -165,8 +166,18 @@ export const registerIpcHandlers = (
   ipcMain.handle(modelsListChannel, () => {
     const listed = models?.list();
     return listed === undefined
-      ? { items: [], totalDiskUsed: 0 }
-      : { items: listed.items, totalDiskUsed: listed.totalDiskUsed };
+      ? { items: [], totalDiskUsed: 0, whisperRuntime: { state: "idle" } }
+      : {
+          items: listed.items,
+          totalDiskUsed: listed.totalDiskUsed,
+          whisperRuntime: listed.whisperRuntime
+        };
+  });
+
+  ipcMain.handle(modelsInstallRuntimeChannel, async () => {
+    if (models === null) return { ok: false };
+    await models.installWhisperRuntime();
+    return { ok: true };
   });
 
   ipcMain.handle(modelsDownloadChannel, (_event, request: ModelsModelRequest) => {

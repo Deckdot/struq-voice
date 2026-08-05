@@ -22,6 +22,7 @@ import type {
 
 export const WHISPER_CPP_ENGINE_ID = "whisper-cpp" as const;
 
+const DEFAULT_MODEL_ID = "whisper-large-v3-turbo-q5_0";
 const DEFAULT_MODEL_FILE = "ggml-large-v3-turbo-q5_0.bin";
 const CUDA_DLL = "cudart64_13.dll";
 const SAMPLE_RATE = 16_000;
@@ -49,8 +50,12 @@ export interface WhisperCppDeps {
 }
 
 export interface WhisperCppEngineOptions {
-  /** userData/runtimes; whisper-cli.exe and the model live under it. */
+  /** userData/runtimes; whisper-cli.exe lives under whisper-cpp/. */
   readonly runtimeRoot: string;
+  /** userData/models; the catalog model downloads here. */
+  readonly modelsRoot: string;
+  /** Catalog id of the whisper model; defaults to whisper-large-v3-turbo-q5_0. */
+  readonly modelId?: string;
   readonly onWarmup?: (state: "cold" | "warming" | "warm" | "failed") => void;
   readonly deps?: WhisperCppDeps;
 }
@@ -127,7 +132,10 @@ export const createWhisperCppEngine = (
   const fileExists = options.deps?.exists ?? existsSync;
 
   const binaryPath = join(options.runtimeRoot, "whisper-cpp", "whisper-cli.exe");
-  const modelPath = join(options.runtimeRoot, "whisper-cpp", "models", DEFAULT_MODEL_FILE);
+  // The model lives in the catalog download tree: modelsRoot/<modelId>/<file>.
+  // Defaults to the whisper-large-v3-turbo-q5_0 entry.
+  const modelId = options.modelId ?? DEFAULT_MODEL_ID;
+  const modelPath = join(options.modelsRoot, modelId, DEFAULT_MODEL_FILE);
 
   const detectCuda = async (): Promise<"cuda" | "cpu"> => {
     if (cudaCache !== null) return cudaCache;

@@ -95,7 +95,11 @@ if (!gotLock) {
     const settingsStore = createSettingsStore(join(app.getPath("userData"), "settings.json"));
     const secrets = createSecretsStore();
     const history = openDatabase(app.getPath("userData"));
-    const models = createModelsService(join(app.getPath("userData"), "models"));
+    const runtimeRoot = join(app.getPath("userData"), "runtimes");
+    const models = createModelsService(
+      join(app.getPath("userData"), "models"),
+      runtimeRoot
+    );
     const autostart = createAutostart();
 
     // Keep the login-item flag in sync with the setting. Applied at boot so
@@ -123,8 +127,7 @@ if (!gotLock) {
     const openrouterEngine = createOpenRouterEngine({
       getApiKey: () => secrets.readOpenRouterKey()
     });
-    const runtimeRoot = join(app.getPath("userData"), "runtimes");
-    const whisperCppEngine = createWhisperCppEngine({ runtimeRoot });
+    const whisperCppEngine = createWhisperCppEngine({ runtimeRoot, modelsRoot });
     const engines = new Map<string, TranscriptionEngine>([
       [mockEngine.id, mockEngine],
       [parakeetEngine.id, parakeetEngine],

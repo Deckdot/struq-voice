@@ -44,6 +44,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "uiohook-napi": "^1.5.5",
+    "yauzl": "^3.4.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
@@ -56,6 +57,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@types/yauzl": "^3.4.0",
     "@vitejs/plugin-react": "^5.1.0",
     "drizzle-kit": "^0.31.10",
     "electron": "^39.1.2",

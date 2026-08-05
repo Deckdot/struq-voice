@@ -35,6 +35,7 @@ export interface MainWindowApi {
     download: (request: { modelId: string }) => Promise<ModelsModelResult>;
     cancel: (request: { modelId: string }) => Promise<ModelsModelResult>;
     remove: (request: { modelId: string }) => Promise<ModelsModelResult>;
+    installRuntime: () => Promise<ModelsModelResult>;
     onDownloadProgress: (
       listener: (event: {
         modelId: string;

@@ -17,7 +17,7 @@ export interface ModelFile {
 export interface ModelInfo {
   id: string;
   name: string;
-  engine: "parakeet";
+  engine: "parakeet" | "whisper-cpp";
   bytes: number;
   languages: string;
   whenToUse: string;
@@ -40,16 +40,18 @@ export interface ModelStatus {
 }
 
 const HF_RESOLVE_ROOT = "https://huggingface.co/csukuangfj";
+const HF_WHISPER_ROOT = "https://huggingface.co/ggerganov/whisper.cpp";
 
 function file(
-  model: string,
+  repo: string,
   path: string,
   bytes: number,
-  sha256: string
+  sha256: string,
+  root: string = HF_RESOLVE_ROOT
 ): ModelFile {
   return {
     path,
-    url: `${HF_RESOLVE_ROOT}/${model}/resolve/main/${path}`,
+    url: `${root}/${repo}/resolve/main/${path}`,
     bytes,
     sha256
   };
@@ -125,6 +127,42 @@ export const MODEL_CATALOG: readonly ModelInfo[] = [
         "tokens.txt",
         9384,
         ZERO_HASH
+      )
+    ]
+  },
+  {
+    id: "whisper-large-v3-turbo-q5_0",
+    name: "Whisper large-v3 turbo (q5_0)",
+    engine: "whisper-cpp",
+    bytes: 574041195,
+    languages: "99 languages, best multilingual coverage",
+    whenToUse: "Non-European languages, heavy accents, poor recordings.",
+    license: "MIT (OpenAI weights)",
+    files: [
+      file(
+        "ggml-large-v3-turbo-q5_0.bin",
+        "ggml-large-v3-turbo-q5_0.bin",
+        574041195,
+        "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+        HF_WHISPER_ROOT
+      )
+    ]
+  },
+  {
+    id: "whisper-base",
+    name: "Whisper base",
+    engine: "whisper-cpp",
+    bytes: 147951465,
+    languages: "99 languages, small and fast",
+    whenToUse: "Lightweight option for quick, lower-accuracy drafts.",
+    license: "MIT (OpenAI weights)",
+    files: [
+      file(
+        "ggml-base.bin",
+        "ggml-base.bin",
+        147951465,
+        "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+        HF_WHISPER_ROOT
       )
     ]
   }

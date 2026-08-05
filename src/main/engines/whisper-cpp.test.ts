@@ -49,6 +49,7 @@ const makeDeps = (
 };
 
 const runtimeRoot = "C:\\fake\\runtimes";
+const modelsRoot = "C:\\fake\\models";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -57,13 +58,13 @@ afterEach(() => {
 describe("whisper-cpp engine", () => {
   it("is ready when both binary and model exist", async () => {
     const { deps } = makeDeps();
-    const engine = createWhisperCppEngine({ runtimeRoot, deps });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     await expect(engine.readiness()).resolves.toEqual({ ready: true });
   });
 
   it("reports install-runtime when the binary is missing", async () => {
     const { deps } = makeDeps({ exists: () => false });
-    const engine = createWhisperCppEngine({ runtimeRoot, deps });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     await expect(engine.readiness()).resolves.toMatchObject({
       ready: false,
       action: "install-runtime"
@@ -74,7 +75,7 @@ describe("whisper-cpp engine", () => {
     const { deps } = makeDeps({
       exists: (path: string) => path.includes("whisper-cli.exe")
     });
-    const engine = createWhisperCppEngine({ runtimeRoot, deps });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     await expect(engine.readiness()).resolves.toMatchObject({
       ready: false,
       action: "download-model"
@@ -83,7 +84,7 @@ describe("whisper-cpp engine", () => {
 
   it("transcribes a capture and deletes the temp wav", async () => {
     const { deps, calls } = makeDeps();
-    const engine = createWhisperCppEngine({ runtimeRoot, deps });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     const outcome = await engine.transcribe(request());
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
@@ -98,7 +99,7 @@ describe("whisper-cpp engine", () => {
 
   it("passes the request language instead of auto", async () => {
     const { deps, calls } = makeDeps();
-    const engine = createWhisperCppEngine({ runtimeRoot, deps });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     await engine.transcribe({ ...request(), language: "nl" });
     const args = calls.execs[0]?.args ?? [];
     const langIndex = args.indexOf("-l");
@@ -113,7 +114,7 @@ describe("whisper-cpp engine", () => {
         throw new Error("whisper-cli crashed");
       }
     });
-    const engine = createWhisperCppEngine({ runtimeRoot, deps });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     const outcome = await engine.transcribe(request());
     expect(outcome.ok).toBe(false);
   });
@@ -130,7 +131,7 @@ describe("whisper-cpp engine", () => {
         };
       }
     });
-    const engine = createWhisperCppEngine({ runtimeRoot, deps });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     const outcome = await engine.transcribe(request());
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
@@ -145,7 +146,7 @@ describe("whisper-cpp engine", () => {
         throw new Error("timeout");
       }
     });
-    const engine = createWhisperCppEngine({ runtimeRoot, deps });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     await engine.transcribe(request());
     expect(calls.deletes).toHaveLength(1);
   });

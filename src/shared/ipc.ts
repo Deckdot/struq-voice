@@ -150,6 +150,7 @@ export const modelsListChannel = "models:list" as const;
 export const modelsDownloadChannel = "models:download" as const;
 export const modelsCancelChannel = "models:cancel" as const;
 export const modelsDeleteChannel = "models:delete" as const;
+export const modelsInstallRuntimeChannel = "models:install-runtime" as const;
 export const modelsDownloadProgressChannel = "models:download-progress" as const;
 
 export interface ModelsModelRequest {
@@ -164,6 +165,12 @@ export interface ModelsListResult {
   readonly items: readonly ModelStatus[];
   /** Total bytes used by every installed model, for the Models view. */
   readonly totalDiskUsed: number;
+  readonly whisperRuntime: {
+    readonly state: "idle" | "downloading" | "done" | "error";
+    readonly receivedBytes?: number;
+    readonly totalBytes?: number;
+    readonly message?: string;
+  };
 }
 
 /** Main to renderer: download progress for one model, unthrottled. */
@@ -265,6 +272,7 @@ export const PRELOAD_CHANNELS = {
     download: modelsDownloadChannel,
     cancel: modelsCancelChannel,
     delete: modelsDeleteChannel,
+    installRuntime: modelsInstallRuntimeChannel,
     downloadProgress: modelsDownloadProgressChannel
   }
 } as const;

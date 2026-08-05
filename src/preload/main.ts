@@ -76,6 +76,8 @@ const api: MainWindowApi = {
       ipcRenderer.invoke(channels.models.cancel, request) as Promise<ModelsModelResult>,
     remove: (request: ModelsModelRequest) =>
       ipcRenderer.invoke(channels.models.delete, request) as Promise<ModelsModelResult>,
+    installRuntime: () =>
+      ipcRenderer.invoke(channels.models.installRuntime) as Promise<ModelsModelResult>,
     onDownloadProgress: (listener) => {
       const handler = (
         _event: Electron.IpcRendererEvent,

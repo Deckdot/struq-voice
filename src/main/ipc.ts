@@ -3,13 +3,18 @@ import type { HistoryStore } from "./db/history-store";
 import type { ModelsService } from "./models";
 import type { SecretsStore } from "./store/secrets";
 import type { SettingsStore } from "./store/settings-store";
-import { migrateSettings } from "../shared/settings";
+import { ONBOARDING_VERSION, migrateSettings } from "../shared/settings";
+import type { HardwareProfile, ModelRecommendation } from "../shared/hardware";
+import { UNKNOWN_HARDWARE, recommendModel } from "../shared/hardware";
 import type {
   DevicesListResult,
   HistoryDeleteRequest,
   HistoryListRequest,
   HistorySearchRequest,
   ModelsModelRequest,
+  OnboardingCompleteResult,
+  OnboardingProfileResult,
+  OnboardingStartRecommendedResult,
   OpenRouterKeySetRequest,
   RecorderDevice,
   SettingsUpdateRequest,
@@ -18,6 +23,9 @@ import type {
 } from "../shared/ipc";
 import {
   appGetVersionChannel,
+  onboardingCompleteChannel,
+  onboardingProfileChannel,
+  onboardingStartRecommendedChannel,
   clipboardCopyChannel,
   devicesListChannel,
   historyClearChannel,
@@ -56,14 +64,80 @@ import type { UpdaterController } from "./updater";
  * src/shared/ipc.ts; no logic beyond forwarding to the window, process or
  * store.
  */
+export interface OnboardingDeps {
+  /** Null until detection resolves; the recommendation falls back meanwhile. */
+  readonly getHardware: () => HardwareProfile | null;
+}
+
 export const registerIpcHandlers = (
   history: HistoryStore | null,
   models: ModelsService | null,
   settingsStore: SettingsStore | null,
   secrets: SecretsStore | null,
-  updater: UpdaterController | null = null
+  updater: UpdaterController | null = null,
+  onboarding: OnboardingDeps | null = null
 ): void => {
   const currentVersion = app.getVersion();
+
+  /**
+   * One place decides what this machine should run, so the profile handler
+   * and the "start it" handler can never disagree about which model that is.
+   */
+  const currentRecommendation = (): ModelRecommendation =>
+    recommendModel(onboarding?.getHardware() ?? UNKNOWN_HARDWARE);
+
+  ipcMain.handle(onboardingProfileChannel, (): OnboardingProfileResult => {
+    const recommendation = currentRecommendation();
+    const listed = models?.list();
+    const status = listed?.items.find((item) => item.model.id === recommendation.modelId);
+    return {
+      hardware: onboarding?.getHardware() ?? null,
+      recommendation,
+      modelInstalled: status?.installed ?? false
+    };
+  });
+
+  ipcMain.handle(
+    onboardingStartRecommendedChannel,
+    (): OnboardingStartRecommendedResult => {
+      const recommendation = currentRecommendation();
+      if (settingsStore === null || models === null) {
+        return {
+          modelId: recommendation.modelId,
+          started: false,
+          message: "Models are unavailable in this session."
+        };
+      }
+
+      // Point the engine at the model before the download starts, so a
+      // capture that lands mid-download resolves against the right engine.
+      const settings = settingsStore.get();
+      settingsStore.update({
+        engine: { ...settings.engine, primary: recommendation.engineId },
+        ...(recommendation.engineId === "whisper-cpp"
+          ? { whisperModelId: recommendation.modelId }
+          : {})
+      });
+
+      const listed = models.list();
+      const status = listed.items.find((item) => item.model.id === recommendation.modelId);
+      if (status?.installed === true) {
+        return { modelId: recommendation.modelId, started: false, message: "Already installed." };
+      }
+      return { modelId: recommendation.modelId, started: models.startDownload(recommendation.modelId) };
+    }
+  );
+
+  ipcMain.handle(onboardingCompleteChannel, (): OnboardingCompleteResult => {
+    settingsStore?.update({
+      onboarding: {
+        completed: true,
+        completedVersion: ONBOARDING_VERSION,
+        hardware: onboarding?.getHardware() ?? null
+      }
+    });
+    return { settings: settingsStore?.get() ?? migrateSettings({}) };
+  });
 
   ipcMain.handle(
     updatesGetChannel,

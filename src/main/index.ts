@@ -49,6 +49,9 @@ import { createOverlayWindowController } from "./windows/overlay-window";
 import { createRecorderWindow } from "./windows/recorder-window";
 import { createAutostart } from "./platform/win32/autostart";
 import { MOCK_ENGINE, MOCK_ENGINE_ID } from "../shared/engines";
+import { ONBOARDING_VERSION } from "../shared/settings";
+import type { HardwareProfile } from "../shared/hardware";
+import { detectHardware } from "./hardware/detect";
 
 const e2e = process.env["STRUQ_VOICE_E2E"] === "1";
 // The keyboard-hook verification spec: like production, but it installs the
@@ -116,6 +119,14 @@ if (!gotLock) {
       models.ensureWhisperRuntime();
     }
 
+    // The e2e suite drives the app directly and must never meet the
+    // onboarding takeover, which would sit in front of every spec.
+    if (e2e && !settingsStore.get().onboarding.completed) {
+      settingsStore.update({
+        onboarding: { completed: true, completedVersion: ONBOARDING_VERSION, hardware: null }
+      });
+    }
+
     // Keep the login-item flag in sync with the setting. Applied at boot so
     // an external change or a fresh install settles, then on every change.
     autostart.setEnabled(settingsStore.get().autostart);
@@ -130,7 +141,17 @@ if (!gotLock) {
       ? null
       : createUpdater({ autoUpdater, isPackaged: app.isPackaged });
 
-    registerIpcHandlers(history, models, settingsStore, secrets, updater);
+    // Hardware detection feeds the onboarding recommendation. It runs once,
+    // in the background, and never blocks boot: until it resolves the
+    // recommendation falls back to the balanced tier.
+    let hardware: HardwareProfile | null = null;
+    void detectHardware({ runtimeRoot }).then((profile) => {
+      hardware = profile;
+    });
+
+    registerIpcHandlers(history, models, settingsStore, secrets, updater, {
+      getHardware: () => hardware
+    });
 
     updater?.subscribe((state) => {
       // The window is created on demand and can be closed while a download is

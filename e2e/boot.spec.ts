@@ -18,9 +18,13 @@ test("boots to the main window with zero console errors", async () => {
     // The recorder window exists but is never visible.
     expect(await testHook.recorder.isVisible(app)).toBe(false);
 
-    // The theme is actually applied: the wordmark renders and the body uses
-    // the linen background, not the white browser default.
-    await expect(window.locator("h1")).toHaveText("Struq Voice");
+    // The theme is actually applied: the landing view renders and the body
+    // uses the linen background, not the white browser default. Onboarding is
+    // marked complete under e2e, so Dictate is what boot lands on.
+    await expect(window.locator("h1")).toHaveText("Dictate");
+    await expect(
+      window.getByRole("navigation", { name: "Struq Voice" }).getByText("Struq Voice")
+    ).toBeVisible();
     const bodyBackground = await window.evaluate(
       () => getComputedStyle(document.body).backgroundColor
     );

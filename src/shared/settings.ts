@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { hardwareProfileSchema } from "./hardware";
 import { DEFAULT_PTT_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
 import { DEFAULT_WHISPER_MODEL_ID } from "./models";
 
@@ -20,6 +21,22 @@ export const postProcessingSchema = z.object({
   removeFillers: z.boolean().default(false),
   addTrailingPunctuation: z.boolean().default(false)
 });
+
+/**
+ * First-run state. Lives in settings rather than renderer localStorage so
+ * main can gate the window on it and clearing the web cache cannot replay
+ * onboarding at an established user. The hardware snapshot is kept so the
+ * Models view can name the machine without re-probing.
+ */
+export const onboardingSchema = z.object({
+  completed: z.boolean().default(false),
+  /** ONBOARDING_VERSION at the time it was completed. */
+  completedVersion: z.number().int().min(0).default(0),
+  hardware: hardwareProfileSchema.nullable().default(null)
+});
+
+/** Bump to replay onboarding after a change that needs the user to see it. */
+export const ONBOARDING_VERSION = 1;
 
 export const settingsSchema = z.object({
   version: z.literal(1).default(1),
@@ -51,11 +68,17 @@ export const settingsSchema = z.object({
     dictionary: [],
     removeFillers: false,
     addTrailingPunctuation: false
+  }),
+  onboarding: onboardingSchema.default({
+    completed: false,
+    completedVersion: 0,
+    hardware: null
   })
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
 export type DictionaryEntry = z.infer<typeof dictionaryEntrySchema>;
+export type OnboardingState = z.infer<typeof onboardingSchema>;
 
 export const DEFAULT_SETTINGS: Settings = settingsSchema.parse({});
 
@@ -67,4 +90,15 @@ export const migrateSettings = (raw: unknown): Settings => {
   const parsed = settingsSchema.safeParse(raw);
   if (parsed.success) return parsed.data;
   return settingsSchema.parse({});
+};
+
+/**
+ * Whether onboarding should run. An install that predates the onboarding
+ * block parses with `completed: false`, so completion is also inferred: a
+ * user who already picked a real engine has done the setup by hand and must
+ * not be walked through it again.
+ */
+export const shouldRunOnboarding = (settings: Settings, mockEngineId: string): boolean => {
+  if (settings.onboarding.completed) return false;
+  return settings.engine.primary === mockEngineId;
 };

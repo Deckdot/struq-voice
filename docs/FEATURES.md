@@ -69,10 +69,40 @@ as `pnpm test:e2e`).
 - Trim/collapse whitespace (always on), custom dictionary, filler removal,
   trailing punctuation; pure functions with unit tests.
 
+### Onboarding and hardware
+- Machine profiling: cores and memory from Node `os`, GPU vendor from
+  `app.getGPUInfo("basic")`, CUDA runtime from the whisper.cpp DLL probe.
+  No subprocess calls, and every probe degrades to the unknown profile
+  rather than blocking boot (`src/shared/hardware.ts`,
+  `src/main/hardware/detect.ts`).
+- One model recommended per machine, named with the hardware that chose it:
+  Parakeet v3 for a balanced or capable PC, whisper base q5_1 for a light
+  one. Pure and unit tested.
+- First run is a full-window flow with four steps: microphone (arrives
+  satisfied, live meter), hotkey (defaults already registered), engine (the
+  download starts on mount, not on arrival), and a real capture the user
+  performs themselves. Skipping is as cheap as continuing and still leaves a
+  working app.
+- Completion lives in the settings schema (`onboarding.completed`), so main
+  can gate on it and clearing the web cache cannot replay it. An install that
+  predates the block and already has a real engine is treated as complete.
+  Skipped entirely under `STRUQ_VOICE_E2E=1`.
+
 ### Interface
 - Main window shell: custom title bar, rail navigation (Dictate, History,
   Models, Settings), Zustand store.
-- Command palette (Ctrl+K), first-run steps (mic, engine, hotkey).
+- Shared component layer in `src/renderer/main/components/ui/`: Button (four
+  variants, no fifth), Card, Section, Field, Badge, StatusDot, ProgressBar,
+  Kbd, HotkeyCapture. Views build from these rather than re-typing Tailwind.
+- Dictate is a readiness home: microphone and engine state with the fix
+  offered inline, plus the last transcript in the serif reading face.
+- Settings groups into Capture, Transcription, Delivery and Text behind a
+  sub-nav, with the capture timing values (`minCaptureMs`, `maxCaptureMs`,
+  `prerollMs`, `restoreClipboardDelayMs`) exposed under Advanced
+  disclosures. They were previously in the schema but unreachable.
+- Models leads with "Recommended for this PC" and keeps the full catalog
+  below it.
+- Command palette (Ctrl+K).
 - Views built against Velden Linen Forest (`docs/DESIGN_SYSTEM.md`).
 
 ### Platform
@@ -88,8 +118,15 @@ as `pnpm test:e2e`).
 - The manual checklist in `docs/IMPLEMENTATION_PLAN.md` section 7.3 is
   inherently manual and has not been run.
 - shadcn/ui components were not adopted; views are hand-built on theme
-  tokens. The "default shadcn skin ships by accident" risk is therefore
-  moot, but it is a deviation from the plan's letter.
+  tokens, now through the shared layer in `components/ui/`. The "default
+  shadcn skin ships by accident" risk is therefore moot, but it is a
+  deviation from the plan's letter.
+- GPU detection identifies the vendor but not VRAM, because that needs
+  `nvidia-smi` or WMI and both can hang for seconds during boot. The CUDA
+  runtime check is a file probe, so a card without the whisper.cpp CUDA
+  build present is classified on its cores and memory alone.
+- The onboarding "try it" step is the one part not covered by a unit test:
+  it needs a real capture. Worth an e2e spec when the user wants one.
 
 ## Notes for maintainers
 

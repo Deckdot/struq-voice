@@ -7,6 +7,7 @@
 import type { CaptureState } from "./capture";
 import type { TranscriptRecord } from "./ipc";
 import type { ModelsListResult, ModelsModelResult } from "./ipc";
+import type { OnboardingProfileResult, OnboardingStartRecommendedResult } from "./ipc";
 import type { Settings } from "./settings";
 import type { UpdateState } from "./updates";
 
@@ -77,6 +78,12 @@ export interface MainWindowApi {
     check: () => Promise<{ state: UpdateState; currentVersion: string }>;
     install: () => Promise<{ started: boolean }>;
     onChange: (listener: (state: UpdateState) => void) => () => void;
+  };
+  readonly onboarding: {
+    profile: () => Promise<OnboardingProfileResult>;
+    /** Selects the recommended engine and starts its download. */
+    startRecommended: () => Promise<OnboardingStartRecommendedResult>;
+    complete: () => Promise<{ settings: Settings }>;
   };
 }
 

@@ -45,11 +45,15 @@ bridge via `contextBridge` (`window.struqVoice`); main registers handlers in
 electron.vite.config.ts   three main/preload/renderer entries
 src/
   shared/                 ipc.ts (single source) · result.ts (Result<T>)
+                          hardware.ts (profile, tier, recommendation)
   main/                   index.ts (lifecycle) · ipc.ts (typed dispatch)
+    hardware/detect.ts    os + getGPUInfo probing, degrades to unknown
   preload/                main.ts · overlay.ts · recorder.ts
   renderer/
     styles/               main.css · theme.css (Velden Linen Forest tokens)
     main/                 index.html · main.tsx · App.tsx
+      components/ui/      the shared visual layer, built on the tokens
+      onboarding/         first-run takeover, one file per step
     overlay/              index.html · overlay.tsx · Overlay.tsx
     recorder/             index.html · recorder.ts
 e2e/
@@ -59,13 +63,51 @@ docs/                     this directory
 scripts/                  rebuild-native-modules.mjs
 ```
 
+## First run
+
+Onboarding is a renderer takeover gated on main-process state. The decision
+lives in `settings.onboarding.completed` rather than renderer localStorage,
+for three reasons: main can act on it, clearing the web cache cannot replay
+it, and it is testable as a pure function (`shouldRunOnboarding`).
+
+```
+boot ──▶ detectHardware() in background, never blocking
+             │
+             ▼
+App reads settings once ──▶ shouldRunOnboarding?
+             │                      │
+             │ no                   │ yes
+             ▼                      ▼
+    rail + views          Onboarding takeover
+                          mic ▸ hotkey ▸ engine ▸ try it
+                                 │
+                          model download starts on MOUNT,
+                          not on reaching the engine step
+                                 │
+                                 ▼
+                       onboarding:complete writes the flag
+```
+
+Three channels serve it, declared in `src/shared/ipc.ts` like every other:
+`onboarding:get-profile` (hardware plus recommendation),
+`onboarding:start-recommended` (sets the engine, then starts the download),
+and `onboarding:complete`. Progress, mic levels, device lists and capture
+state all reuse the existing broadcasts rather than adding new ones.
+
+Detection failure is not an error path: `detectHardware` returns the unknown
+profile, which classifies as balanced and still yields a usable
+recommendation. Under `STRUQ_VOICE_E2E=1` main marks onboarding complete at
+boot, so no spec ever meets the takeover.
+
 ## Boot order (main process)
 
 1. `STRUQ_VOICE_USERDATA` applied before `app` is ready, so e2e never touches
    the real profile.
 2. Single instance lock. A second launch focuses the existing window.
 3. `whenReady`: `Menu.setApplicationMenu(null)`, IPC handlers, main window.
-4. `window-all-closed` quits on Windows.
+4. Hardware detection starts in the background and resolves into a cached
+   profile the onboarding handlers read.
+5. `window-all-closed` quits on Windows.
 
 ## Verification
 

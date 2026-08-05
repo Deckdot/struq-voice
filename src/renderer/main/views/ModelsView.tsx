@@ -2,23 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { Download, Check, Trash2, Loader2, HardDrive, FolderOpen } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
-import type { ModelsListResult } from "../../../shared/ipc";
+import type { ModelsListResult, OnboardingProfileResult } from "../../../shared/ipc";
 import type { ModelStatus, WhisperTier } from "../../../shared/models";
-import { WHISPER_TIER_ORDER, whisperVariant } from "../../../shared/models";
+import { WHISPER_TIER_ORDER, findModel, whisperVariant } from "../../../shared/models";
+import { Badge, Button, Card, formatBytes } from "../components/ui";
 
 /**
- * The Models view: a card per catalog model with install state, live
- * download progress and per-model delete. "Measured on this machine" speed
- * figures land once an engine has run; until then the card shows the
- * catalog's one-liner.
+ * The Models view: the one model this machine should run, then the full
+ * catalog for anyone who wants to choose. A list of thirty-one entries with
+ * no default is a decision handed to someone with no basis for making it.
+ *
+ * "Measured on this machine" speed figures land once an engine has run;
+ * until then a card shows the catalog's one-liner.
  */
-
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) return `${String(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-};
 
 const formatPercent = (received: number, total: number): string =>
   total > 0 ? `${String(Math.round((received / total) * 100))}%` : "0%";
@@ -62,6 +58,7 @@ export function ModelsView(): JSX.Element {
   const [measuredRtf, setMeasuredRtf] = useState<Record<string, number>>({});
   const [tier, setTier] = useState<TierFilter>("all");
   const [englishOnly, setEnglishOnly] = useState(false);
+  const [profile, setProfile] = useState<OnboardingProfileResult | null>(null);
 
   const visible = useMemo(() => {
     const filtered = statuses.filter((status) => {
@@ -102,6 +99,9 @@ export function ModelsView(): JSX.Element {
       });
     };
     initialRefresh();
+    void api.onboarding.profile().then((result) => {
+      if (!cancelled) setProfile(result);
+    });
     const unsubscribe = api.models.onDownloadProgress(() => {
       refresh();
     });
@@ -115,6 +115,13 @@ export function ModelsView(): JSX.Element {
   const runtimeDone = runtime.state === "done";
   const runtimeError = runtime.state === "error";
 
+  const recommended = profile?.recommendation ?? null;
+  const recommendedModel = recommended === null ? null : findModel(recommended.modelId);
+  const recommendedStatus =
+    recommended === null
+      ? undefined
+      : statuses.find((status) => status.model.id === recommended.modelId);
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-border px-6 py-5">
@@ -123,97 +130,86 @@ export function ModelsView(): JSX.Element {
           Local engines, downloaded to your machine. OpenRouter is the zero-setup
           cloud path and never appears here.
         </p>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {(["all", ...WHISPER_TIER_ORDER] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={tier === option}
-              onClick={() => {
-                setTier(option);
-              }}
-              className={`rounded-full border px-2.5 py-1 text-xs transition-colors duration-fast ${
-                tier === option
-                  ? "border-accent bg-accent-soft text-accent-text"
-                  : "border-border text-text-muted hover:bg-surface-hover hover:text-text"
-              }`}
-            >
-              {TIER_LABEL[option]}
-            </button>
-          ))}
-          <label className="ml-1 flex cursor-pointer items-center gap-1.5 text-xs text-text-muted">
-            <input
-              type="checkbox"
-              checked={englishOnly}
-              onChange={(event) => {
-                setEnglishOnly(event.target.checked);
-              }}
-              className="accent-[var(--color-accent)]"
-            />
-            English-only builds
-          </label>
-          <span className="ml-auto text-xs text-text-muted">
-            {String(visible.length)} of {String(statuses.length)}
-          </span>
-        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-        <div className="flex max-w-2xl flex-col gap-3">
-          <article className="rounded-lg border border-border bg-surface p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-base font-medium text-text">Whisper runtime</h2>
-                <p className="mt-0.5 text-sm text-text-muted">
-                  whisper-cli.exe, required for the Whisper.cpp models. CPU build, ~8MB.
-                  Installs automatically on first run; use the button if that failed.
-                </p>
-              </div>
-              {runtimeDone && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs text-success">
-                  <Check className="h-3 w-3" aria-hidden="true" /> Installed
-                </span>
-              )}
-              {runtimeDownloading && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent-text">
-                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                  {runtime.totalBytes !== undefined
-                    ? formatPercent(runtime.receivedBytes ?? 0, runtime.totalBytes)
-                    : "..."}
-                </span>
-              )}
-              {runtimeError && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs text-danger">
-                  {runtime.message}
-                </span>
-              )}
-            </div>
-            <div className="mt-3 flex justify-end">
-              {runtimeDone ? (
-                <span className="text-xs text-text-muted">Ready</span>
-              ) : runtimeDownloading ? (
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-text-muted"
-                >
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Downloading
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void api.models.installRuntime().then(refresh);
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-accent-solid px-3 py-1.5 text-xs font-medium text-text-inverse transition-colors duration-fast hover:bg-accent-solid-hover"
-                >
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" /> Install runtime
-                </button>
-              )}
-            </div>
-          </article>
+        <div className="flex max-w-2xl flex-col gap-8">
+          {recommendedModel !== null && recommended !== null && (
+            <section>
+              <h2 className="text-base font-semibold text-text">Recommended for this PC</h2>
+              <p className="mt-0.5 text-sm text-text-muted">{recommended.reason}</p>
+              <Card className="mt-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-medium text-text">{recommendedModel.name}</h3>
+                    <p className="mt-0.5 text-sm text-text-muted">{recommendedModel.whenToUse}</p>
+                    <p className="mt-1 text-2xs uppercase tracking-wide text-text-muted">
+                      {recommendedModel.languages} &middot; {formatBytes(recommendedModel.bytes)}
+                    </p>
+                  </div>
+                  {recommendedStatus?.installed === true ? (
+                    <Badge tone="success">
+                      <Check className="h-3 w-3" aria-hidden="true" /> Installed
+                    </Badge>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={() => {
+                        void api.onboarding.startRecommended().then(refresh);
+                      }}
+                    >
+                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      Download and use
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            </section>
+          )}
 
-          {visible.map((status) => {
+          <section>
+            <h2 className="text-base font-semibold text-text">All models</h2>
+            <p className="mt-0.5 text-sm text-text-muted">
+              Every build in the catalog. Smaller is faster, larger is more accurate.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {(["all", ...WHISPER_TIER_ORDER] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={tier === option}
+                  onClick={() => {
+                    setTier(option);
+                  }}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors duration-fast ${
+                    tier === option
+                      ? "border-accent bg-accent-soft text-accent-text"
+                      : "border-border text-text-muted hover:bg-surface-hover hover:text-text"
+                  }`}
+                >
+                  {TIER_LABEL[option]}
+                </button>
+              ))}
+              <label className="ml-1 flex cursor-pointer items-center gap-1.5 text-xs text-text-muted">
+                <input
+                  type="checkbox"
+                  checked={englishOnly}
+                  onChange={(event) => {
+                    setEnglishOnly(event.target.checked);
+                  }}
+                  className="accent-[var(--color-accent)]"
+                />
+                English-only builds
+              </label>
+              <span className="ml-auto text-xs text-text-muted" data-numeric>
+                {String(visible.length)} of {String(statuses.length)}
+              </span>
+            </div>
+          </section>
+
+          <div className="flex flex-col gap-3">
+            {visible.map((status) => {
             const downloading = status.download.state === "downloading";
             const verifying = status.download.state === "verifying";
             const done = status.installed;
@@ -224,13 +220,10 @@ export function ModelsView(): JSX.Element {
                 : null;
             const measured = measuredRtf[status.model.engine];
             return (
-              <article
-                key={status.model.id}
-                className="rounded-lg border border-border bg-surface p-4"
-              >
+              <Card key={status.model.id}>
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-base font-medium text-text">{status.model.name}</h2>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-medium text-text">{status.model.name}</h3>
                     <p className="mt-0.5 text-sm text-text-muted">{status.model.whenToUse}</p>
                     <p className="mt-1 text-2xs uppercase tracking-wide text-text-muted">
                       {status.model.languages} &middot; {formatBytes(status.model.bytes)}
@@ -243,25 +236,23 @@ export function ModelsView(): JSX.Element {
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {done && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs text-success">
+                      <Badge tone="success">
                         <Check className="h-3 w-3" aria-hidden="true" /> Installed
-                      </span>
+                      </Badge>
                     )}
                     {downloading && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent-text">
+                      <Badge tone="accent">
                         <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
                         {progress}
-                      </span>
+                      </Badge>
                     )}
                     {verifying && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent-text">
+                      <Badge tone="accent">
                         <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> Verifying
-                      </span>
+                      </Badge>
                     )}
                     {error && status.download.state === "error" && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs text-danger">
-                        {status.download.message}
-                      </span>
+                      <Badge tone="danger">{status.download.message}</Badge>
                     )}
                   </div>
                 </div>
@@ -273,57 +264,106 @@ export function ModelsView(): JSX.Element {
                       : "Not installed"}
                   </span>
                   {done ? (
-                    <button
-                      type="button"
+                    <Button
+                      variant="danger"
+                      size="sm"
                       onClick={() => {
                         void api.models.remove({ modelId: status.model.id }).then(refresh);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors duration-fast hover:border-danger-soft hover:bg-danger-soft hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
-                    </button>
+                    </Button>
                   ) : downloading || verifying ? (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => {
                         void api.models.cancel({ modelId: status.model.id }).then(refresh);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text"
                     >
                       Cancel
-                    </button>
+                    </Button>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => {
                           void api.models.import({ modelId: status.model.id }).then(refresh);
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text"
                       >
                         <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" /> Import folder
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => {
                           void api.models.download({ modelId: status.model.id }).then(refresh);
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-accent-solid px-3 py-1.5 text-xs font-medium text-text-inverse transition-colors duration-fast hover:bg-accent-solid-hover"
                       >
                         <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
-              </article>
+              </Card>
             );
-          })}
-        </div>
+            })}
+          </div>
 
-        <p className="mt-6 flex items-center gap-1.5 text-xs text-text-muted">
-          <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
-          {formatBytes(diskUsed ?? 0)} used by models
-        </p>
+          {/* Infrastructure rather than a choice, so it sits after the models
+              it exists to serve. */}
+          <section>
+            <h2 className="text-base font-semibold text-text">Whisper runtime</h2>
+            <p className="mt-0.5 text-sm text-text-muted">
+              whisper-cli.exe, required by the Whisper.cpp models. CPU build, around 8MB.
+              Installs itself on first run; the button is for when that failed.
+            </p>
+            <Card className="mt-3">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm text-text-muted">
+                  {runtimeDone
+                    ? "Installed and ready."
+                    : runtimeDownloading
+                      ? `Downloading, ${
+                          runtime.totalBytes !== undefined
+                            ? formatPercent(runtime.receivedBytes ?? 0, runtime.totalBytes)
+                            : "starting"
+                        }`
+                      : runtimeError
+                        ? runtime.message ?? "The download failed."
+                        : "Not installed."}
+                </span>
+                {runtimeDone ? (
+                  <Badge tone="success">
+                    <Check className="h-3 w-3" aria-hidden="true" /> Ready
+                  </Badge>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={runtimeDownloading}
+                    onClick={() => {
+                      void api.models.installRuntime().then(refresh);
+                    }}
+                  >
+                    {runtimeDownloading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    {runtimeDownloading ? "Downloading" : "Install runtime"}
+                  </Button>
+                )}
+              </div>
+            </Card>
+          </section>
+
+          <p className="flex items-center gap-1.5 text-xs text-text-muted" data-numeric>
+            <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
+            {formatBytes(diskUsed ?? 0)} used by models
+          </p>
+        </div>
       </div>
     </div>
   );

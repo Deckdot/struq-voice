@@ -127,6 +127,16 @@ const parseTranscript = (stdout: string): string => {
   return stdout.trim();
 };
 
+/**
+ * Whether the whisper.cpp CUDA runtime sits next to whisper-cli.exe. The
+ * presence of the DLL is the only GPU signal this app has, so hardware
+ * detection reads it from here rather than probing for it a second time.
+ */
+export const hasCudaRuntime = (
+  runtimeRoot: string,
+  exists: (path: string) => boolean = existsSync
+): boolean => exists(join(runtimeRoot, "whisper-cpp", CUDA_DLL));
+
 export const createWhisperCppEngine = (
   options: WhisperCppEngineOptions
 ): TranscriptionEngine => {
@@ -152,7 +162,12 @@ export const createWhisperCppEngine = (
   const detectCuda = async (): Promise<"cuda" | "cpu"> => {
     if (cudaCache !== null) return cudaCache;
     const detect = options.deps?.detectCuda;
-    cudaCache = detect !== undefined ? await detect() : fileExists(join(options.runtimeRoot, "whisper-cpp", CUDA_DLL)) ? "cuda" : "cpu";
+    cudaCache =
+      detect !== undefined
+        ? await detect()
+        : hasCudaRuntime(options.runtimeRoot, fileExists)
+          ? "cuda"
+          : "cpu";
     return cudaCache;
   };
 

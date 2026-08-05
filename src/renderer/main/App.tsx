@@ -3,18 +3,26 @@ import type { JSX } from "react";
 import { Rail } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
 import { CommandPalette } from "./components/CommandPalette";
-import { FirstRun } from "./components/FirstRun";
+import { Onboarding } from "./onboarding/Onboarding";
 import { useMainStore } from "./store/use-main-store";
 import { DictateView } from "./views/DictateView";
 import { HistoryView } from "./views/HistoryView";
 import { ModelsView } from "./views/ModelsView";
 import { SettingsView } from "./views/SettingsView";
+import type { MainWindowApi } from "../../shared/api";
+import type { Settings } from "../../shared/settings";
+import { DEFAULT_SETTINGS } from "../../shared/settings";
+import { MOCK_ENGINE_ID } from "../../shared/engines";
+import { shouldRunOnboarding } from "../../shared/settings";
 
 export function App(): JSX.Element {
+  const api = window.struqVoice as MainWindowApi;
   const route = useMainStore((state) => state.route);
   const setRoute = useMainStore((state) => state.setRoute);
+  const capture = useMainStore((state) => state.capture);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [showFirstRun, setShowFirstRun] = useState(true);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [onboarding, setOnboarding] = useState(false);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -29,34 +37,52 @@ export function App(): JSX.Element {
     };
   }, []);
 
+  // Whether onboarding runs is decided once, from the settings main persists.
+  // Re-deciding on every settings change would tear the flow down the moment
+  // a step wrote a hotkey.
+  useEffect(() => {
+    let cancelled = false;
+    void api.settings.get().then(({ settings: loaded }) => {
+      if (cancelled) return;
+      setSettings(loaded);
+      setOnboarding(shouldRunOnboarding(loaded, MOCK_ENGINE_ID));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  useEffect(() => {
+    return api.settings.onChange(setSettings);
+  }, [api]);
+
   return (
     <div className="flex h-full flex-col bg-bg text-text">
       <TitleBar />
-      <div className="flex min-h-0 flex-1">
-        <Rail route={route} onSelect={setRoute} />
-        <main className="min-h-0 flex-1 overflow-hidden bg-bg" data-selectable>
-          {route === "dictate" && <DictateView />}
-          {route === "history" && <HistoryView />}
-          {route === "models" && <ModelsView />}
-          {route === "settings" && <SettingsView />}
-        </main>
-      </div>
-      {/* The first-run banner is fixed to the bottom, so it would cover the
-          last controls of a scrolling view. Reserve the space it occupies. */}
-      {showFirstRun && <div aria-hidden="true" className="h-[168px] shrink-0" />}
+      {onboarding ? (
+        <Onboarding
+          settings={settings ?? DEFAULT_SETTINGS}
+          capture={capture}
+          onFinished={() => {
+            setOnboarding(false);
+          }}
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <Rail route={route} onSelect={setRoute} />
+          <main className="min-h-0 flex-1 overflow-hidden bg-bg" data-selectable>
+            {route === "dictate" && <DictateView />}
+            {route === "history" && <HistoryView />}
+            {route === "models" && <ModelsView />}
+            {route === "settings" && <SettingsView />}
+          </main>
+        </div>
+      )}
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         onNavigate={setRoute}
       />
-      {showFirstRun && (
-        <FirstRun
-          onNavigate={setRoute}
-          onDismissed={() => {
-            setShowFirstRun(false);
-          }}
-        />
-      )}
     </div>
   );
 }

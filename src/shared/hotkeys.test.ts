@@ -1,11 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
   parseAccelerator,
+  formatAccelerator,
   formatChord,
   domEventToAccelerator,
   DEFAULT_PTT_ACCELERATOR,
   DEFAULT_TOGGLE_ACCELERATOR
 } from "./hotkeys";
+
+describe("formatAccelerator", () => {
+  // The stored spelling is Electron's portable one. On a Windows-only app a
+  // keycap reading "CommandOrControl" names a key the keyboard does not have.
+  it("renders the portable modifier as the key Windows actually has", () => {
+    expect(formatAccelerator(DEFAULT_PTT_ACCELERATOR)).toBe("Ctrl+Space");
+    expect(formatAccelerator(DEFAULT_TOGGLE_ACCELERATOR)).toBe("Ctrl+Shift+Space");
+  });
+
+  it("leaves an already-plain chord untouched", () => {
+    expect(formatAccelerator("Ctrl+Alt+K")).toBe("Ctrl+Alt+K");
+  });
+
+  it("names the Windows key", () => {
+    expect(formatAccelerator("Meta+Space")).toBe("Win+Space");
+  });
+});
 
 describe("parseAccelerator", () => {
   it("parses the default PTT chord", () => {

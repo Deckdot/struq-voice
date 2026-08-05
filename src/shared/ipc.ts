@@ -5,6 +5,7 @@
  */
 
 import type { CaptureState } from "./capture";
+import type { HardwareProfile, ModelRecommendation } from "./hardware";
 import type { ModelStatus } from "./models";
 import type { Settings } from "./settings";
 import type { UpdateState } from "./updates";
@@ -234,6 +235,33 @@ export interface SettingsChangedEvent {
   readonly settings: Settings;
 }
 
+export const onboardingProfileChannel = "onboarding:get-profile" as const;
+export const onboardingStartRecommendedChannel = "onboarding:start-recommended" as const;
+export const onboardingCompleteChannel = "onboarding:complete" as const;
+
+export interface OnboardingProfileResult {
+  /** Null when detection has not finished, or failed outright. */
+  readonly hardware: HardwareProfile | null;
+  readonly recommendation: ModelRecommendation;
+  /** True when the recommended model is already on disk. */
+  readonly modelInstalled: boolean;
+}
+
+/**
+ * Sets the recommended engine and starts its model download in one call, so
+ * the renderer does not have to sequence two operations and handle a partial
+ * failure between them.
+ */
+export interface OnboardingStartRecommendedResult {
+  readonly modelId: string;
+  readonly started: boolean;
+  readonly message?: string;
+}
+
+export interface OnboardingCompleteResult {
+  readonly settings: Settings;
+}
+
 export const openRouterKeyStatusChannel = "secrets:openrouter-status" as const;
 export const openRouterKeySetChannel = "secrets:openrouter-set" as const;
 export const openRouterKeyClearChannel = "secrets:openrouter-clear" as const;
@@ -318,6 +346,11 @@ export const PRELOAD_CHANNELS = {
     check: updatesCheckChannel,
     install: updatesInstallChannel,
     changed: updatesChangedChannel
+  },
+  onboarding: {
+    profile: onboardingProfileChannel,
+    startRecommended: onboardingStartRecommendedChannel,
+    complete: onboardingCompleteChannel
   }
 } as const;
 

@@ -7,20 +7,23 @@ import { launchApp } from "./helpers/launch";
  * what the user actually sees and clicks.
  *
  * Several assertions here are regressions for bugs that shipped: the mic list
- * arriving empty, the first-run banner covering the last settings controls,
- * and the whisper catalog carrying only two entries.
+ * arriving empty, and the whisper catalog carrying only two entries.
+ *
+ * Onboarding never appears under STRUQ_VOICE_E2E: main marks it complete at
+ * boot, so every spec lands directly on the rail.
  */
-
-/** The first-run banner is fixed to the bottom; dismiss it before clicking. */
-const dismissFirstRun = async (window: Page): Promise<void> => {
-  const dismiss = window.getByRole("button", { name: "Dismiss" });
-  if (await dismiss.isVisible().catch(() => false)) {
-    await dismiss.click();
-  }
-};
 
 const goTo = async (window: Page, route: string): Promise<void> => {
   await window.getByRole("button", { name: route, exact: true }).first().click();
+};
+
+/** Settings groups its sections behind a sub-nav; open the one under test. */
+const settingsGroup = async (window: Page, group: string): Promise<void> => {
+  await goTo(window, "Settings");
+  await window
+    .getByRole("navigation", { name: "Settings sections" })
+    .getByRole("button", { name: group, exact: true })
+    .click();
 };
 
 test("every view renders and the rail navigates between them", async () => {
@@ -28,16 +31,17 @@ test("every view renders and the rail navigates between them", async () => {
 
   try {
     await expect(window).toHaveTitle("Struq Voice", { timeout: 10_000 });
-    await dismissFirstRun(window);
 
     // Dictate is the landing route.
-    await expect(window.getByRole("heading", { name: "Struq Voice" })).toBeVisible();
+    await expect(
+      window.getByRole("heading", { name: "Dictate", exact: true })
+    ).toBeVisible();
 
     for (const [route, heading] of [
       ["History", "History"],
       ["Models", "Models"],
       ["Settings", "Settings"],
-      ["Dictate", "Struq Voice"]
+      ["Dictate", "Dictate"]
     ] as const) {
       await goTo(window, route);
       await expect(
@@ -55,13 +59,9 @@ test("settings shows the real microphone list", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await dismissFirstRun(window);
-    await goTo(window, "Settings");
+    await settingsGroup(window, "Capture");
 
-    const mic = window
-      .locator("section")
-      .filter({ has: window.getByRole("heading", { name: "Microphone" }) })
-      .locator("select");
+    const mic = window.getByRole("combobox", { name: "Microphone device" });
     await expect(mic).toBeVisible();
 
     // The recorder answers the enumeration request, so the list is populated.
@@ -81,20 +81,22 @@ test("every settings control is reachable and applies", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await dismissFirstRun(window);
-    await goTo(window, "Settings");
+    // Every checkbox toggles and the new value survives a round trip through
+    // the settings store. They are split across two groups now, so both are
+    // walked: a control reachable only by scrolling past everything else was
+    // the original bug here.
+    for (const group of ["Delivery", "Text"]) {
+      await settingsGroup(window, group);
+      const boxes = window.locator("input[type=checkbox]");
+      const count = await boxes.count();
+      expect(count).toBeGreaterThan(0);
 
-    // Each delivery checkbox toggles and the new value survives a round trip
-    // through the settings store. The last two sat under the first-run banner.
-    const boxes = window.locator("input[type=checkbox]");
-    const count = await boxes.count();
-    expect(count).toBeGreaterThan(0);
-
-    for (let index = 0; index < count; index += 1) {
-      const box = boxes.nth(index);
-      const before = await box.isChecked();
-      await box.click({ timeout: 5000 });
-      await expect(box).toBeChecked({ checked: !before });
+      for (let index = 0; index < count; index += 1) {
+        const box = boxes.nth(index);
+        const before = await box.isChecked();
+        await box.click({ timeout: 5000 });
+        await expect(box).toBeChecked({ checked: !before });
+      }
     }
 
     expect(consoleErrors).toEqual([]);
@@ -107,8 +109,7 @@ test("selecting an engine persists and reveals its options", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await dismissFirstRun(window);
-    await goTo(window, "Settings");
+    await settingsGroup(window, "Transcription");
 
     for (const id of ["parakeet", "openrouter", "whisper-cpp"]) {
       const radio = window.locator(`input[type=radio][value="${id}"]`);
@@ -117,10 +118,7 @@ test("selecting an engine persists and reveals its options", async () => {
     }
 
     // Whisper is selected, so its model picker appears with the full catalog.
-    const picker = window
-      .locator("section")
-      .filter({ has: window.getByRole("heading", { name: "Whisper model" }) })
-      .locator("select");
+    const picker = window.getByRole("combobox", { name: "Whisper model" });
     await expect(picker).toBeVisible();
     await expect
       .poll(async () => picker.locator("option").count())
@@ -144,11 +142,10 @@ test("models lists the full whisper catalog and filters by size", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await dismissFirstRun(window);
     await goTo(window, "Models");
 
-    // The runtime card plus a card per catalog model.
-    const cards = window.locator("article");
+    // One heading per catalog model in the "All models" list.
+    const cards = window.getByRole("heading", { level: 3 });
     await expect.poll(async () => cards.count(), { timeout: 10_000 }).toBeGreaterThan(20);
 
     const unfiltered = await cards.count();
@@ -174,8 +171,7 @@ test("settings shows the update panel and the running version", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await dismissFirstRun(window);
-    await goTo(window, "Settings");
+    await settingsGroup(window, "Delivery");
 
     const updates = window
       .locator("section")
@@ -184,7 +180,7 @@ test("settings shows the update panel and the running version", async () => {
 
     // The running version comes from the main process, so an empty string here
     // means the IPC never answered.
-    await expect(updates.getByText(/^Version \d/)).toBeVisible();
+    await expect(updates.getByText(/version \d/i)).toBeVisible();
 
     // Under e2e there is no updater, so the check is a no-op that must still
     // leave the button usable rather than spinning forever.
@@ -203,7 +199,6 @@ test("the command palette opens and navigates", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await dismissFirstRun(window);
     await window.keyboard.press("Control+k");
 
     // cmdk renders a plain container, so the input identifies the palette.
@@ -234,7 +229,6 @@ test("history renders its empty state before any capture", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await dismissFirstRun(window);
     await goTo(window, "History");
 
     await expect(window.getByRole("heading", { name: "History" })).toBeVisible();
@@ -260,8 +254,6 @@ test("the window renders the theme, not the browser default", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await dismissFirstRun(window);
-
     // Guards the dev-server regression that rendered a blank white 404 page.
     const background = await window.evaluate(
       () => getComputedStyle(document.body).backgroundColor

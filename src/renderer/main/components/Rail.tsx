@@ -20,8 +20,9 @@ export interface RailProps {
 
 /**
  * The slim left rail. Four routes, icon plus label, no more. The active
- * route is marked with a surface step and the forest accent, never with
- * hue gymnastics: interaction moves lightness only.
+ * route is marked with a surface step and a 2px accent edge, the same way a
+ * selected row is marked: the accent identifies the selection rather than
+ * becoming it. Shadows belong to the overlay and the palette, not here.
  */
 export function Rail({ route, onSelect }: RailProps): JSX.Element {
   return (
@@ -45,10 +46,10 @@ export function Rail({ route, onSelect }: RailProps): JSX.Element {
             }}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors duration-fast",
+              "flex items-center gap-2.5 rounded-md border-l-2 px-2.5 py-1.5 text-left text-sm transition-colors duration-fast",
               active
-                ? "bg-surface text-text shadow-float"
-                : "text-text-muted hover:bg-surface-hover hover:text-text"
+                ? "border-accent bg-surface font-medium text-text"
+                : "border-transparent text-text-muted hover:bg-surface-hover hover:text-text"
             )}
           >
             <Icon className="h-4 w-4" aria-hidden="true" />

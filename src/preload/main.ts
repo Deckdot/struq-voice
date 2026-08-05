@@ -12,6 +12,8 @@ import type {
   ModelsListResult,
   ModelsModelResult,
   ModelsDownloadProgressEvent,
+  OnboardingProfileResult,
+  OnboardingStartRecommendedResult,
   SettingsGetResult,
   SettingsUpdateResult,
   SettingsChangedEvent,
@@ -183,6 +185,16 @@ const api: MainWindowApi = {
         ipcRenderer.removeListener(channels.updates.changed, handler);
       };
     }
+  },
+  onboarding: {
+    profile: () =>
+      ipcRenderer.invoke(channels.onboarding.profile) as Promise<OnboardingProfileResult>,
+    startRecommended: () =>
+      ipcRenderer.invoke(
+        channels.onboarding.startRecommended
+      ) as Promise<OnboardingStartRecommendedResult>,
+    complete: () =>
+      ipcRenderer.invoke(channels.onboarding.complete) as Promise<SettingsGetResult>
   }
 };
 

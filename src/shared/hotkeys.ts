@@ -100,6 +100,24 @@ export const formatChord = (chord: PttChord): string => {
 };
 
 /**
+ * An accelerator as a Windows user reads it. Electron's portable
+ * "CommandOrControl" spelling is correct on disk and meaningless on a keycap:
+ * this app is Windows-only, so the key is Ctrl and the label should say so.
+ */
+export const formatAccelerator = (accelerator: string): string =>
+  accelerator
+    .split("+")
+    .map((part) => {
+      if (part === "CommandOrControl" || part === "CmdOrCtrl") return "Ctrl";
+      if (part === "Control") return "Ctrl";
+      if (part === "Meta" || part === "Super" || part === "Command" || part === "Cmd") {
+        return "Win";
+      }
+      return part;
+    })
+    .join("+");
+
+/**
  * The DOM key event fields the capture widget needs. Typed structurally so
  * shared stays usable under the node tsconfig (no DOM lib there).
  */

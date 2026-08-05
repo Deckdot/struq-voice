@@ -9,6 +9,7 @@ import type { BrowserWindow } from "electron";
 import { uIOhook, UiohookKey } from "uiohook-napi";
 import { buildWav } from "./audio/wav";
 import type { RecorderBridge } from "./audio/recorder-bridge";
+import type { HistoryStore } from "./db/history-store";
 import type { CaptureAudio } from "./session/audio-source";
 import type { TestHarnessApi, TestHarnessGlobal } from "../shared/test-hooks";
 import type { CaptureSession } from "./session/capture-session";
@@ -21,6 +22,7 @@ export interface TestHookInput {
   readonly overlay: OverlayWindowController;
   readonly recorderWindow: BrowserWindow | null;
   readonly bridge: RecorderBridge;
+  readonly history: HistoryStore | null;
   readonly getLastCaptureAudio: () => CaptureAudio | null;
 }
 
@@ -61,6 +63,9 @@ export const installTestHook = (input: TestHookInput): void => {
       fail: (message: string) => { input.session.fail(message); }
     },
     getState: () => input.session.state,
+    history: {
+      getRecent: () => input.history?.listRecent(50) ?? []
+    },
     tray: {
       getMenuItemIds: () => input.tray.getMenuItemIds(),
       getTooltip: () => input.tray.getTooltip()

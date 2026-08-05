@@ -58,6 +58,49 @@ export interface CaptureLevelsChangedEvent {
   readonly level: number;
 }
 
+/** One history row. The shape both processes share. */
+export interface TranscriptRecord {
+  readonly id: number;
+  readonly text: string;
+  readonly engineId: string;
+  readonly modelId: string;
+  readonly durationMs: number;
+  readonly inferenceMs: number | null;
+  readonly costUsd: number | null;
+  readonly language: string | null;
+  readonly createdAtMs: number;
+}
+
+export const historyListChannel = "history:list" as const;
+export const historySearchChannel = "history:search" as const;
+export const historyDeleteChannel = "history:delete" as const;
+export const historyClearChannel = "history:clear" as const;
+
+export interface HistoryListRequest {
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+export interface HistoryListResult {
+  readonly items: readonly TranscriptRecord[];
+}
+
+export interface HistorySearchRequest {
+  readonly query: string;
+  readonly limit?: number;
+}
+
+export interface HistoryDeleteRequest {
+  readonly id: number;
+}
+
+/** Tray recent-transcript re-copy and the History reader's copy action. */
+export const clipboardCopyChannel = "clipboard:copy" as const;
+
+export interface ClipboardCopyRequest {
+  readonly text: string;
+}
+
 /**
  * The channels sandboxed preloads need at runtime, in one object. Sandboxed
  * preloads cannot load shared modules (the bundle must be a single file), so

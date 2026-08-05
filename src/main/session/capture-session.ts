@@ -25,6 +25,15 @@ import type { CaptureAudio, CaptureAudioSource } from "./audio-source";
 export const SIMULATED_TRANSCRIPT =
   "This is a simulated transcript. Hold the hotkey anywhere in Windows and speak.";
 
+export interface TranscriptMeta {
+  readonly engineId: string;
+  readonly modelId: string;
+  readonly language: string | null;
+  readonly inferenceMs: number;
+  readonly costUsd: number | null;
+  readonly durationMs: number;
+}
+
 export interface CaptureSessionOptions {
   /** Captures shorter than this (ms) are discarded silently. */
   readonly minCaptureMs: number;
@@ -40,6 +49,14 @@ export interface CaptureSessionOptions {
   readonly source?: CaptureAudioSource;
   /** Called with the captured audio before delivering. */
   readonly onAudio?: (audio: CaptureAudio) => void;
+  /** Transcribe the captured audio; replaces the simulated transcript. */
+  readonly transcribe?: (
+    audio: CaptureAudio
+  ) => Promise<{ text: string; meta: TranscriptMeta }>;
+  /** Engine shown in the transcribing state while inference runs. */
+  readonly transcribingEngineId?: string;
+  /** Called once the transcript exists, before delivering. */
+  readonly onTranscript?: (text: string, meta: TranscriptMeta) => void;
 }
 
 export const DEFAULT_CAPTURE_OPTIONS: CaptureSessionOptions = {
@@ -142,7 +159,7 @@ export const createCaptureSession = (
   const finishCapture = async (captureStartedAt: number): Promise<void> => {
     setState({
       phase: "transcribing",
-      engineId: MOCK_ENGINE_ID,
+      engineId: options.transcribingEngineId ?? MOCK_ENGINE_ID,
       startedAtMs: captureStartedAt
     });
 
@@ -160,14 +177,40 @@ export const createCaptureSession = (
     // The capture may have been cancelled or failed while we waited.
     if (currentPhase() !== "transcribing") return;
 
+    let text = SIMULATED_TRANSCRIPT;
+    let meta: TranscriptMeta | null = null;
+
     if (audio !== null) {
       options.onAudio?.(audio);
+      if (options.transcribe !== undefined) {
+        try {
+          const outcome = await options.transcribe(audio);
+          text = outcome.text;
+          meta = outcome.meta;
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Transcription failed. Try again.";
+          fail(message, null);
+          void error;
+          return;
+        }
+        if (currentPhase() !== "transcribing") return;
+      } else {
+        await delay(options.simulatedInferenceMs);
+        if (currentPhase() !== "transcribing") return;
+      }
+    } else {
+      await delay(options.simulatedInferenceMs);
+      if (currentPhase() !== "transcribing") return;
     }
 
-    await delay(options.simulatedInferenceMs);
-    if (currentPhase() !== "transcribing") return;
+    if (meta !== null) {
+      options.onTranscript?.(text, meta);
+    }
 
-    setState({ phase: "delivering", text: SIMULATED_TRANSCRIPT, inserted: false });
+    setState({ phase: "delivering", text, inserted: false });
     schedule(options.deliverHoldMs, () => {
       toIdle();
     });

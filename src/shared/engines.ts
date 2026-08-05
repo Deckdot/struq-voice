@@ -17,3 +17,7 @@ export const MOCK_ENGINE: EngineDescriptor = {
   displayName: "Mock",
   kind: "test"
 };
+
+/** The mock engine's deterministic output; also the e2e contract. */
+export const MOCK_TRANSCRIPT =
+  "This is a mock transcription. Configure an engine to replace it.";

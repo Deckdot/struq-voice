@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { _electron, type ElectronApplication, type Page } from "playwright";
 import type { CaptureState } from "../../src/shared/capture";
+import type { TranscriptRecord } from "../../src/shared/ipc";
 import type { TestHarnessGlobal } from "../../src/shared/test-hooks";
 
 export interface Harness {
@@ -133,6 +134,14 @@ export const testHook = {
       if (state === undefined) throw new Error("test hook state missing");
       return state;
     }),
+  history: {
+    getRecent: (app: ElectronApplication): Promise<readonly TranscriptRecord[]> =>
+      app.evaluate(() => {
+        const recent = (globalThis as unknown as TestHarnessGlobal).__struqVoiceTest?.history.getRecent();
+        if (recent === undefined) throw new Error("test hook history missing");
+        return recent;
+      })
+  },
   tray: {
     getMenuItemIds: (app: ElectronApplication): Promise<readonly string[]> =>
       app.evaluate(() => {

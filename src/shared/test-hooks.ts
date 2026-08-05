@@ -7,6 +7,7 @@
  */
 
 import type { CaptureState } from "./capture";
+import type { TranscriptRecord } from "./ipc";
 
 export interface TestHarnessApi {
   readonly drive: {
@@ -16,6 +17,9 @@ export interface TestHarnessApi {
     fail: (message: string) => void;
   };
   readonly getState: () => CaptureState;
+  readonly history: {
+    getRecent: () => readonly TranscriptRecord[];
+  };
   readonly tray: {
     getMenuItemIds: () => readonly string[];
     getTooltip: () => string | null;

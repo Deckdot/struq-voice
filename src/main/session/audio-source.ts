@@ -3,6 +3,8 @@
  * the simulated source keeps the session testable without a microphone.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { BrowserWindow } from "electron";
 import type { RecorderBridge } from "../audio/recorder-bridge";
 import { recorderBeginCaptureChannel, recorderEndCaptureChannel } from "../../shared/ipc";
@@ -43,16 +45,32 @@ export const createRecorderAudioSource = (
 };
 
 /**
- * Test-only source: one second of a quiet 440Hz tone, so the full session
- * journey runs without a microphone and captures still produce real PCM.
+ * Test-only source: real fixture PCM (e2e/fixtures/sample-16k-mono.pcm)
+ * when present, otherwise one second of a quiet 440Hz tone, so the full
+ * session journey runs without a microphone and captures still produce real
+ * PCM.
  */
-export const createSimulatedAudioSource = (): CaptureAudioSource => {
+export const createSimulatedAudioSource = (appPath: string): CaptureAudioSource => {
+  const loadFixture = (): Int16Array | null => {
+    try {
+      const bytes = readFileSync(join(appPath, "e2e", "fixtures", "sample-16k-mono.pcm"));
+      return new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+    } catch {
+      return null;
+    }
+  };
+
   return {
     beginCapture: () => {
-      // Nothing to arm; the tone is generated on end.
+      // Nothing to arm; the PCM is returned on end.
     },
     endCapture: () => {
       const sampleRate = 16_000;
+      const fixture = loadFixture();
+      if (fixture !== null) {
+        const durationMs = Math.round((fixture.length / sampleRate) * 1000);
+        return Promise.resolve({ pcm: fixture, durationMs, sampleRate });
+      }
       const samples = sampleRate; // one second
       const pcm = new Int16Array(samples);
       for (let i = 0; i < samples; i++) {

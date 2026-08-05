@@ -58,7 +58,10 @@ export default tseslint.config(
         Buffer: "readonly",
         require: "readonly",
         module: "readonly",
-        __dirname: "readonly"
+        __dirname: "readonly",
+        // The pcm-collector worklet runs in the AudioWorklet global scope.
+        AudioWorkletProcessor: "readonly",
+        registerProcessor: "readonly"
       }
     }
   }

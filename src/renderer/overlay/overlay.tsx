@@ -21,12 +21,18 @@ const simulateBands = (): number[] => {
 const truncate = (text: string, max: number): string =>
   text.length <= max ? text : `${text.slice(0, max - 1)}\u2026`;
 
-function ListeningView({ state }: { readonly state: Extract<CaptureState, { phase: "listening" }> }): JSX.Element {
-  const [bands, setBands] = useState<number[]>(() => simulateBands());
+function ListeningView({
+  state,
+  realBands
+}: {
+  readonly state: Extract<CaptureState, { phase: "listening" }>;
+  readonly realBands: readonly number[] | null;
+}): JSX.Element {
+  const [syntheticBands, setSyntheticBands] = useState<number[]>(() => simulateBands());
   const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
-    const levelTimer = setInterval(() => { setBands(simulateBands()); }, 50);
+    const levelTimer = setInterval(() => { setSyntheticBands(simulateBands()); }, 50);
     const clock = setInterval(() => {
       setElapsedMs(Date.now() - state.startedAtMs);
     }, 100);
@@ -35,6 +41,8 @@ function ListeningView({ state }: { readonly state: Extract<CaptureState, { phas
       clearInterval(clock);
     };
   }, [state.startedAtMs]);
+
+  const bands = realBands !== null ? Array.from(realBands) : syntheticBands;
 
   return (
     <div className="flex w-full items-center justify-center gap-3 px-6">
@@ -102,19 +110,29 @@ function ErrorView({ state }: { readonly state: Extract<CaptureState, { phase: "
  */
 export function Overlay(): JSX.Element | null {
   const [state, setState] = useState<CaptureState>(INITIAL_CAPTURE_STATE);
+  const [realBands, setRealBands] = useState<readonly number[] | null>(null);
 
   useEffect(() => {
     // This renderer only ever runs inside the overlay window (its preload
     // exposes windowKind "overlay"), so the union narrows by construction.
     const api = window.struqVoice as OverlayWindowApi;
-    return api.onCaptureStateChanged(setState);
+    const unsubscribeState = api.onCaptureStateChanged(setState);
+    const unsubscribeLevels = api.onCaptureLevelsChanged((data) => {
+      setRealBands(data.bands);
+    });
+    return () => {
+      unsubscribeState();
+      unsubscribeLevels();
+    };
   }, []);
 
   if (state.phase === "idle") return null;
 
   return (
     <div className="flex h-[88px] w-[360px] items-center justify-center overflow-hidden rounded-full border border-border bg-surface shadow-float">
-      {state.phase === "listening" && <ListeningView state={state} />}
+      {state.phase === "listening" && (
+        <ListeningView state={state} realBands={realBands} />
+      )}
       {state.phase === "transcribing" && <TranscribingView engineId={state.engineId} />}
       {state.phase === "delivering" && <DeliveringView text={state.text} />}
       {state.phase === "error" && <ErrorView state={state} />}

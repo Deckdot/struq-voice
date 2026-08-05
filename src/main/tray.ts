@@ -20,11 +20,13 @@ export interface TrayInput {
   readonly onOpenMainWindow: () => void;
   readonly onSetHotkeysPaused: (paused: boolean) => void;
   readonly onQuit: () => void;
+  readonly onCopyTranscript: (text: string) => void;
   readonly engineDisplayName: () => string;
 }
 
 export interface TrayController {
   setState: (state: CaptureState) => void;
+  setRecentTranscripts: (items: readonly { id: number; text: string }[]) => void;
   getMenuItemIds: () => readonly string[];
   getTooltip: () => string | null;
   /** One-time balloon, called the first time the main window hides. */
@@ -63,19 +65,29 @@ export const createTray = (input: TrayInput): TrayController => {
   let tooltip: string | null = null;
   let balloonShown = false;
   let hotkeysPaused = false;
+  let recentTranscripts: readonly { id: number; text: string }[] = [];
+
+  const recentSubmenu = (): Electron.MenuItemConstructorOptions[] => {
+    if (recentTranscripts.length === 0) {
+      return [{ id: "recentEmpty", label: "No transcripts yet", enabled: false }];
+    }
+    return recentTranscripts.map((item) => ({
+      id: `recent-${String(item.id)}`,
+      label:
+        item.text.length > 60 ? `${item.text.slice(0, 59)}\u2026` : item.text,
+      click: () => { input.onCopyTranscript(item.text); }
+    }));
+  };
 
   const buildMenu = (): Menu => {
-    const captureLabel = state.phase === "listening" || state.phase === "arming"
-      ? "Stop Capture"
-      : "Start Capture";
+    const captureLabel =
+      state.phase === "listening" || state.phase === "arming"
+        ? "Stop Capture"
+        : "Start Capture";
     const template: Electron.MenuItemConstructorOptions[] = [
       { id: "startStop", label: captureLabel, click: () => { input.onToggleCapture(); } },
       { type: "separator" },
-      {
-        id: "recent",
-        label: "Recent transcripts",
-        submenu: [{ id: "recentEmpty", label: "No transcripts yet", enabled: false }]
-      },
+      { id: "recent", label: "Recent transcripts", submenu: recentSubmenu() },
       { type: "separator" },
       {
         id: "engine",
@@ -108,6 +120,12 @@ export const createTray = (input: TrayInput): TrayController => {
     return Menu.buildFromTemplate(template);
   };
 
+  const refreshMenu = (): void => {
+    if (tray === null) return;
+    contextMenu = buildMenu();
+    tray.setContextMenu(contextMenu);
+  };
+
   const setState = (next: CaptureState): void => {
     state = next;
     if (tray === null) return;
@@ -117,8 +135,7 @@ export const createTray = (input: TrayInput): TrayController => {
     }
     tooltip = `Struq Voice: ${PHASE_LABEL[state.phase]} (${input.engineDisplayName()})`;
     tray.setToolTip(tooltip);
-    contextMenu = buildMenu();
-    tray.setContextMenu(contextMenu);
+    refreshMenu();
   };
 
   try {
@@ -138,6 +155,10 @@ export const createTray = (input: TrayInput): TrayController => {
 
   return {
     setState,
+    setRecentTranscripts: (items: readonly { id: number; text: string }[]) => {
+      recentTranscripts = items;
+      refreshMenu();
+    },
     getMenuItemIds: () => {
       if (contextMenu === null) return [];
       const ids: string[] = [];

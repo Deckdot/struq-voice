@@ -16,7 +16,13 @@
     "test": "vitest run",
     "test:e2e": "electron-vite build && playwright test",
     "pack": "electron-vite build && electron-builder --dir",
-    "dist": "electron-vite build && electron-builder",
+    "dist": "node scripts/build-installer.mjs",
+    "release": "pnpm dist && pnpm release:sign && pnpm release:verify",
+    "release:sign": "node scripts/sign-release.mjs",
+    "release:verify": "node scripts/verify-release.mjs",
+    "release:publish": "node scripts/publish-release.mjs",
+    "release:cut": "node scripts/release-cut.mjs",
+    "ship": "pnpm release && pnpm release:publish",
     "postinstall": "node scripts/rebuild-native-modules.mjs"
   },
   "dependencies": {
@@ -36,6 +42,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "drizzle-orm": "^0.45.2",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^1.28.0",
     "motion": "^12.43.0",
     "react": "^19.2.0",

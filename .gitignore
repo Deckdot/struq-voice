@@ -4,6 +4,7 @@ release/
 dist/
 test-results/
 playwright-report/
+.playwright-mcp/
 .vite/
 *.log
 *.tsbuildinfo

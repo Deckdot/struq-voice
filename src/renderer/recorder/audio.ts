@@ -33,20 +33,28 @@ let monitorTimer: ReturnType<typeof setInterval> | null = null;
 let deviceChangeListenerAttached = false;
 let deviceListListenerAttached = false;
 
+/**
+ * Answer device-list requests. Enumeration opens no stream and needs no
+ * permission, so this is safe to attach even when the microphone itself is
+ * skipped. Attached once per session, not per pipeline build.
+ */
+export const initRecorderDeviceList = (api: RecorderWindowApi): void => {
+  if (deviceListListenerAttached) return;
+  deviceListListenerAttached = true;
+  api.onGetDevices(() => {
+    void listAudioDevices().then((devices) => {
+      // The selected id lives in this window's localStorage, so it travels
+      // with the list; main has no way to read it otherwise.
+      api.sendDevices(devices, currentDeviceId());
+    });
+  });
+  api.onSetDevice((deviceId) => {
+    switchDevice(api, deviceId);
+  });
+};
+
 export const initRecorderAudio = (api: RecorderWindowApi): void => {
-  // Device list requests: enumerate and reply through the bridge. Handled
-  // once per session, not per pipeline build.
-  if (!deviceListListenerAttached) {
-    deviceListListenerAttached = true;
-    api.onGetDevices(() => {
-      void listAudioDevices().then((devices) => {
-        api.sendDevices(devices);
-      });
-    });
-    api.onSetDevice((deviceId) => {
-      switchDevice(api, deviceId);
-    });
-  }
+  initRecorderDeviceList(api);
   void buildPipeline(api);
 };
 

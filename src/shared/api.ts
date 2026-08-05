@@ -97,7 +97,10 @@ export interface RecorderWindowApi {
   readonly sendStreamState: (data: { live: boolean; reason?: string }) => void;
   readonly onSetDevice: (callback: (deviceId: string) => void) => () => void;
   readonly onGetDevices: (callback: () => void) => () => void;
-  readonly sendDevices: (devices: readonly RecorderDevice[]) => void;
+  readonly sendDevices: (
+    devices: readonly RecorderDevice[],
+    currentDeviceId: string | null
+  ) => void;
 }
 
 export interface RecorderDevice {

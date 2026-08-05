@@ -141,25 +141,32 @@ export const registerIpcHandlers = (
   ipcMain.handle(devicesListChannel, async (): Promise<DevicesListResult> => {
     const recorder = findRecorderWindow();
     if (recorder === undefined) return { devices: [], currentDeviceId: null };
-    const devices = await new Promise<RecorderDevice[]>((resolve) => {
+    return await new Promise<DevicesListResult>((resolve) => {
       let settled = false;
-      const finish = (listed: RecorderDevice[]): void => {
+      const finish = (result: DevicesListResult): void => {
         if (!settled) {
           settled = true;
           ipcMain.removeListener(recorderDevicesChannel, onDevices);
-          resolve(listed);
+          resolve(result);
         }
       };
-      const onDevices = (_event: Electron.IpcMainEvent, payload: { devices: readonly RecorderDevice[] }): void => {
-        finish([...payload.devices]);
+      const onDevices = (
+        _event: Electron.IpcMainEvent,
+        payload:
+          | { devices?: readonly RecorderDevice[]; currentDeviceId?: string | null }
+          | undefined
+      ): void => {
+        finish({
+          devices: [...(payload?.devices ?? [])],
+          currentDeviceId: payload?.currentDeviceId ?? null
+        });
       };
       ipcMain.on(recorderDevicesChannel, onDevices);
       recorder.webContents.send(recorderGetDevicesChannel);
       setTimeout(() => {
-        finish([]);
+        finish({ devices: [], currentDeviceId: null });
       }, 1500);
     });
-    return { devices, currentDeviceId: null };
   });
 
   ipcMain.on(

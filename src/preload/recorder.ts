@@ -66,8 +66,13 @@ const api: RecorderWindowApi = {
       ipcRenderer.removeListener(channels.recorder.getDevices, wrapped);
     };
   },
-  sendDevices: (devices: readonly RecorderDevice[]) => {
-    ipcRenderer.send(channels.recorder.devices, devices);
+  sendDevices: (devices: readonly RecorderDevice[], currentDeviceId: string | null) => {
+    // Main reads payload.devices, so the array must be wrapped. Sending it
+    // bare makes the handler destructure undefined and the list comes back empty.
+    ipcRenderer.send(channels.recorder.devices, {
+      devices: [...devices],
+      currentDeviceId
+    });
   }
 };
 

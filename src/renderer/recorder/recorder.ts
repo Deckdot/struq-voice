@@ -6,7 +6,7 @@
  */
 
 import type { RecorderWindowApi } from "../../shared/api";
-import { initRecorderAudio } from "./audio";
+import { initRecorderAudio, initRecorderDeviceList } from "./audio";
 
 // This renderer only ever runs inside the recorder window; its preload
 // exposes windowKind "recorder", so the union narrows by construction.
@@ -14,6 +14,10 @@ const api = window.struqVoice as RecorderWindowApi;
 
 if (api.isE2E) {
   api.sendStreamState({ live: false, reason: "e2e: microphone skipped" });
+  // Enumeration needs no permission and opens no stream, so the device list
+  // still answers under e2e. Without this the request times out and Settings
+  // reports "No microphones found".
+  initRecorderDeviceList(api);
 } else {
   initRecorderAudio(api);
 }

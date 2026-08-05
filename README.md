@@ -51,10 +51,17 @@ offline-first transcription, and a paste that lands in the app you were using.
 
 ## Documentation
 
+- `AGENTS.md` / `CLAUDE.md` - the agent context: what this project is, the
+  rules, and how to gate work. Read before touching the codebase.
+- `docs/FEATURES.md` - what is built, current state, known gaps.
 - `docs/DESIGN_SYSTEM.md` - the Velden Linen Forest design system, binding.
 - `docs/MODELS.md` - engines, model catalog, download pipeline.
 - `docs/TROUBLESHOOTING.md` - known failures and their fixes.
 - `docs/ARCHITECTURE.md` - process and window model, boundaries.
+
+AI agents can load the invokable skills in `.agents/skills/` (and the
+mirrored `.claude/skills/`) for project context, verification gates, IPC
+architecture, native modules and the capture session.
 
 ## Privacy
 

@@ -29,6 +29,18 @@ const api: OverlayWindowApi = {
     return () => {
       ipcRenderer.removeListener(channels.captureStateChanged, wrapped);
     };
+  },
+  onCaptureLevelsChanged: (listener: (data: { bands: readonly number[]; level: number }) => void) => {
+    const wrapped = (
+      _event: IpcRendererEvent,
+      payload: { bands: readonly number[]; level: number }
+    ): void => {
+      listener(payload);
+    };
+    ipcRenderer.on(channels.captureLevelsChanged, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.captureLevelsChanged, wrapped);
+    };
   }
 };
 

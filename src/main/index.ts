@@ -15,6 +15,7 @@ import {
   PARAKEET_ENGINE_ID
 } from "./engines/parakeet";
 import { createOpenRouterEngine, OPENROUTER_ENGINE_ID } from "./engines/openrouter";
+import { createWhisperCppEngine } from "./engines/whisper-cpp";
 import type { TranscriptionEngine } from "./engines/types";
 import { createHotkeys } from "./hotkeys";
 import { registerIpcHandlers } from "./ipc";
@@ -112,9 +113,12 @@ if (!gotLock) {
     const openrouterEngine = createOpenRouterEngine({
       getApiKey: () => secrets.readOpenRouterKey()
     });
+    const runtimeRoot = join(app.getPath("userData"), "runtimes");
+    const whisperCppEngine = createWhisperCppEngine({ runtimeRoot });
     const engines = new Map<string, TranscriptionEngine>([
       [mockEngine.id, mockEngine],
       [parakeetEngine.id, parakeetEngine],
+      [whisperCppEngine.id, whisperCppEngine],
       [openrouterEngine.id, openrouterEngine]
     ]);
     const router = createEngineRouter({

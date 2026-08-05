@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
-import { Download, Check, Trash2, Loader2, HardDrive } from "lucide-react";
+import { Download, Check, Trash2, Loader2, HardDrive, FolderOpen } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { ModelsListResult } from "../../../shared/ipc";
 import type { ModelStatus } from "../../../shared/models";
@@ -199,15 +199,26 @@ export function ModelsView(): JSX.Element {
                       Cancel
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void api.models.download({ modelId: status.model.id }).then(refresh);
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-accent-solid px-3 py-1.5 text-xs font-medium text-text-inverse transition-colors duration-fast hover:bg-accent-solid-hover"
-                    >
-                      <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void api.models.import({ modelId: status.model.id }).then(refresh);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text"
+                      >
+                        <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" /> Import folder
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void api.models.download({ modelId: status.model.id }).then(refresh);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-accent-solid px-3 py-1.5 text-xs font-medium text-text-inverse transition-colors duration-fast hover:bg-accent-solid-hover"
+                      >
+                        <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
+                      </button>
+                    </div>
                   )}
                 </div>
               </article>

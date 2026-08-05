@@ -78,6 +78,11 @@ const api: MainWindowApi = {
       ipcRenderer.invoke(channels.models.delete, request) as Promise<ModelsModelResult>,
     installRuntime: () =>
       ipcRenderer.invoke(channels.models.installRuntime) as Promise<ModelsModelResult>,
+    import: (request: ModelsModelRequest) =>
+      ipcRenderer.invoke(channels.models.import, request) as Promise<{
+        ok: boolean;
+        message?: string;
+      }>,
     onDownloadProgress: (listener) => {
       const handler = (
         _event: Electron.IpcRendererEvent,

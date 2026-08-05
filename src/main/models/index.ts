@@ -8,6 +8,10 @@
  */
 
 import { MODEL_CATALOG, findModel, type ModelStatus } from "../../shared/models";
+import { copyFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import type { Result } from "../../shared/result";
+import { fail, ok } from "../../shared/result";
 import { createDownloader, type Downloader } from "./downloader";
 import { createModelInstaller, type ModelInstaller } from "./installer";
 import { createRuntimeDownloader, type RuntimeDownloader } from "./runtime";
@@ -36,6 +40,8 @@ export interface ModelsService {
   cancelDownload: (modelId: string) => boolean;
   deleteModel: (modelId: string) => Promise<boolean>;
   installWhisperRuntime: () => Promise<void>;
+  /** Copy and verify catalog files from an existing local directory. */
+  importFromDirectory: (modelId: string, sourceDir: string) => Promise<Result<void>>;
   subscribe: (listener: (listed: ModelList) => void) => () => void;
   dispose: () => void;
 }
@@ -149,6 +155,38 @@ export const createModelsService = (
     }
   };
 
+  const importFromDirectory = async (
+    modelId: string,
+    sourceDir: string
+  ): Promise<Result<void>> => {
+    const model = findModel(modelId);
+    if (model === null) {
+      return fail({ code: "UNKNOWN", message: `Unknown model "${modelId}".` });
+    }
+    const targetDir = join(modelsRoot, model.id);
+    try {
+      await mkdir(targetDir, { recursive: true });
+      for (const file of model.files) {
+        await copyFile(join(sourceDir, file.path), join(targetDir, file.path));
+      }
+    } catch (error) {
+      return fail({
+        code: "UNKNOWN",
+        message: error instanceof Error ? error.message : "Could not import the model directory."
+      });
+    }
+    const verified = await installer.verify(model);
+    notifyListeners();
+    if (!verified) {
+      return fail({
+        code: "UNKNOWN",
+        message:
+          "The files were copied but did not match the expected checksums. Remove and re-import a complete model folder."
+      });
+    }
+    return ok(undefined);
+  };
+
   const subscribe = (
     listener: (listed: ModelList) => void
   ): (() => void) => {
@@ -168,6 +206,7 @@ export const createModelsService = (
     cancelDownload,
     deleteModel,
     installWhisperRuntime,
+    importFromDirectory,
     subscribe,
     dispose
   };

@@ -1,4 +1,4 @@
-import { BrowserWindow, app, clipboard, ipcMain } from "electron";
+import { BrowserWindow, app, clipboard, dialog, ipcMain } from "electron";
 import type { HistoryStore } from "./db/history-store";
 import type { ModelsService } from "./models";
 import type { SecretsStore } from "./store/secrets";
@@ -28,6 +28,7 @@ import {
   modelsDownloadProgressChannel,
   modelsInstallRuntimeChannel,
   modelsListChannel,
+  modelsImportChannel,
   openRouterKeyClearChannel,
   openRouterKeySetChannel,
   openRouterKeyStatusChannel,
@@ -179,6 +180,24 @@ export const registerIpcHandlers = (
     await models.installWhisperRuntime();
     return { ok: true };
   });
+
+  ipcMain.handle(
+    modelsImportChannel,
+    async (_event, request: ModelsModelRequest) => {
+      if (models === null) return { ok: false, message: "Models unavailable." };
+      const picked = await dialog.showOpenDialog({
+        title: "Import model files",
+        properties: ["openDirectory"]
+      });
+      if (picked.canceled || picked.filePaths.length === 0) {
+        return { ok: false, message: "Import cancelled." };
+      }
+      const outcome = await models.importFromDirectory(request.modelId, picked.filePaths[0] ?? "");
+      return outcome.ok
+        ? { ok: true }
+        : { ok: false, message: outcome.error.message };
+    }
+  );
 
   ipcMain.handle(modelsDownloadChannel, (_event, request: ModelsModelRequest) => {
     return { ok: models?.startDownload(request.modelId) ?? false };

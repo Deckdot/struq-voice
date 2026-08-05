@@ -91,4 +91,32 @@ describe("model service", () => {
       unsubscribe();
     })
   );
+
+  it("imports a directory and reports checksum mismatch on bad content", async () => {
+    await withRoot(async (root) => {
+      const service = createModelsService(root, join(root, "..", "runtimes"));
+      const target = MODEL_CATALOG[0]!;
+
+      // A source directory holding the catalog file names but wrong bytes.
+      const source = mkdtempSync(join(tmpdir(), "sv-import-"));
+      for (const file of target.files) {
+        installFile(source, "", file.path, "not the real model bytes");
+      }
+
+      const outcome = await service.importFromDirectory(target.id, source);
+      expect(outcome.ok).toBe(false);
+      // The import reported the checksum mismatch; a partial import is not a
+      // usable model even though the files were copied to disk.
+
+      await rm(source, { recursive: true, force: true });
+    });
+  });
+
+  it("rejects importing an unknown model id", async () => {
+    await withRoot(async (root) => {
+      const service = createModelsService(root, join(root, "..", "runtimes"));
+      const outcome = await service.importFromDirectory("does-not-exist", root);
+      expect(outcome.ok).toBe(false);
+    });
+  });
 });

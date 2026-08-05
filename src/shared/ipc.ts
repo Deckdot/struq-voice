@@ -150,6 +150,7 @@ export const modelsListChannel = "models:list" as const;
 export const modelsDownloadChannel = "models:download" as const;
 export const modelsCancelChannel = "models:cancel" as const;
 export const modelsDeleteChannel = "models:delete" as const;
+export const modelsImportChannel = "models:import" as const;
 export const modelsInstallRuntimeChannel = "models:install-runtime" as const;
 export const modelsDownloadProgressChannel = "models:download-progress" as const;
 
@@ -159,6 +160,15 @@ export interface ModelsModelRequest {
 
 export interface ModelsModelResult {
   readonly ok: boolean;
+}
+
+export interface ModelsDeleteResult {
+  readonly ok: boolean;
+}
+
+export interface ModelsImportResult {
+  readonly ok: boolean;
+  readonly message?: string;
 }
 
 export interface ModelsListResult {
@@ -272,6 +282,7 @@ export const PRELOAD_CHANNELS = {
     download: modelsDownloadChannel,
     cancel: modelsCancelChannel,
     delete: modelsDeleteChannel,
+    import: modelsImportChannel,
     installRuntime: modelsInstallRuntimeChannel,
     downloadProgress: modelsDownloadProgressChannel
   }

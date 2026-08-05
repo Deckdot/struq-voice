@@ -16,11 +16,31 @@ export const windowMinimizeChannel = "window:minimize" as const;
 export const windowToggleMaximizeChannel = "window:toggle-maximize" as const;
 export const windowCloseChannel = "window:close" as const;
 
+/**
+ * Overlay to main: move the capture panel to a screen position. The overlay
+ * is `focusable: false` so that a synthesised paste lands in the user's app
+ * rather than in ours, which also means Windows will not drag it and
+ * -webkit-app-region does nothing. The renderer tracks the pointer itself and
+ * sends absolute screen coordinates; main clamps them to a visible display.
+ */
+export const overlayMoveChannel = "overlay:move" as const;
+
+export interface OverlayMoveRequest {
+  readonly x: number;
+  readonly y: number;
+}
+
 /** Push channel: the capture state changed. Broadcast to every window. */
 export const captureStateChangedChannel = "capture:state-changed" as const;
 
 export interface CaptureStateChangedEvent {
   readonly state: CaptureState;
+  /**
+   * Whether the live transcript is switched on, so the capture panel can say
+   * "waiting for the first words" rather than "it is off" while the first
+   * partial is still being decoded. Optional: older senders omit it.
+   */
+  readonly liveTranscription?: boolean;
 }
 
 /** Main to recorder: start appending to the active capture buffer. */
@@ -91,6 +111,57 @@ export const captureLevelsChangedChannel = "capture:levels-changed" as const;
 export interface CaptureLevelsChangedEvent {
   readonly bands: readonly number[];
   readonly level: number;
+}
+
+/**
+ * Push channel: the running transcript while a capture is still open, so the
+ * user can see that what they said was heard correctly during a long
+ * dictation. Partials come from re-decoding the audio so far on an interval,
+ * never from the delivery path: `text` here is provisional and is always
+ * superseded by the final transcript.
+ */
+export const capturePartialTranscriptChannel = "capture:partial-transcript" as const;
+
+export interface CapturePartialTranscriptEvent {
+  readonly text: string;
+  /** Audio covered by this partial, so the UI can show progress. */
+  readonly durationMs: number;
+  /** Rises with each partial in a capture; the UI drops stale ones. */
+  readonly sequence: number;
+}
+
+/**
+ * Main to recorder: play a capture sound.
+ *
+ * The recorder window plays them because it is hidden, permanently alive and
+ * already owns audio. Playing from a visible window would mean creating or
+ * showing one mid-capture, and anything that touches the foreground breaks
+ * the paste that the whole product depends on.
+ */
+export const recorderPlaySoundChannel = "recorder:play-sound" as const;
+
+export type CaptureSound = "open" | "close";
+
+export interface RecorderPlaySoundRequest {
+  readonly sound: CaptureSound;
+  readonly volume: number;
+}
+
+/** Main to recorder: copy the capture buffer so far without ending it. */
+export const recorderSnapshotRequestChannel = "recorder:snapshot-request" as const;
+
+export interface RecorderSnapshotRequest {
+  readonly sequence: number;
+}
+
+/** Recorder to main: the audio captured so far, for a partial decode. */
+export const recorderSnapshotDataChannel = "recorder:snapshot-data" as const;
+
+export interface RecorderSnapshotData {
+  readonly pcm: ArrayBuffer;
+  readonly durationMs: number;
+  readonly sampleRate: number;
+  readonly sequence: number;
 }
 
 /** One history row. The shape both processes share. */
@@ -295,8 +366,12 @@ export const PRELOAD_CHANNELS = {
     toggleMaximize: windowToggleMaximizeChannel,
     close: windowCloseChannel
   },
+  overlay: {
+    move: overlayMoveChannel
+  },
   captureStateChanged: captureStateChangedChannel,
   captureLevelsChanged: captureLevelsChangedChannel,
+  capturePartialTranscript: capturePartialTranscriptChannel,
   recorder: {
     begin: recorderBeginCaptureChannel,
     end: recorderEndCaptureChannel,
@@ -305,7 +380,10 @@ export const PRELOAD_CHANNELS = {
     streamState: recorderStreamStateChannel,
     setDevice: recorderSetDeviceChannel,
     getDevices: recorderGetDevicesChannel,
-    devices: recorderDevicesChannel
+    devices: recorderDevicesChannel,
+    snapshotRequest: recorderSnapshotRequestChannel,
+    snapshotData: recorderSnapshotDataChannel,
+    playSound: recorderPlaySoundChannel
   },
   history: {
     list: historyListChannel,

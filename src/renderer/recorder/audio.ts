@@ -9,6 +9,7 @@
  */
 
 import type { RecorderDevice, RecorderWindowApi } from "../../shared/api";
+import { playCaptureSound } from "./sounds";
 import workletUrl from "./pcm-collector.worklet.js?url";
 
 const TARGET_SAMPLE_RATE = 16_000;
@@ -25,6 +26,7 @@ interface AudioPipeline {
   readonly worklet: AudioWorkletNode;
   readonly unsubscribeBegin: () => void;
   readonly unsubscribeEnd: () => void;
+  readonly unsubscribeSnapshot: () => void;
 }
 
 let current: AudioPipeline | null = null;
@@ -55,7 +57,23 @@ export const initRecorderDeviceList = (api: RecorderWindowApi): void => {
 
 export const initRecorderAudio = (api: RecorderWindowApi): void => {
   initRecorderDeviceList(api);
+  initCaptureSounds(api);
   void buildPipeline(api);
+};
+
+/**
+ * Attached once per session rather than per pipeline: the pipeline is torn
+ * down and rebuilt on every device change, and a sound listener that came and
+ * went with it would miss the capture that follows a microphone switch.
+ */
+let soundListenerAttached = false;
+
+export const initCaptureSounds = (api: RecorderWindowApi): void => {
+  if (soundListenerAttached) return;
+  soundListenerAttached = true;
+  api.onPlaySound(({ bytes, volume }) => {
+    void playCaptureSound(bytes, volume);
+  });
 };
 
 const currentDeviceId = (): string | null =>
@@ -97,12 +115,28 @@ const teardown = (): void => {
   if (current !== null) {
     current.unsubscribeBegin();
     current.unsubscribeEnd();
+    current.unsubscribeSnapshot();
     current.stream.getTracks().forEach((track) => {
       track.stop();
     });
     void current.context.close();
     current = null;
   }
+};
+
+/**
+ * Float samples in -1..1 to the Int16 PCM both engines expect. Returns the
+ * backing ArrayBuffer too: it is allocated here, so it is never a
+ * SharedArrayBuffer, and the transfer list needs the concrete type.
+ */
+const toInt16 = (samples: Float32Array): { pcm: ArrayBuffer } => {
+  const buffer = new ArrayBuffer(samples.length * Int16Array.BYTES_PER_ELEMENT);
+  const int16 = new Int16Array(buffer);
+  for (let i = 0; i < samples.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, samples[i] ?? 0));
+    int16[i] = Math.round(clamped * 32767);
+  }
+  return { pcm: buffer };
 };
 
 const acquireStream = async (): Promise<MediaStream> => {
@@ -161,24 +195,50 @@ const buildPipeline = async (api: RecorderWindowApi): Promise<void> => {
     worklet.port.postMessage({ type: "disarm" });
   });
 
+  const unsubscribeSnapshot = api.onSnapshotRequest((sequence) => {
+    worklet.port.postMessage({ type: "snapshot", sequence });
+  });
+
   worklet.port.onmessage = (event: MessageEvent) => {
-    const message = event.data as { type?: string; samples?: Float32Array };
-    if (message.type !== "capture" || message.samples === undefined) return;
+    const message = event.data as {
+      type?: string;
+      samples?: Float32Array;
+      sequence?: number;
+    };
+    if (message.samples === undefined) return;
+    if (message.type !== "capture" && message.type !== "snapshot") return;
+
     const samples = message.samples;
-    const int16 = new Int16Array(samples.length);
-    for (let i = 0; i < samples.length; i++) {
-      const clamped = Math.max(-1, Math.min(1, samples[i] ?? 0));
-      int16[i] = Math.round(clamped * 32767);
-    }
+    const { pcm } = toInt16(samples);
     const durationMs = Math.round((samples.length / TARGET_SAMPLE_RATE) * 1000);
+
+    if (message.type === "snapshot") {
+      api.sendSnapshotData({
+        pcm,
+        durationMs,
+        sampleRate: TARGET_SAMPLE_RATE,
+        sequence: message.sequence ?? 0
+      });
+      return;
+    }
+
     api.sendCaptureData({
-      pcm: int16.buffer,
+      pcm,
       durationMs,
       sampleRate: TARGET_SAMPLE_RATE
     });
   };
 
-  current = { api, stream, context, analyser, worklet, unsubscribeBegin, unsubscribeEnd };
+  current = {
+    api,
+    stream,
+    context,
+    analyser,
+    worklet,
+    unsubscribeBegin,
+    unsubscribeEnd,
+    unsubscribeSnapshot
+  };
 
   api.sendStreamState({ live: true });
 

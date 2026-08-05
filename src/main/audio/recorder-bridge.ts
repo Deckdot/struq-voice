@@ -10,12 +10,16 @@ import type {
   CaptureLevelsChangedEvent,
   RecorderCaptureData,
   RecorderLevels,
+  RecorderSnapshotData,
+  RecorderSnapshotRequest,
   RecorderStreamState
 } from "../../shared/ipc";
 import {
   captureLevelsChangedChannel,
   recorderCaptureDataChannel,
   recorderLevelsChannel,
+  recorderSnapshotDataChannel,
+  recorderSnapshotRequestChannel,
   recorderStreamStateChannel
 } from "../../shared/ipc";
 
@@ -23,6 +27,12 @@ export interface RecorderBridge {
   waitForCaptureData: (timeoutMs: number) => Promise<CaptureAudio>;
   isLive: () => boolean;
   onStreamState: (listener: (state: RecorderStreamState) => void) => () => void;
+  /**
+   * Copy the audio captured so far without ending the capture, for a partial
+   * transcript. Resolves null when the recorder does not answer in time: a
+   * partial is cosmetic, so a slow reply is dropped rather than retried.
+   */
+  requestSnapshot: (timeoutMs: number) => Promise<CaptureAudio | null>;
 }
 
 interface PendingCapture {
@@ -31,10 +41,40 @@ interface PendingCapture {
   readonly timer: ReturnType<typeof setTimeout>;
 }
 
+interface PendingSnapshot {
+  readonly resolve: (audio: CaptureAudio | null) => void;
+  readonly timer: ReturnType<typeof setTimeout>;
+}
+
 export const createRecorderBridge = (): RecorderBridge => {
   let pending: PendingCapture | null = null;
   let live = false;
   const streamStateListeners = new Set<(state: RecorderStreamState) => void>();
+
+  // Snapshots are keyed by sequence: several can be outstanding if a decode
+  // runs long, and a late reply must never resolve a newer request.
+  let snapshotSequence = 0;
+  const pendingSnapshots = new Map<number, PendingSnapshot>();
+
+  const findRecorderWindow = (): BrowserWindow | null =>
+    BrowserWindow.getAllWindows().find((candidate) =>
+      candidate.webContents.getURL().includes("recorder/index.html")
+    ) ?? null;
+
+  ipcMain.on(
+    recorderSnapshotDataChannel,
+    (_event, payload: RecorderSnapshotData) => {
+      const waiting = pendingSnapshots.get(payload.sequence);
+      if (waiting === undefined) return;
+      pendingSnapshots.delete(payload.sequence);
+      clearTimeout(waiting.timer);
+      waiting.resolve({
+        pcm: new Int16Array(payload.pcm),
+        durationMs: payload.durationMs,
+        sampleRate: payload.sampleRate
+      });
+    }
+  );
 
   const settlePending = (audio: CaptureAudio | null, error: Error | null): void => {
     if (pending === null) return;
@@ -86,6 +126,22 @@ export const createRecorderBridge = (): RecorderBridge => {
   });
 
   return {
+    requestSnapshot: (timeoutMs: number): Promise<CaptureAudio | null> => {
+      const recorder = findRecorderWindow();
+      if (recorder === null) return Promise.resolve(null);
+
+      const sequence = ++snapshotSequence;
+      const request: RecorderSnapshotRequest = { sequence };
+      recorder.webContents.send(recorderSnapshotRequestChannel, request);
+
+      return new Promise<CaptureAudio | null>((resolve) => {
+        const timer = setTimeout(() => {
+          pendingSnapshots.delete(sequence);
+          resolve(null);
+        }, timeoutMs);
+        pendingSnapshots.set(sequence, { resolve, timer });
+      });
+    },
     waitForCaptureData: (timeoutMs: number): Promise<CaptureAudio> => {
       if (pending !== null) {
         pending.reject(new Error("Capture already in flight"));

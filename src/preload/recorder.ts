@@ -48,6 +48,38 @@ const api: RecorderWindowApi = {
   sendStreamState: (data: { live: boolean; reason?: string }) => {
     ipcRenderer.send(channels.recorder.streamState, data);
   },
+  onPlaySound: (callback: (data: { bytes: ArrayBuffer; volume: number }) => void) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      payload: { bytes: ArrayBuffer; volume: number }
+    ): void => {
+      callback(payload);
+    };
+    ipcRenderer.on(channels.recorder.playSound, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.recorder.playSound, wrapped);
+    };
+  },
+  onSnapshotRequest: (callback: (sequence: number) => void) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      payload: { sequence: number }
+    ): void => {
+      callback(payload.sequence);
+    };
+    ipcRenderer.on(channels.recorder.snapshotRequest, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.recorder.snapshotRequest, wrapped);
+    };
+  },
+  sendSnapshotData: (data: {
+    pcm: ArrayBuffer;
+    durationMs: number;
+    sampleRate: number;
+    sequence: number;
+  }) => {
+    ipcRenderer.send(channels.recorder.snapshotData, data, [data.pcm]);
+  },
   onSetDevice: (callback: (deviceId: string) => void) => {
     const wrapped = (_event: Electron.IpcRendererEvent, deviceId: string): void => {
       callback(deviceId);

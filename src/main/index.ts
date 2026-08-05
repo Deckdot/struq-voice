@@ -23,13 +23,19 @@ import { registerIpcHandlers } from "./ipc";
 import { createModelsService } from "./models";
 import electronUpdater from "electron-updater";
 import { createUpdater, type AutoUpdaterLike } from "./updater";
-import { updatesChangedChannel } from "../shared/ipc";
+import type { CapturePartialTranscriptEvent } from "../shared/ipc";
+import {
+  capturePartialTranscriptChannel,
+  updatesChangedChannel
+} from "../shared/ipc";
+import { fail } from "../shared/result";
 
 // electron-updater ships CommonJS, so the named exports hang off the default.
 const { autoUpdater } = electronUpdater as unknown as { autoUpdater: AutoUpdaterLike };
 import { cleanupTranscript } from "./post/text-cleanup";
 import { insertTextIntoActiveApp } from "./platform/win32/paste";
 import { createRecorderBridge } from "./audio/recorder-bridge";
+import { createCaptureSoundPlayer } from "./audio/capture-sounds";
 import {
   createRecorderAudioSource,
   createSimulatedAudioSource,
@@ -40,6 +46,7 @@ import {
   createCaptureSession,
   type TranscriptMeta,
 } from "./session/capture-session";
+import { createPartialTranscriber } from "./session/partial-transcriber";
 import { createSecretsStore } from "./store/secrets";
 import { createSettingsStore } from "./store/settings-store";
 import { installTestHook } from "./test-hook";
@@ -186,9 +193,21 @@ if (!gotLock) {
       hardware = profile;
     });
 
-    registerIpcHandlers(history, models, settingsStore, secrets, updater, {
-      getHardware: () => hardware
-    });
+    // The overlay controller is built further down, so the move handler binds
+    // late. It is only ever called from a drag, long after boot.
+    registerIpcHandlers(
+      history,
+      models,
+      settingsStore,
+      secrets,
+      updater,
+      { getHardware: () => hardware },
+      {
+        moveTo: (x, y) => {
+          overlay?.moveTo(x, y);
+        }
+      }
+    );
 
     updater?.subscribe((state) => {
       // The window is created on demand and can be closed while a download is
@@ -337,7 +356,96 @@ if (!gotLock) {
       },
     });
 
-    overlay = createOverlayWindowController({ e2e });
+    overlay = createOverlayWindowController({
+      e2e,
+      initialPosition: settingsStore.get().overlayPosition,
+      onPositionChange: (position) => {
+        settingsStore.update({ overlayPosition: position });
+      },
+      isLiveTranscriptionEnabled: () => settingsStore.get().liveTranscription
+    });
+
+    /**
+     * The live transcript. Off unless the user asked for it, and deliberately
+     * routed to the primary engine directly rather than through the router: a
+     * partial must never cascade to a cloud engine, which would send audio off
+     * the machine and bill for text that is only ever shown, never delivered.
+     */
+    const partials = createPartialTranscriber({
+      intervalMs: settingsStore.get().liveTranscriptionIntervalMs,
+      snapshotTimeoutMs: 1500,
+      minAudioMs: 600,
+      snapshot: (timeoutMs) => bridge.requestSnapshot(timeoutMs),
+      transcribe: async (audio, signal) => {
+        const engine = engines.get(primaryEngineId);
+        if (engine === undefined) {
+          return fail({ code: "APP_NOT_READY", message: "Engine unavailable." });
+        }
+        if (engine.kind === "cloud") {
+          return fail({
+            code: "APP_NOT_READY",
+            message: "Live transcript is local-only."
+          });
+        }
+        const trimmed = trimSilence(audio.pcm, 16000);
+        const pcm = slicePcm(audio.pcm, trimmed.start, trimmed.end);
+        if (pcm.length === 0) {
+          return fail({ code: "APP_NOT_READY", message: "Nothing to decode yet." });
+        }
+        return engine.transcribe({
+          pcm,
+          durationMs: Math.max(Math.round((pcm.length / 16000) * 1000), 1),
+          signal
+        });
+      },
+      onPartial: (partial) => {
+        const payload: CapturePartialTranscriptEvent = partial;
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.webContents.send(capturePartialTranscriptChannel, payload);
+          }
+        }
+      }
+    });
+
+    /**
+     * The capture sounds. Open fires when recording actually starts, not when
+     * the key goes down, so it confirms that the microphone is live rather
+     * than merely that the key registered. Close fires when listening ends,
+     * on every route out: a normal stop, Escape, or a failure. A capture that
+     * opened with a sound and ended in silence reads as one still running.
+     */
+    const sounds = createCaptureSoundPlayer({
+      isEnabled: () => settingsStore.get().captureSounds,
+      getVolume: () => settingsStore.get().captureSoundVolume
+    });
+    if (!e2e) {
+      void sounds.warmup();
+    }
+
+    let wasListening = false;
+
+    session.subscribe((state) => {
+      const listening = state.phase === "listening";
+      if (listening && !wasListening) {
+        sounds.play("open");
+      } else if (!listening && wasListening) {
+        sounds.play("close");
+      }
+      wasListening = listening;
+
+      if (listening) {
+        if (settingsStore.get().liveTranscription && !partials.isRunning()) {
+          partials.start();
+        }
+        return;
+      }
+      // Anything other than listening ends the live transcript, including the
+      // transcribing phase: the final pass owns the engine from here.
+      if (partials.isRunning()) {
+        partials.stop();
+      }
+    });
 
     const toggleCapture = (): void => {
       const phase = session.state.phase;

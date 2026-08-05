@@ -10,6 +10,12 @@ directories:
 files:
   - out/**
   - "!**/*.map"
+  # Runtime assets loaded from disk by path rather than bundled: the tray
+  # icons and the capture sounds. Without this they are absent from the asar
+  # and both degrade silently in a packaged build (an empty nativeImage, a
+  # failed Audio load) while working fine in dev.
+  - resources/tray/**
+  - resources/sounds/**
 
 # Where installed copies look for updates, and what makes latest.yml get
 # written at all. The signature in struq-voice-release.json is what actually

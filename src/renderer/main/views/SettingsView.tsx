@@ -358,6 +358,60 @@ export function SettingsView(): JSX.Element {
                     />
                   </Advanced>
                 </Section>
+
+                <Section
+                  title="Sounds"
+                  description="A short chime when a capture starts and ends."
+                >
+                  <Toggle
+                    checked={settings.captureSounds}
+                    label="Play capture sounds"
+                    hint="Confirms the microphone opened and closed without looking at the screen."
+                    onChange={(captureSounds) => {
+                      update({ captureSounds });
+                    }}
+                  />
+                  <Advanced>
+                    <NumberField
+                      label="Sound volume"
+                      hint="0 is silent, 100 is full volume."
+                      value={Math.round(settings.captureSoundVolume * 100)}
+                      min={0}
+                      max={100}
+                      unit="%"
+                      onCommit={(percent) => {
+                        update({ captureSoundVolume: percent / 100 });
+                      }}
+                    />
+                  </Advanced>
+                </Section>
+
+                <Section
+                  title="Capture panel"
+                  description="The floating panel that appears while you dictate."
+                >
+                  <Toggle
+                    checked={settings.liveTranscription}
+                    label="Show a live transcript while speaking"
+                    hint="Re-transcribes what you have said so far every second or so, so you can check a long dictation as you go. Off by default: it costs extra CPU, and on a slower machine that competes with the transcription that actually gets pasted."
+                    onChange={(liveTranscription) => {
+                      update({ liveTranscription });
+                    }}
+                  />
+                  <Advanced>
+                    <NumberField
+                      label="Live transcript interval"
+                      hint="How often to re-transcribe while listening. Longer is cheaper."
+                      value={settings.liveTranscriptionIntervalMs}
+                      min={400}
+                      max={10000}
+                      unit="ms"
+                      onCommit={(liveTranscriptionIntervalMs) => {
+                        update({ liveTranscriptionIntervalMs });
+                      }}
+                    />
+                  </Advanced>
+                </Section>
               </>
             )}
 

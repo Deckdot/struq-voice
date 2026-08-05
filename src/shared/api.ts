@@ -90,11 +90,24 @@ export interface MainWindowApi {
 export interface OverlayWindowApi {
   readonly windowKind: "overlay";
   readonly onCaptureStateChanged: (
-    listener: (state: CaptureState) => void
+    listener: (state: CaptureState, liveTranscription: boolean) => void
   ) => () => void;
   readonly onCaptureLevelsChanged: (
     listener: (data: { bands: readonly number[]; level: number }) => void
   ) => () => void;
+  readonly onPartialTranscript: (
+    listener: (data: {
+      text: string;
+      durationMs: number;
+      sequence: number;
+    }) => void
+  ) => () => void;
+  /**
+   * Move the panel to absolute screen coordinates. The overlay cannot be
+   * dragged by the OS (focusable: false keeps paste delivery working), so the
+   * renderer tracks the pointer and calls this; main clamps to a display.
+   */
+  readonly move: (x: number, y: number) => void;
 }
 
 export interface RecorderWindowApi {
@@ -109,6 +122,20 @@ export interface RecorderWindowApi {
   }) => void;
   readonly sendLevels: (data: { bands: readonly number[]; level: number }) => void;
   readonly sendStreamState: (data: { live: boolean; reason?: string }) => void;
+  /**
+   * Play a capture sound. Main sends the decoded file bytes rather than a
+   * path: the recorder is sandboxed and cannot read from disk itself.
+   */
+  readonly onPlaySound: (
+    callback: (data: { bytes: ArrayBuffer; volume: number }) => void
+  ) => () => void;
+  readonly onSnapshotRequest: (callback: (sequence: number) => void) => () => void;
+  readonly sendSnapshotData: (data: {
+    pcm: ArrayBuffer;
+    durationMs: number;
+    sampleRate: number;
+    sequence: number;
+  }) => void;
   readonly onSetDevice: (callback: (deviceId: string) => void) => () => void;
   readonly onGetDevices: (callback: () => void) => () => void;
   readonly sendDevices: (

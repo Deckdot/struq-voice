@@ -1,9 +1,56 @@
-/* Overlay-only animations. Everything else comes from theme.css tokens. */
+/* Overlay-only styling. Everything else comes from theme.css tokens. */
+
+/* The overlay window is transparent, so the document must not paint. theme.css
+   gives body the linen page colour, which would fill the window with an opaque
+   rectangle and square off the panel's rounded corners. The panel itself is
+   the only thing that draws. */
+html,
+body,
+#root {
+  background: transparent;
+}
+
+/* The default scrollbar is desktop-chrome sized and overwhelms a panel this
+   small, so the transcript well gets a hairline one. */
+.transcript-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.transcript-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.transcript-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.transcript-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-strong);
+  border-radius: var(--radius-pill);
+}
+
+/* The panel arrives with a short rise and settle, never a bounce: it appears
+   over whatever the user is working in, so it has to read as calm. */
+.panel-enter {
+  animation: panel-enter 180ms var(--ease-out-quart) 1 both;
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
 
 /* The transcribing shimmer: a centre line with one sweep, then rest. */
 .shimmer-line {
   position: relative;
-  width: 180px;
+  width: 100%;
   height: 3px;
   border-radius: var(--radius-pill);
   background: var(--color-state-transcribing);
@@ -54,5 +101,9 @@
   .checkmark-draw {
     animation: none;
     stroke-dashoffset: 0;
+  }
+
+  .panel-enter {
+    animation: none;
   }
 }

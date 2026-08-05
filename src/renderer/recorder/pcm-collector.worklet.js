@@ -34,6 +34,16 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
         const samples = Float32Array.from(active);
         active = [];
         this.port.postMessage({ type: "capture", samples }, [samples.buffer]);
+      } else if (message.type === "snapshot") {
+        // A partial read for the live transcript: copy what has been captured
+        // so far and leave the capture running. Float32Array.from copies, so
+        // transferring the copy cannot disturb the buffer the real capture
+        // will hand over at disarm.
+        const samples = Float32Array.from(active);
+        this.port.postMessage(
+          { type: "snapshot", samples, sequence: message.sequence },
+          [samples.buffer]
+        );
       }
     };
   }

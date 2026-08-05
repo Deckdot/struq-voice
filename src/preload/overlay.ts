@@ -21,9 +21,11 @@ const channels = readChannels(process.argv);
 
 const api: OverlayWindowApi = {
   windowKind: "overlay",
-  onCaptureStateChanged: (listener: (state: CaptureState) => void) => {
+  onCaptureStateChanged: (
+    listener: (state: CaptureState, liveTranscription: boolean) => void
+  ) => {
     const wrapped = (_event: IpcRendererEvent, payload: CaptureStateChangedEvent): void => {
-      listener(payload.state);
+      listener(payload.state, payload.liveTranscription ?? false);
     };
     ipcRenderer.on(channels.captureStateChanged, wrapped);
     return () => {
@@ -41,6 +43,25 @@ const api: OverlayWindowApi = {
     return () => {
       ipcRenderer.removeListener(channels.captureLevelsChanged, wrapped);
     };
+  },
+  onPartialTranscript: (
+    listener: (data: { text: string; durationMs: number; sequence: number }) => void
+  ) => {
+    const wrapped = (
+      _event: IpcRendererEvent,
+      payload: { text: string; durationMs: number; sequence: number }
+    ): void => {
+      listener(payload);
+    };
+    ipcRenderer.on(channels.capturePartialTranscript, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.capturePartialTranscript, wrapped);
+    };
+  },
+  // Explicit numbers, never the caller's arguments: anything non-cloneable
+  // crossing contextBridge throws before the send happens.
+  move: (x: number, y: number) => {
+    ipcRenderer.send(channels.overlay.move, { x, y });
   }
 };
 

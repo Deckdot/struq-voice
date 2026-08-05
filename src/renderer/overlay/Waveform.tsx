@@ -1,81 +1,192 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { JSX } from "react";
 
 export interface WaveformProps {
-  /** 32 band levels in 0..1, fed at 60Hz in production, simulated until then. */
-  readonly bands: number[];
+  /** Band levels in 0..1, fed at 60Hz from the recorder's analyser. */
+  readonly bands: readonly number[];
+  /** The token name to paint with, resolved from the theme at runtime. */
+  readonly colorToken?: string;
+  /** Idle draws a calm baseline instead of reacting to input. */
+  readonly idle?: boolean;
 }
 
 const BAR_COUNT = 32;
-const BAR_WIDTH = 3;
-const BAR_GAP = 5;
+const BAR_WIDTH = 2;
+const MIN_BAR = 2;
 
 /**
- * The listening waveform: 32 bars on a canvas, transform-only redraw at 60fps.
- * Levels arrive at 60Hz and are interpolated between frames so the bars read
- * as smooth rather than stepped. In Phase 1 the caller feeds simulated bands;
- * Phase 2 feeds real analyser data over the same prop.
+ * Attack is fast and release is slow, which is what makes a meter read as
+ * responsive rather than mushy: the bar jumps to a transient immediately and
+ * falls back gently. Symmetric smoothing looks laggy on speech.
  */
-export function Waveform({ bands }: WaveformProps): JSX.Element {
+const ATTACK = 0.55;
+const RELEASE = 0.12;
+
+/** The peak cap falls at a constant rate, the way a hardware meter behaves. */
+const PEAK_FALL_PER_FRAME = 0.012;
+
+/**
+ * A canvas 2D context cannot resolve CSS custom properties: assigning
+ * `fillStyle = "var(--x)"` is silently ignored and the context keeps its
+ * previous value (black, by default). Every colour must be resolved to a
+ * concrete value through getComputedStyle first.
+ */
+const resolveColor = (element: HTMLElement, token: string, fallback: string): string => {
+  const value = getComputedStyle(element).getPropertyValue(token).trim();
+  return value.length > 0 ? value : fallback;
+};
+
+const prefersReducedMotion = (): boolean =>
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * The listening visualiser: mirrored bars on a canvas, redrawn on rAF.
+ *
+ * Levels arrive at 60Hz and are interpolated between frames, with a peak-hold
+ * cap above each bar, so the meter reads as continuous rather than stepped.
+ */
+export function Waveform({
+  bands,
+  colorToken = "--color-state-listening",
+  idle = false
+}: WaveformProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  // Live values the animation loop reads. Refs rather than state: these change
+  // every frame and must never trigger a React render.
   const targetRef = useRef<number[]>(Array.from({ length: BAR_COUNT }, () => 0));
   const currentRef = useRef<number[]>(Array.from({ length: BAR_COUNT }, () => 0));
-  const rafRef = useRef<number | null>(null);
+  const peakRef = useRef<number[]>(Array.from({ length: BAR_COUNT }, () => 0));
+  const idleRef = useRef(idle);
 
   useEffect(() => {
     targetRef.current = Array.from({ length: BAR_COUNT }, (_, i) => bands[i] ?? 0);
   }, [bands]);
 
   useEffect(() => {
+    idleRef.current = idle;
+  }, [idle]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
     const parent = canvas.parentElement;
     if (parent === null) return;
-    const dpr = window.devicePixelRatio || 1;
-    const width = parent.clientWidth;
-    const height = parent.clientHeight;
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    canvas.style.width = `${String(width)}px`;
-    canvas.style.height = `${String(height)}px`;
-    setSize({ width, height });
-
     const context = canvas.getContext("2d");
     if (context === null) return;
-    context.scale(dpr, dpr);
 
-    const draw = (): void => {
+    const reducedMotion = prefersReducedMotion();
+    let barColor = resolveColor(canvas, colorToken, "#b4653a");
+    let peakColor = resolveColor(canvas, "--color-border-strong", "#c0c4b8");
+
+    let width = 0;
+    let height = 0;
+    let frame: number | null = null;
+    let startedAt = performance.now();
+
+    // The canvas backing store is sized in device pixels and scaled back down,
+    // so bars stay crisp on a HiDPI display. Re-run on every resize: the panel
+    // can change size, and the ratio changes when a window moves between
+    // displays with different scaling.
+    const resize = (): void => {
+      const dpr = window.devicePixelRatio || 1;
+      width = parent.clientWidth;
+      height = parent.clientHeight;
+      if (width === 0 || height === 0) return;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      canvas.style.width = `${String(width)}px`;
+      canvas.style.height = `${String(height)}px`;
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Colours are resolved against the live element, so a theme change is
+      // picked up on the next resize rather than being baked in at mount.
+      barColor = resolveColor(canvas, colorToken, barColor);
+      peakColor = resolveColor(canvas, "--color-border-strong", peakColor);
+    };
+
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(parent);
+
+    const draw = (now: number): void => {
+      frame = requestAnimationFrame(draw);
+      if (width === 0 || height === 0) return;
+
       const current = currentRef.current;
       const target = targetRef.current;
-      for (let i = 0; i < BAR_COUNT; i++) {
-        const next = current[i] ?? 0;
-        const goal = target[i] ?? 0;
-        current[i] = next + (goal - next) * 0.35;
-      }
+      const peaks = peakRef.current;
+      const isIdle = idleRef.current;
+      const elapsed = (now - startedAt) / 1000;
+
       context.clearRect(0, 0, width, height);
-      context.fillStyle = "var(--color-state-listening)";
-      const usableHeight = height - 4;
+
+      const centerY = height / 2;
+      const usableHalf = Math.max(1, height / 2 - 1);
+      // Spread the bars across whatever width the strip has, rather than a
+      // fixed span centred in it: the panel is narrow and the row is flexible.
+      const step = width / BAR_COUNT;
+      const barWidth = Math.max(1, Math.min(BAR_WIDTH, step - 1));
+      const originX = (step - barWidth) / 2;
+
       for (let i = 0; i < BAR_COUNT; i++) {
-        const level = Math.min(1, Math.max(0.06, current[i] ?? 0));
-        const barHeight = Math.max(3, level * usableHeight);
-        const x = (width - BAR_COUNT * BAR_GAP + BAR_GAP - BAR_WIDTH) / 2 + i * BAR_GAP;
-        const y = (height - barHeight) / 2;
-        const radius = BAR_WIDTH / 2;
+        let goal: number;
+        if (isIdle) {
+          // A dead flat line reads as broken rather than quiet, so idle keeps
+          // a slow travelling swell. Reduced motion gets a static hairline.
+          goal = reducedMotion
+            ? 0.04
+            : 0.05 + Math.sin(elapsed * 1.6 - i * 0.28) * 0.028;
+        } else {
+          goal = target[i] ?? 0;
+        }
+
+        const previous = current[i] ?? 0;
+        const rate = goal > previous ? ATTACK : RELEASE;
+        const next = reducedMotion ? goal : previous + (goal - previous) * rate;
+        current[i] = next;
+
+        const peak = peaks[i] ?? 0;
+        peaks[i] = next >= peak ? next : Math.max(next, peak - PEAK_FALL_PER_FRAME);
+
+        const level = Math.min(1, Math.max(0, next));
+        const half = Math.max(MIN_BAR / 2, level * usableHalf);
+        const x = originX + i * step;
+
+        // Mirrored around the centre line: the shape reads as a waveform
+        // rather than a bar chart, and stays legible at this size.
+        context.fillStyle = barColor;
         context.beginPath();
-        context.roundRect(x, y, BAR_WIDTH, barHeight, radius);
+        context.roundRect(x, centerY - half, barWidth, half * 2, barWidth / 2);
         context.fill();
+
+        // The peak cap needs vertical room to read as separate from the bar.
+        // In the compact strip there is none, so it is skipped rather than
+        // drawn as noise on top of the bar it belongs to.
+        if (!isIdle && !reducedMotion && usableHalf >= 12) {
+          const peakLevel = Math.min(1, Math.max(0, peaks[i] ?? 0));
+          const peakHalf = Math.max(MIN_BAR / 2, peakLevel * usableHalf);
+          if (peakHalf > half + 1.5) {
+            context.fillStyle = peakColor;
+            context.beginPath();
+            context.roundRect(x, centerY - peakHalf, barWidth, 1.5, 0.75);
+            context.fill();
+            context.beginPath();
+            context.roundRect(x, centerY + peakHalf - 1.5, barWidth, 1.5, 0.75);
+            context.fill();
+          }
+        }
       }
-      rafRef.current = requestAnimationFrame(draw);
     };
 
-    rafRef.current = requestAnimationFrame(draw);
+    startedAt = performance.now();
+    frame = requestAnimationFrame(draw);
+
     return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-      }
+      if (frame !== null) cancelAnimationFrame(frame);
+      observer.disconnect();
     };
-  }, [size.width, size.height]);
+  }, [colorToken]);
 
   return <canvas ref={canvasRef} className="h-full w-full" aria-hidden="true" />;
 }

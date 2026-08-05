@@ -16,6 +16,7 @@ import type {
   OnboardingProfileResult,
   OnboardingStartRecommendedResult,
   OpenRouterKeySetRequest,
+  OverlayMoveRequest,
   RecorderDevice,
   SettingsUpdateRequest,
   UpdatesInstallResult,
@@ -54,7 +55,8 @@ import {
   updatesInstallChannel,
   windowCloseChannel,
   windowMinimizeChannel,
-  windowToggleMaximizeChannel
+  windowToggleMaximizeChannel,
+  overlayMoveChannel
 } from "../shared/ipc";
 import { INITIAL_UPDATE_STATE } from "../shared/updates";
 import type { UpdaterController } from "./updater";
@@ -69,13 +71,19 @@ export interface OnboardingDeps {
   readonly getHardware: () => HardwareProfile | null;
 }
 
+/** The overlay controls the panel owns that the renderer can ask for. */
+export interface OverlayDeps {
+  readonly moveTo: (x: number, y: number) => void;
+}
+
 export const registerIpcHandlers = (
   history: HistoryStore | null,
   models: ModelsService | null,
   settingsStore: SettingsStore | null,
   secrets: SecretsStore | null,
   updater: UpdaterController | null = null,
-  onboarding: OnboardingDeps | null = null
+  onboarding: OnboardingDeps | null = null,
+  overlay: OverlayDeps | null = null
 ): void => {
   const currentVersion = app.getVersion();
 
@@ -203,6 +211,10 @@ export const registerIpcHandlers = (
 
   ipcMain.on(windowCloseChannel, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+
+  ipcMain.on(overlayMoveChannel, (_event, request: OverlayMoveRequest) => {
+    overlay?.moveTo(request.x, request.y);
   });
 
   ipcMain.handle(historyListChannel, (_event, request: HistoryListRequest) => {

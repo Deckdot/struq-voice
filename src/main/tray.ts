@@ -4,7 +4,9 @@
  * - Three icon states driven by the capture session: idle, recording,
  *   transcribing (16px plus @2x, generated from the theme tokens).
  * - Tooltip carries state and engine.
- * - Left click toggles capture. The tray is a control, not decoration.
+ * - Left click opens the main window. Starting a capture is the hotkey's job
+ *   and the menu's Start Capture item; clicking the icon must never begin
+ *   recording someone who only meant to open the app.
  * - Right click menu: start/stop, recent transcripts, engine radio group,
  *   open, settings, pause hotkeys, quit.
  * - Close hides instead of quitting; quit from the tray (or Ctrl+Q).
@@ -144,8 +146,11 @@ export const createTray = (input: TrayInput): TrayController => {
     tray.setContextMenu(contextMenu);
     tooltip = `Struq Voice: idle (${input.engineDisplayName()})`;
     tray.setToolTip(tooltip);
-    // Left click toggles capture: the tray is a control, not decoration.
-    tray.on("click", () => { input.onToggleCapture(); });
+    // Left click opens the window. Capture belongs to the hotkey and to the
+    // menu's Start Capture item: a tray icon is the app's front door, and a
+    // stray click on it must never silently start recording the user.
+    tray.on("click", () => { input.onOpenMainWindow(); });
+    tray.on("double-click", () => { input.onOpenMainWindow(); });
   } catch (error) {
     console.warn("[tray] Could not create the tray icon.", error);
     tray = null;

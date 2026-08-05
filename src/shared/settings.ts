@@ -64,6 +64,30 @@ export const settingsSchema = z.object({
     .default({ primary: "mock", fallback: null }),
   /** Catalog id of the whisper.cpp model the engine loads. */
   whisperModelId: z.string().min(1).default(DEFAULT_WHISPER_MODEL_ID),
+  /** Play a short sound when a capture starts and when it ends. */
+  captureSounds: z.boolean().default(true),
+  /** Capture sound volume, 0 to 1. */
+  captureSoundVolume: z.number().min(0).max(1).default(0.4),
+  /**
+   * Show a running transcript in the capture panel while still speaking.
+   *
+   * Off by default, and deliberately so: partials come from re-decoding the
+   * audio so far on an interval, which is real CPU spent on top of the
+   * transcription that actually matters. On a slow machine that competes with
+   * the final pass. Users who dictate long passages can turn it on.
+   */
+  liveTranscription: z.boolean().default(false),
+  /** How often to re-decode while listening (ms). */
+  liveTranscriptionIntervalMs: z.number().int().min(400).max(10000).default(1200),
+  /**
+   * Where the user last dragged the capture panel, in screen coordinates.
+   * Re-clamped to a live display on use, so a monitor that disappears cannot
+   * strand the panel off-screen.
+   */
+  overlayPosition: z
+    .object({ x: z.number(), y: z.number() })
+    .nullable()
+    .default(null),
   post: postProcessingSchema.default({
     dictionary: [],
     removeFillers: false,

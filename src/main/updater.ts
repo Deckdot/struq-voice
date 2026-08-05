@@ -33,9 +33,24 @@ import {
 } from "../shared/release-key";
 import { INITIAL_UPDATE_STATE, type UpdateState } from "../shared/updates";
 
-/** Where installed copies look for updates. Overridable for a self-hosted feed. */
+/**
+ * Where installed copies look for updates.
+ *
+ * This must match what electron-builder publishes to, which is the GitHub
+ * release configured in electron-builder.yml. A feed pointing anywhere else
+ * fails silently: the check finds nothing, the app reports "up to date"
+ * forever, and there is no error anywhere to notice.
+ *
+ * The `/releases/latest/download/` form always resolves to the newest
+ * published release, so the URL does not change per version. Anonymous
+ * download requires the repository to be public; a private one answers 404
+ * without a token, which the app does not and should not have.
+ *
+ * Overridable for a self-hosted feed.
+ */
 export const DEFAULT_FEED_URL =
-  process.env["STRUQ_VOICE_FEED_URL"] ?? "https://updates.struq.app/voice";
+  process.env["STRUQ_VOICE_FEED_URL"] ??
+  "https://github.com/Deckdot/DeckVoice/releases/latest/download";
 
 export interface UpdaterDeps {
   /** Fetch the manifest that rides beside the installer. */

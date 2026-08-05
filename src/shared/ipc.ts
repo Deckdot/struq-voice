@@ -91,8 +91,20 @@ export interface HistorySearchRequest {
   readonly limit?: number;
 }
 
+export interface HistorySearchResult {
+  readonly items: readonly TranscriptRecord[];
+}
+
 export interface HistoryDeleteRequest {
   readonly id: number;
+}
+
+export interface HistoryDeleteResult {
+  readonly ok: boolean;
+}
+
+export interface HistoryClearResult {
+  readonly ok: boolean;
 }
 
 /** Tray recent-transcript re-copy and the History reader's copy action. */
@@ -148,6 +160,15 @@ export const PRELOAD_CHANNELS = {
     data: recorderCaptureDataChannel,
     levels: recorderLevelsChannel,
     streamState: recorderStreamStateChannel
+  },
+  history: {
+    list: historyListChannel,
+    search: historySearchChannel,
+    delete: historyDeleteChannel,
+    clear: historyClearChannel
+  },
+  clipboard: {
+    copy: clipboardCopyChannel
   },
   models: {
     list: modelsListChannel,

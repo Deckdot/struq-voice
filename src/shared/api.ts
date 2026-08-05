@@ -5,6 +5,8 @@
  */
 
 import type { CaptureState } from "./capture";
+import type { TranscriptRecord } from "./ipc";
+import type { ModelStatus } from "./models";
 
 export interface MainWindowApi {
   readonly windowKind: "main";
@@ -13,6 +15,35 @@ export interface MainWindowApi {
     minimize: () => void;
     toggleMaximize: () => void;
     close: () => void;
+  };
+  readonly onCaptureStateChanged: (
+    listener: (state: CaptureState) => void
+  ) => () => void;
+  readonly history: {
+    list: (request: { limit?: number; offset?: number }) => Promise<{
+      items: readonly TranscriptRecord[];
+    }>;
+    search: (request: { query: string; limit?: number }) => Promise<{
+      items: readonly TranscriptRecord[];
+    }>;
+    remove: (request: { id: number }) => Promise<{ ok: boolean }>;
+    clear: () => Promise<{ ok: boolean }>;
+  };
+  readonly models: {
+    list: () => Promise<{ items: readonly ModelStatus[] }>;
+    download: (request: { modelId: string }) => Promise<{ ok: boolean }>;
+    cancel: (request: { modelId: string }) => Promise<{ ok: boolean }>;
+    remove: (request: { modelId: string }) => Promise<{ ok: boolean }>;
+    onDownloadProgress: (
+      listener: (event: {
+        modelId: string;
+        receivedBytes: number;
+        totalBytes: number;
+      }) => void
+    ) => () => void;
+  };
+  readonly clipboard: {
+    copy: (text: string) => void;
   };
 }
 

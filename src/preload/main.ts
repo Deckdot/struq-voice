@@ -1,5 +1,18 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { MainWindowApi } from "../shared/api";
+import type {
+  HistoryListRequest,
+  HistorySearchRequest,
+  HistoryDeleteRequest,
+  HistoryListResult,
+  HistorySearchResult,
+  HistoryDeleteResult,
+  HistoryClearResult,
+  ModelsModelRequest,
+  ModelsListResult,
+  ModelsModelResult,
+  ModelsDownloadProgressEvent
+} from "../shared/ipc";
 import type { PreloadChannels } from "../shared/ipc";
 
 /**
@@ -29,6 +42,52 @@ const api: MainWindowApi = {
     },
     close: () => {
       ipcRenderer.send(channels.window.close);
+    }
+  },
+  onCaptureStateChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: unknown): void => {
+      listener(state as never);
+    };
+    ipcRenderer.on(channels.captureStateChanged, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.captureStateChanged, handler);
+    };
+  },
+  history: {
+    list: (request: HistoryListRequest) =>
+      ipcRenderer.invoke(channels.history.list, request) as Promise<HistoryListResult>,
+    search: (request: HistorySearchRequest) =>
+      ipcRenderer.invoke(channels.history.search, request) as Promise<HistorySearchResult>,
+    remove: (request: HistoryDeleteRequest) =>
+      ipcRenderer.invoke(channels.history.delete, request) as Promise<HistoryDeleteResult>,
+    clear: () =>
+      ipcRenderer.invoke(channels.history.clear) as Promise<HistoryClearResult>
+  },
+  models: {
+    list: () =>
+      ipcRenderer.invoke(channels.models.list) as Promise<ModelsListResult>,
+    download: (request: ModelsModelRequest) =>
+      ipcRenderer.invoke(channels.models.download, request) as Promise<ModelsModelResult>,
+    cancel: (request: ModelsModelRequest) =>
+      ipcRenderer.invoke(channels.models.cancel, request) as Promise<ModelsModelResult>,
+    remove: (request: ModelsModelRequest) =>
+      ipcRenderer.invoke(channels.models.delete, request) as Promise<ModelsModelResult>,
+    onDownloadProgress: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: ModelsDownloadProgressEvent
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(channels.models.downloadProgress, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.models.downloadProgress, handler);
+      };
+    }
+  },
+  clipboard: {
+    copy: (text: string) => {
+      ipcRenderer.send(channels.clipboard.copy, text);
     }
   }
 };

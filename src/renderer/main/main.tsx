@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect } from "react";
+import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource/instrument-sans/400.css";
 import "@fontsource/instrument-sans/500.css";
@@ -8,6 +9,19 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "../styles/main.css";
 import { App } from "./App";
+import { useMainStore } from "./store/use-main-store";
+import type { CaptureState } from "../../shared/capture";
+import type { MainWindowApi } from "../../shared/api";
+
+function Bootstrap(): JSX.Element {
+  useEffect(() => {
+    const api = window.struqVoice as MainWindowApi;
+    return api.onCaptureStateChanged((state: CaptureState) => {
+      useMainStore.getState().setCapture(state);
+    });
+  }, []);
+  return <App />;
+}
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) {
@@ -16,6 +30,6 @@ if (rootElement === null) {
 
 createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <Bootstrap />
   </React.StrictMode>,
 );

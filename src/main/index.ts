@@ -1,6 +1,24 @@
-import { join } from "node:path";
+/**
+ * Main process entry: lifecycle, single instance, boot order.
+ * Phase 1 wires: main window (close hides), recorder window, overlay
+ * controller, capture session, hotkeys, tray, and the E2E test hook.
+ */
+
 import { app, BrowserWindow, Menu } from "electron";
 import { registerIpcHandlers } from "./ipc";
+import { createHotkeys } from "./hotkeys";
+import {
+  DEFAULT_CAPTURE_OPTIONS,
+  createCaptureSession
+} from "./session/capture-session";
+import { installTestHook } from "./test-hook";
+import { createTray } from "./tray";
+import { createMainWindow } from "./windows/main-window";
+import { createOverlayWindowController } from "./windows/overlay-window";
+import { createRecorderWindow } from "./windows/recorder-window";
+import { MOCK_ENGINE } from "../shared/engines";
+
+const e2e = process.env["STRUQ_VOICE_E2E"] === "1";
 
 // Test isolation: e2e runs always point userData at a fresh temp dir so the
 // real profile is never touched. Must happen before app is ready.
@@ -10,45 +28,23 @@ if (userDataOverride !== undefined) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let overlay: ReturnType<typeof createOverlayWindowController> | null = null;
+let hotkeys: ReturnType<typeof createHotkeys> | null = null;
+let isQuitting = false;
 
-const createMainWindow = (): BrowserWindow => {
-  const window = new BrowserWindow({
-    width: 1100,
-    height: 720,
-    minWidth: 880,
-    minHeight: 600,
-    title: "Struq Voice",
-    show: false,
-    frame: false,
-    // The linen page colour, so there is no white flash before the renderer
-    // paints. Matches --color-bg in the theme.
-    backgroundColor: "#f6f4eb",
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      preload: join(__dirname, "../preload/main.cjs"),
-    },
-  });
+app.on("before-quit", () => {
+  isQuitting = true;
+});
 
-  window.once("ready-to-show", () => {
-    window.show();
-  });
-
-  window.on("closed", () => {
-    if (mainWindow === window) {
-      mainWindow = null;
-    }
-  });
-
-  const rendererUrl = process.env["ELECTRON_RENDERER_URL"];
-  if (rendererUrl !== undefined) {
-    void window.loadURL(rendererUrl);
-  } else {
-    void window.loadFile(join(__dirname, "../renderer/main/index.html"));
+const showMainWindow = (): void => {
+  if (mainWindow === null || mainWindow.isDestroyed()) {
+    mainWindow = createMainWindow();
   }
-
-  return window;
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
 };
 
 const gotLock = app.requestSingleInstanceLock();
@@ -57,12 +53,7 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (mainWindow !== null) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
-      }
-      mainWindow.focus();
-    }
+    showMainWindow();
   });
 
   void app.whenReady().then(() => {
@@ -70,7 +61,64 @@ if (!gotLock) {
     Menu.setApplicationMenu(null);
 
     registerIpcHandlers();
+
+    const recorderWindow = createRecorderWindow();
+
+    const session = createCaptureSession(DEFAULT_CAPTURE_OPTIONS);
+
+    overlay = createOverlayWindowController({ e2e });
+
+    const toggleCapture = (): void => {
+      const phase = session.state.phase;
+      if (phase === "listening" || phase === "arming") {
+        session.stop();
+      } else {
+        session.start();
+      }
+    };
+
+    const tray = createTray({
+      onToggleCapture: toggleCapture,
+      onOpenMainWindow: showMainWindow,
+      onSetHotkeysPaused: (paused) => hotkeys?.setPaused(paused),
+      onQuit: () => { app.quit(); },
+      engineDisplayName: () => MOCK_ENGINE.displayName
+    });
+
+    hotkeys = createHotkeys({
+      e2e,
+      onPttStart: () => { session.start(); },
+      onPttStop: () => { session.stop(); },
+      onToggle: toggleCapture
+    });
+
+    session.subscribe((state) => {
+      tray.setState(state);
+      overlay?.update(state);
+      if (state.phase === "listening") {
+        // Escape cancels a capture. Registered only for the duration of the
+        // capture, since the overlay cannot receive key events.
+        hotkeys?.registerEscape(() => { session.cancel(); });
+      } else {
+        hotkeys?.unregisterEscape();
+      }
+    });
+
+    hotkeys.init();
+
     mainWindow = createMainWindow();
+    mainWindow.on("close", (event) => {
+      if (!isQuitting) {
+        // Close hides, it does not quit. Quit from the tray or Ctrl+Q.
+        event.preventDefault();
+        mainWindow?.hide();
+        tray.notifyFirstHide();
+      }
+    });
+
+    if (e2e) {
+      installTestHook({ session, tray, overlay, recorderWindow });
+    }
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -83,5 +131,10 @@ if (!gotLock) {
     if (process.platform !== "darwin") {
       app.quit();
     }
+  });
+
+  app.on("will-quit", () => {
+    overlay?.dispose();
+    hotkeys?.dispose();
   });
 }

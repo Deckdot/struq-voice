@@ -1,12 +1,18 @@
 /**
  * Main process entry: lifecycle, single instance, boot order.
- * Phase 1 wires: main window (close hides), recorder window, overlay
- * controller, capture session, hotkeys, tray, and the E2E test hook.
+ * Phase 2 wires the recorder audio source, live levels relay, the stream
+ * watchdog, and starts the keyboard hook only after the stream is live.
  */
 
 import { app, BrowserWindow, Menu } from "electron";
-import { registerIpcHandlers } from "./ipc";
+import { createRecorderBridge } from "./audio/recorder-bridge";
 import { createHotkeys } from "./hotkeys";
+import { registerIpcHandlers } from "./ipc";
+import {
+  createRecorderAudioSource,
+  createSimulatedAudioSource,
+  type CaptureAudio
+} from "./session/audio-source";
 import {
   DEFAULT_CAPTURE_OPTIONS,
   createCaptureSession
@@ -19,6 +25,9 @@ import { createRecorderWindow } from "./windows/recorder-window";
 import { MOCK_ENGINE } from "../shared/engines";
 
 const e2e = process.env["STRUQ_VOICE_E2E"] === "1";
+// The keyboard-hook verification spec: like production, but it installs the
+// test hook so the synthesized capture cycles are observable.
+const hookTest = process.env["STRUQ_VOICE_HOOK_TEST"] === "1";
 
 // Test isolation: e2e runs always point userData at a fresh temp dir so the
 // real profile is never touched. Must happen before app is ready.
@@ -31,6 +40,10 @@ let mainWindow: BrowserWindow | null = null;
 let overlay: ReturnType<typeof createOverlayWindowController> | null = null;
 let hotkeys: ReturnType<typeof createHotkeys> | null = null;
 let isQuitting = false;
+
+// The most recent capture, kept for verification until Phase 3 persists
+// history. Never written to disk in the hot path.
+let lastCaptureAudio: CaptureAudio | null = null;
 
 app.on("before-quit", () => {
   isQuitting = true;
@@ -62,9 +75,19 @@ if (!gotLock) {
 
     registerIpcHandlers();
 
-    const recorderWindow = createRecorderWindow();
+    const recorderWindow = createRecorderWindow({ e2e });
+    const bridge = createRecorderBridge();
+    const source = e2e
+      ? createSimulatedAudioSource()
+      : createRecorderAudioSource(recorderWindow, bridge);
 
-    const session = createCaptureSession(DEFAULT_CAPTURE_OPTIONS);
+    const session = createCaptureSession({
+      ...DEFAULT_CAPTURE_OPTIONS,
+      source,
+      onAudio: (audio) => {
+        lastCaptureAudio = audio;
+      }
+    });
 
     overlay = createOverlayWindowController({ e2e });
 
@@ -104,7 +127,28 @@ if (!gotLock) {
       }
     });
 
-    hotkeys.init();
+    // uIOhook starts only after the recorder window has its stream: this is
+    // the structural fix for the uiohook-napi issue where getUserMedia while
+    // a window is focused kills the global hook. Fall back after 5s if the
+    // stream never comes up (the app must never fail to boot over this).
+    let hotkeysStarted = false;
+    const maybeStartHotkeys = (): void => {
+      if (hotkeysStarted || e2e) return;
+      hotkeysStarted = true;
+      hotkeys?.init();
+    };
+    bridge.onStreamState((streamState) => {
+      if (streamState.live) {
+        maybeStartHotkeys();
+      }
+      // A dead microphone must never silently produce empty transcripts.
+      if (!streamState.live && session.state.phase === "listening") {
+        session.fail(
+          "Microphone lost. Check the device connection and try again."
+        );
+      }
+    });
+    setTimeout(maybeStartHotkeys, 5000);
 
     mainWindow = createMainWindow();
     mainWindow.on("close", (event) => {
@@ -116,8 +160,15 @@ if (!gotLock) {
       }
     });
 
-    if (e2e) {
-      installTestHook({ session, tray, overlay, recorderWindow });
+    if (e2e || hookTest) {
+      installTestHook({
+        session,
+        tray,
+        overlay,
+        recorderWindow,
+        bridge,
+        getLastCaptureAudio: () => lastCaptureAudio
+      });
     }
 
     app.on("activate", () => {

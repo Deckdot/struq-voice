@@ -8,8 +8,17 @@
 
 import { BrowserWindow } from "electron";
 import { join } from "node:path";
+import { PRELOAD_CHANNELS } from "../../shared/ipc";
 
-export const createRecorderWindow = (): BrowserWindow => {
+export interface RecorderWindowOptions {
+  /** E2E mode skips the microphone entirely. */
+  readonly e2e: boolean;
+}
+
+const channelsArg = `--struq-channels=${JSON.stringify(PRELOAD_CHANNELS)}`;
+
+export const createRecorderWindow = (options: RecorderWindowOptions): BrowserWindow => {
+  const e2eArg = options.e2e ? "--struq-e2e" : null;
   const window = new BrowserWindow({
     width: 480,
     height: 360,
@@ -21,7 +30,10 @@ export const createRecorderWindow = (): BrowserWindow => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      preload: join(__dirname, "../preload/recorder.cjs")
+      preload: join(__dirname, "../preload/recorder.cjs"),
+      // The sandboxed preload reads channel names and the e2e flag from
+      // argv; channels are declared in src/shared/ipc.ts and nowhere else.
+      additionalArguments: [channelsArg, ...(e2eArg !== null ? [e2eArg] : [])]
     }
   });
 

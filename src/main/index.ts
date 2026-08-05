@@ -13,6 +13,7 @@ import { createOpenRouterEngine, OPENROUTER_ENGINE_ID } from "./engines/openrout
 import type { TranscriptionEngine } from "./engines/types";
 import { createHotkeys } from "./hotkeys";
 import { registerIpcHandlers } from "./ipc";
+import { createModelsService } from "./models";
 import { insertTextIntoActiveApp } from "./platform/win32/paste";
 import { createRecorderBridge } from "./audio/recorder-bridge";
 import {
@@ -86,8 +87,9 @@ if (!gotLock) {
     const settingsStore = createSettingsStore(join(app.getPath("userData"), "settings.json"));
     const secrets = createSecretsStore();
     const history = openDatabase(app.getPath("userData"));
+    const models = createModelsService(join(app.getPath("userData"), "models"));
 
-    registerIpcHandlers(history);
+    registerIpcHandlers(history, models);
 
     const recorderWindow = createRecorderWindow({ e2e });
     const bridge = createRecorderBridge();

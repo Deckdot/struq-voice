@@ -1,9 +1,11 @@
 import { BrowserWindow, app, clipboard, ipcMain } from "electron";
 import type { HistoryStore } from "./db/history-store";
+import type { ModelsService } from "./models";
 import type {
   HistoryDeleteRequest,
   HistoryListRequest,
-  HistorySearchRequest
+  HistorySearchRequest,
+  ModelsModelRequest
 } from "../shared/ipc";
 import {
   appGetVersionChannel,
@@ -12,6 +14,11 @@ import {
   historyDeleteChannel,
   historyListChannel,
   historySearchChannel,
+  modelsCancelChannel,
+  modelsDeleteChannel,
+  modelsDownloadChannel,
+  modelsDownloadProgressChannel,
+  modelsListChannel,
   windowCloseChannel,
   windowMinimizeChannel,
   windowToggleMaximizeChannel
@@ -22,7 +29,10 @@ import {
  * src/shared/ipc.ts; no logic beyond forwarding to the window, process or
  * store.
  */
-export const registerIpcHandlers = (history: HistoryStore | null): void => {
+export const registerIpcHandlers = (
+  history: HistoryStore | null,
+  models: ModelsService | null
+): void => {
   ipcMain.handle(appGetVersionChannel, () => app.getVersion());
 
   ipcMain.on(windowMinimizeChannel, (event) => {
@@ -68,4 +78,41 @@ export const registerIpcHandlers = (history: HistoryStore | null): void => {
   ipcMain.on(clipboardCopyChannel, (_event, text: string) => {
     clipboard.writeText(text);
   });
+
+  ipcMain.handle(modelsListChannel, () => {
+    return { items: models?.list() ?? [] };
+  });
+
+  ipcMain.handle(modelsDownloadChannel, (_event, request: ModelsModelRequest) => {
+    return { ok: models?.startDownload(request.modelId) ?? false };
+  });
+
+  ipcMain.handle(modelsCancelChannel, (_event, request: ModelsModelRequest) => {
+    return { ok: models?.cancelDownload(request.modelId) ?? false };
+  });
+
+  ipcMain.handle(
+    modelsDeleteChannel,
+    async (_event, request: ModelsModelRequest) => {
+      return { ok: (await models?.deleteModel(request.modelId)) ?? false };
+    }
+  );
+
+  if (models !== null) {
+    models.subscribe((statuses) => {
+      const window = BrowserWindow.getAllWindows().find((candidate) =>
+        candidate.webContents.getURL().includes("main/index.html"),
+      );
+      if (window === undefined) return;
+      for (const status of statuses) {
+        if (status.download.state === "downloading") {
+          window.webContents.send(modelsDownloadProgressChannel, {
+            modelId: status.model.id,
+            receivedBytes: status.download.receivedBytes,
+            totalBytes: status.download.totalBytes,
+          });
+        }
+      }
+    });
+  }
 };

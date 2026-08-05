@@ -5,6 +5,7 @@
  */
 
 import type { CaptureState } from "./capture";
+import type { ModelStatus } from "./models";
 
 export const appGetVersionChannel = "app:get-version" as const;
 
@@ -101,6 +102,31 @@ export interface ClipboardCopyRequest {
   readonly text: string;
 }
 
+export const modelsListChannel = "models:list" as const;
+export const modelsDownloadChannel = "models:download" as const;
+export const modelsCancelChannel = "models:cancel" as const;
+export const modelsDeleteChannel = "models:delete" as const;
+export const modelsDownloadProgressChannel = "models:download-progress" as const;
+
+export interface ModelsModelRequest {
+  readonly modelId: string;
+}
+
+export interface ModelsModelResult {
+  readonly ok: boolean;
+}
+
+export interface ModelsListResult {
+  readonly items: readonly ModelStatus[];
+}
+
+/** Main to renderer: download progress for one model, unthrottled. */
+export interface ModelsDownloadProgressEvent {
+  readonly modelId: string;
+  readonly receivedBytes: number;
+  readonly totalBytes: number;
+}
+
 /**
  * The channels sandboxed preloads need at runtime, in one object. Sandboxed
  * preloads cannot load shared modules (the bundle must be a single file), so
@@ -122,6 +148,13 @@ export const PRELOAD_CHANNELS = {
     data: recorderCaptureDataChannel,
     levels: recorderLevelsChannel,
     streamState: recorderStreamStateChannel
+  },
+  models: {
+    list: modelsListChannel,
+    download: modelsDownloadChannel,
+    cancel: modelsCancelChannel,
+    delete: modelsDeleteChannel,
+    downloadProgress: modelsDownloadProgressChannel
   }
 } as const;
 

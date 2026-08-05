@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
-import type { Settings } from "../../../shared/settings";
+import type { DictionaryEntry, Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
 
 const ENGINE_OPTIONS: readonly { id: string; label: string; hint: string }[] = [
@@ -41,6 +42,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function SettingsView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [fromText, setFromText] = useState("");
+  const [toText, setToText] = useState("");
 
   useEffect(() => {
     void api.settings.get().then(({ settings: loaded }) => {
@@ -57,12 +60,27 @@ export function SettingsView(): JSX.Element {
     });
   };
 
+  const addDictionaryEntry = (): void => {
+    const from = fromText.trim();
+    const to = toText.trim();
+    if (from.length === 0) return;
+    const entry: DictionaryEntry = { from, to, matchCase: false, wholeWord: true };
+    update({ post: { ...settings.post, dictionary: [...settings.post.dictionary, entry] } });
+    setFromText("");
+    setToText("");
+  };
+
+  const removeDictionaryEntry = (index: number): void => {
+    const dictionary = settings.post.dictionary.filter((_entry, i) => i !== index);
+    update({ post: { ...settings.post, dictionary } });
+  };
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-border px-6 py-5">
         <h1 className="font-serif text-2xl tracking-tight text-text">Settings</h1>
         <p className="mt-1 text-sm text-text-muted">
-          Engine, hotkey and delivery options. Changes apply immediately.
+          Engine, hotkey, delivery and post-processing options. Changes apply immediately.
         </p>
       </div>
 
@@ -150,6 +168,66 @@ export function SettingsView(): JSX.Element {
               />
               <span className="text-sm text-text">Add trailing punctuation</span>
             </label>
+          </Section>
+
+          <Section title="Dictionary">
+            <p className="text-xs text-text-muted">
+              "Struck" becomes "Struq", "tow ree" becomes "Tauri". Replaced before delivery.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={fromText}
+                onChange={(event) => {
+                  setFromText(event.target.value);
+                }}
+                placeholder="From"
+                className="w-1/2 rounded-md border border-border bg-bg-sunken px-3 py-1.5 text-sm text-text placeholder:text-text-muted focus:border-border-focus focus:outline-none"
+              />
+              <input
+                type="text"
+                value={toText}
+                onChange={(event) => {
+                  setToText(event.target.value);
+                }}
+                placeholder="To"
+                className="w-1/2 rounded-md border border-border bg-bg-sunken px-3 py-1.5 text-sm text-text placeholder:text-text-muted focus:border-border-focus focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={addDictionaryEntry}
+                disabled={fromText.trim().length === 0}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent-solid px-3 py-1.5 text-sm font-medium text-text-inverse transition-colors duration-fast hover:bg-accent-solid-hover disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add
+              </button>
+            </div>
+            {settings.post.dictionary.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {settings.post.dictionary.map((entry, index) => (
+                  <div
+                    key={`${entry.from}-${String(index)}`}
+                    className="flex items-center justify-between rounded-md border border-border bg-bg px-3 py-2"
+                  >
+                    <span className="text-sm text-text">
+                      <span className="font-mono">{entry.from}</span>
+                      <span className="mx-2 text-text-muted">&rarr;</span>
+                      <span className="font-mono">{entry.to}</span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${entry.from}`}
+                      onClick={() => {
+                        removeDictionaryEntry(index);
+                      }}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-danger-soft hover:text-danger"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </Section>
         </div>
       </div>

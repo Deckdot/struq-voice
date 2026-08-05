@@ -20,6 +20,7 @@ import type { TranscriptionEngine } from "./engines/types";
 import { createHotkeys } from "./hotkeys";
 import { registerIpcHandlers } from "./ipc";
 import { createModelsService } from "./models";
+import { cleanupTranscript } from "./post/text-cleanup";
 import { insertTextIntoActiveApp } from "./platform/win32/paste";
 import { createRecorderBridge } from "./audio/recorder-bridge";
 import {
@@ -181,7 +182,15 @@ if (!gotLock) {
           costUsd: result.costUsd,
           durationMs: audio.durationMs,
         };
-        return { text: result.text, meta };
+        // Post-processing: dictionary, fillers, punctuation. Reads settings
+        // at delivery time; the user may have changed them mid-capture.
+        const current = settingsStore.get();
+        const text = cleanupTranscript(result.text, {
+          dictionary: current.post.dictionary,
+          removeFillers: current.post.removeFillers,
+          addTrailingPunctuation: current.post.addTrailingPunctuation,
+        });
+        return { text, meta };
       },
       onTranscript: (text, meta) => {
         if (history !== null) {

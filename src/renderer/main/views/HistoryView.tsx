@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search, Copy, Trash2, FileText, Sparkles } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { TranscriptRecord } from "../../../shared/ipc";
-
+import { useMainStore } from "../store/use-main-store";
 /**
  * The History reader. Every transcript you have dictated, searchable through
  * FTS5. The transcript itself is set in the serif at reading size: a
@@ -25,9 +25,16 @@ const formatSeconds = (durationMs: number): string =>
 
 export function HistoryView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
+  const setRoute = useMainStore((state) => state.setRoute);
   const [records, setRecords] = useState<readonly TranscriptRecord[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const addToDictionary = (): void => {
+    // The dictionary lives in Settings; land there so the user can enter the
+    // from/to pair for how this word should be corrected.
+    setRoute("settings");
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -145,9 +152,7 @@ export function HistoryView(): JSX.Element {
                           type="button"
                           aria-label="Add to dictionary"
                           title="Add to dictionary"
-                          onClick={() => {
-                            api.clipboard.copy(record.text);
-                          }}
+                          onClick={addToDictionary}
                           className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-accent-soft hover:text-accent-text"
                         >
                           <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />

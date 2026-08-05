@@ -34,6 +34,7 @@ Load the matching skill when the task touches its domain. They live in
 - `ipc-architecture` - how to add an IPC channel end to end.
 - `native-modules` - the native modules, the rebuild script, degradation.
 - `capture-session` - the state machine, hotkeys, audio pipeline.
+- `shipping-a-release` - "ship it" is one command, `pnpm release:auto`.
 
 The skills are small: they exist so a cold session does not have to rediscover
 the invariants by reading the whole tree.

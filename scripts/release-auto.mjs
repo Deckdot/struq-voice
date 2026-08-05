@@ -86,9 +86,21 @@ function die(message, hint) {
 const capture = (cmd, cmdArgs) =>
   execFileSync(cmd, cmdArgs, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 
-/** Stream output. Used for the long steps, where watching it is the point. */
+/**
+ * Stream output. Used for the long steps, where watching it is the point.
+ *
+ * NO SHELL. `process.execPath` on Windows is under "C:\Program Files", and a
+ * shell splits that on the space into a command that does not exist. The only
+ * thing here that needs a shell is pnpm, which is a .cmd shim rather than a
+ * real executable, so that gets its own helper and nothing else pays for it.
+ */
 const stream = (cmd, cmdArgs) => {
-  execFileSync(cmd, cmdArgs, { stdio: "inherit", shell: process.platform === "win32" });
+  execFileSync(cmd, cmdArgs, { stdio: "inherit" });
+};
+
+/** Run a pnpm script. Needs a shell on Windows because pnpm is a .cmd shim. */
+const pnpm = (script) => {
+  execFileSync("pnpm", [script], { stdio: "inherit", shell: process.platform === "win32" });
 };
 
 /* ------------------------------------------------------------------ *
@@ -338,7 +350,7 @@ if (dryRun) {
      that can fail slowly would report success for a release that cannot be
      produced, which is worse than not offering one. */
   try {
-    stream("pnpm", ["release"]);
+    pnpm("release");
     stream(process.execPath, [resolve("scripts/publish-release.mjs"), "--dry-run"]);
   } catch {
     die("the build/sign/verify chain failed");
@@ -350,7 +362,7 @@ if (dryRun) {
 }
 
 try {
-  stream("pnpm", ["release"]);
+  pnpm("release");
 } catch {
   die(
     "the build/sign/verify chain failed after the version was cut",

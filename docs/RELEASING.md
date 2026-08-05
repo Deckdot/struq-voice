@@ -6,12 +6,64 @@ what stops a hostile one from doing the same.
 ## The short version
 
 ```bash
+pnpm release:auto
+```
+
+That is the whole release: it reads what changed, picks the version, runs the
+gates, cuts, builds, signs, verifies, publishes, reads the feed back and
+pushes. Nothing is typed and no decisions are asked for.
+
+Rehearse it first with `pnpm release:dry`, which really builds, signs and
+verifies but never commits, tags, uploads or pushes.
+
+### What it decides on its own
+
+| Decision | How |
+|---|---|
+| version bump | Conventional Commits since the last `v*` tag: a breaking change gives major, any `feat:` gives minor, otherwise patch |
+| release notes | the same commits, grouped Breaking / New / Fixed / Other |
+| dirty tree | committed as `chore: pre-release working tree` before the cut |
+| is it safe | typecheck, lint and unit tests, **before** the version is cut |
+
+The bump rule is not in the script. It lives in `src/shared/release-plan.ts`
+under typecheck and unit tests, because it is the only step here that makes a
+judgement call: every other step fails loudly when it is wrong, while a bump
+chosen badly fails silently and the version number quietly stops meaning
+anything.
+
+### Why the gates run before the cut
+
+A cut is a commit and a tag, and undoing one means rewriting history that may
+already have been fetched. Everything before the cut is reversible and
+everything after it is verified, so the irreversible step sits between a
+passing test suite and a verifier that refuses to publish what it cannot check.
+
+Preflight also fails early on a wrong branch, a missing or unauthenticated
+`gh`, or a missing signing key. Each of those would otherwise surface after a
+116MB build.
+
+### Flags
+
+| Flag | When |
+|---|---|
+| `--dry-run` | rehearse without publishing |
+| `--bump minor` | override the inferred bump, or give an explicit `1.2.3` |
+| `--skip-gates` | retry after a failed upload, gates already passed |
+| `--no-commit` | refuse on a dirty tree instead of committing it |
+| `--yes` | allow a branch other than `main` |
+
+### Doing it by hand
+
+The steps underneath are still there and still work on their own:
+
+```bash
 pnpm release:cut patch    # bump, commit, tag
 pnpm ship                 # build, sign, verify, publish
 ```
 
-Nothing else is typed. The version is read from `package.json` by every step
-after the cut, so it cannot be mistyped into one of them.
+The version is read from `package.json` by every step after the cut, so it
+cannot be mistyped into one of them. Reach for these when recovering from a
+partial failure, see the table at the end of this document.
 
 ## Why updates are signed
 
@@ -151,6 +203,22 @@ node scripts/verify-release.mjs   # must FAIL on hash and signature, exit 1
 
 The unit tests in `src/main/updater.test.ts` cover the refusal paths: swapped
 artifact, downgrade replay, wrong key, tampered signature, unreachable manifest.
+
+## When a release fails halfway
+
+`release:auto` names the stage that failed and what to run. In summary:
+
+| Failed at | State | Recovery |
+|---|---|---|
+| preflight or gates | nothing changed | fix, re-run `pnpm release:auto` |
+| gates, after auto-commit | tree committed, not cut | fix and re-run, or `git reset --soft HEAD~1` to get the changes back |
+| build / sign / verify | cut and tagged locally, nothing published | fix, then `pnpm ship` to retry from the tag. Or undo: `git tag -d vX.Y.Z && git reset --hard HEAD~1` |
+| publish | built and verified, tagged locally | `pnpm release:publish` |
+| push | **the release is already live** | `git push origin main && git push origin vX.Y.Z` |
+
+The last row is the one to read carefully. After a failed push the release is
+on the feed and only the local repo is behind, so re-running the whole thing
+would cut a second version for no reason. Just push.
 
 ## First install
 

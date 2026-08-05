@@ -176,7 +176,30 @@ Electron without the user's explicit request.
   an explicit instruction to commit slices.
 - Before committing, check `git status`, `git diff`, `git log --oneline -5`.
 
-## 12. Docs
+## 12. Releasing and updates
+
+`pnpm release:cut patch` then `pnpm ship`. Nothing else is typed: every step
+after the cut reads the version from `package.json`.
+
+Struq Voice ships without a code signing certificate, so an update channel
+would otherwise mean "execute whatever the feed serves". Every artifact
+carries an Ed25519 signature over `<sha512>|<version>`, verified in
+`src/main/updater.ts` against the public key in `src/shared/release-key.ts`
+before anything installs. A failed check aborts rather than warns.
+
+- The private key lives at `~/.struq/struq-voice-release-private.pem`, never
+  in the repo. Rotating it stops every installed copy from updating.
+- The version is in the signed message so a genuinely signed older build
+  cannot be replayed as a downgrade.
+- `verify-release.mjs` deliberately shares no code with `sign-release.mjs`.
+  A verifier built on the signer's helpers only proves they agree with
+  themselves.
+- Builds go to `%TEMP%/struq-voice-release`, because electron-builder's
+  rename step hits EPERM under `Documents`.
+
+Full detail, including the manual gate check, in `docs/RELEASING.md`.
+
+## 13. Docs
 
 - `docs/IMPLEMENTATION_PLAN.md` - the full build plan (7 phases). The
   definitive reference for intended behavior.
@@ -185,9 +208,10 @@ Electron without the user's explicit request.
 - `docs/MODELS.md` - engines, catalog, download pipeline.
 - `docs/TROUBLESHOOTING.md` - known failures and fixes.
 - `docs/ARCHITECTURE.md` - process/window model and boundaries.
+- `docs/RELEASING.md` - cut, sign, verify, publish, and why updates are signed.
 - `README.md` - product-facing summary.
 
-## 13. Skills
+## 14. Skills
 
 `src/../.agents/skills/` (and the mirrored `.claude/skills/`) hold invokable
 skills for this repo:

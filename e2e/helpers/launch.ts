@@ -153,7 +153,32 @@ export const testHook = {
         () =>
           (globalThis as unknown as TestHarnessGlobal).__struqVoiceTest?.recorder.isVisible() ??
           false
+      ),
+    isLive: (app: ElectronApplication): Promise<boolean> =>
+      app.evaluate(
+        () =>
+          (globalThis as unknown as TestHarnessGlobal).__struqVoiceTest?.recorder.isLive() ??
+          false
       )
+  },
+  getLastCaptureWav: (
+    app: ElectronApplication
+  ): Promise<{ base64: string; durationMs: number } | null> =>
+    app.evaluate(() => {
+      const wav = (globalThis as unknown as TestHarnessGlobal).__struqVoiceTest
+        ?.getLastCaptureWav();
+      if (wav === undefined) throw new Error("test hook wav missing");
+      return wav;
+    }),
+  keyboard: {
+    pressAndHold: (app: ElectronApplication): Promise<void> =>
+      app.evaluate(() => {
+        (globalThis as unknown as TestHarnessGlobal).__struqVoiceTest?.keyboard.pressAndHold();
+      }),
+    releaseHold: (app: ElectronApplication): Promise<void> =>
+      app.evaluate(() => {
+        (globalThis as unknown as TestHarnessGlobal).__struqVoiceTest?.keyboard.releaseHold();
+      })
   },
   overlay: {
     exists: (app: ElectronApplication): Promise<boolean> =>

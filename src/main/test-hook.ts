@@ -1,10 +1,15 @@
 /**
- * E2E test hook installation. Only active when STRUQ_VOICE_E2E=1: tests drive
- * the capture session and inspect windows and tray without touching real input
- * devices. Never installed in production.
+ * E2E test hook installation. Active when STRUQ_VOICE_E2E=1 (tests drive the
+ * capture session without input devices) or STRUQ_VOICE_HOOK_TEST=1 (the
+ * keyboard-hook verification spec needs to observe synthesized cycles).
+ * Never installed in production.
  */
 
 import type { BrowserWindow } from "electron";
+import { uIOhook, UiohookKey } from "uiohook-napi";
+import { buildWav } from "./audio/wav";
+import type { RecorderBridge } from "./audio/recorder-bridge";
+import type { CaptureAudio } from "./session/audio-source";
 import type { TestHarnessApi, TestHarnessGlobal } from "../shared/test-hooks";
 import type { CaptureSession } from "./session/capture-session";
 import type { TrayController } from "./tray";
@@ -15,6 +20,8 @@ export interface TestHookInput {
   readonly tray: TrayController;
   readonly overlay: OverlayWindowController;
   readonly recorderWindow: BrowserWindow | null;
+  readonly bridge: RecorderBridge;
+  readonly getLastCaptureAudio: () => CaptureAudio | null;
 }
 
 export const installTestHook = (input: TestHookInput): void => {
@@ -59,7 +66,8 @@ export const installTestHook = (input: TestHookInput): void => {
       getTooltip: () => input.tray.getTooltip()
     },
     recorder: {
-      isVisible: () => input.recorderWindow?.isVisible() ?? false
+      isVisible: () => input.recorderWindow?.isVisible() ?? false,
+      isLive: () => input.bridge.isLive()
     },
     overlay: {
       exists: () => overlayState().exists,
@@ -67,6 +75,22 @@ export const installTestHook = (input: TestHookInput): void => {
       isFocusable: () => overlayState().isFocusable,
       isSkipTaskbar: () => overlayState().isSkipTaskbar,
       isAlwaysOnTop: () => overlayState().isAlwaysOnTop
+    },
+    keyboard: {
+      pressAndHold: () => {
+        uIOhook.keyToggle(UiohookKey.Ctrl, "down");
+        uIOhook.keyToggle(UiohookKey.Space, "down");
+      },
+      releaseHold: () => {
+        uIOhook.keyToggle(UiohookKey.Space, "up");
+        uIOhook.keyToggle(UiohookKey.Ctrl, "up");
+      }
+    },
+    getLastCaptureWav: () => {
+      const audio = input.getLastCaptureAudio();
+      if (audio === null) return null;
+      const wav = buildWav(audio.pcm, audio.sampleRate);
+      return { base64: wav.toString("base64"), durationMs: audio.durationMs };
     }
   };
 

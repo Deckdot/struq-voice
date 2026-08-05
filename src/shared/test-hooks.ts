@@ -22,6 +22,7 @@ export interface TestHarnessApi {
   };
   readonly recorder: {
     isVisible: () => boolean;
+    isLive: () => boolean;
   };
   readonly overlay: {
     exists: () => boolean;
@@ -30,6 +31,13 @@ export interface TestHarnessApi {
     isSkipTaskbar: () => boolean;
     isAlwaysOnTop: () => boolean;
   };
+  /** Synthesised keyboard hold, for the hook-verification spec. */
+  readonly keyboard: {
+    pressAndHold: () => void;
+    releaseHold: () => void;
+  };
+  /** The most recent capture as a WAV, base64, for audio verification. */
+  getLastCaptureWav: () => { base64: string; durationMs: number } | null;
 }
 
 export interface TestHarnessGlobal {

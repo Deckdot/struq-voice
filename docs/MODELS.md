@@ -42,12 +42,34 @@ build is trivial.
 
 | Model | Size | Notes |
 |---|---:|---|
-| `ggml-large-v3-turbo-q5_0.bin` | ~870MB | Default whisper model |
+| `ggml-large-v3-turbo-q5_0.bin` | ~574MB | Default whisper model |
 | `ggml-base.bin` | ~148MB | Light option |
 
-The binary and model download to `userData/runtimes/whisper-cpp/`. If the CUDA
-build cannot start (missing runtime DLLs), the engine falls back to CPU and
-says so once.
+The **runtime** (`whisper-cli.exe`, CPU build from the whisper.cpp v1.9.2
+release) and the model both download on demand from the Models view. The
+runtime is a zip, downloaded and sha256-verified, then only `whisper-cli.exe`
+is extracted into `userData/runtimes/whisper-cpp/`. If the CUDA build cannot
+start (missing runtime DLLs), the engine falls back to CPU and says so once.
+
+## Measured speed
+
+The Models view reports a realtime factor **measured on this machine**, not a
+static claim: after the first capture on an engine, `inferenceMs / durationMs`
+is averaged over recent History rows and shown on every model card of that
+engine.
+
+## Download pipeline
+
+- Storage: `userData/models/<model-id>/` for verified files.
+- Partial downloads live in `.partial/` and resume with HTTP range requests
+  across restarts.
+- At most three files download concurrently across all models.
+- Every file is sha256-verified before it is atomically renamed into place.
+- Progress is reported at 4Hz; cancellation keeps the partial so a later
+  retry resumes instead of restarting.
+- **Import:** a model already present on disk can be imported from its folder
+  in the Models view. Files are copied and then verified against the catalog
+  hashes; a mismatch is reported rather than silently accepted.
 
 ## OpenRouter (cloud)
 
@@ -60,16 +82,6 @@ The API key lives in `userData/secrets/openrouter.enc`, encrypted with
 Electron `safeStorage` (DPAPI on Windows). The raw key never crosses IPC; the
 Settings view shows a masked placeholder and a Replace-key action only.
 Resolution order: stored key, then `OPENROUTER_API_KEY`, then unconfigured.
-
-## Download pipeline
-
-- Storage: `userData/models/<model-id>/` for verified files.
-- Partial downloads live in `.partial/` and resume with HTTP range requests
-  across restarts.
-- At most three files download concurrently across all models.
-- Every file is sha256-verified before it is atomically renamed into place.
-- Progress is reported at 4Hz; cancellation keeps the partial so a later
-  retry resumes instead of restarting.
 
 ## Engine selection
 

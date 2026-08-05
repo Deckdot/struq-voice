@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, KeyRound, Check, X, Keyboard } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { DictionaryEntry, Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
+import { domEventToAccelerator } from "../../../shared/hotkeys";
 
 const ENGINE_OPTIONS: readonly { id: string; label: string; hint: string }[] = [
   {
@@ -28,8 +29,6 @@ const ENGINE_OPTIONS: readonly { id: string; label: string; hint: string }[] = [
   }
 ];
 
-const HOTKEY_LABEL = "Ctrl+Space";
-
 function Section({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
   return (
     <section className="rounded-lg border border-border bg-surface p-4">
@@ -44,6 +43,14 @@ export function SettingsView(): JSX.Element {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [fromText, setFromText] = useState("");
   const [toText, setToText] = useState("");
+  const [keyConfigured, setKeyConfigured] = useState(false);
+  const [keyStored, setKeyStored] = useState(false);
+  const [keyInput, setKeyInput] = useState("");
+  const [keyEditing, setKeyEditing] = useState(false);
+  const [keyMessage, setKeyMessage] = useState<string | null>(null);
+  const [capturingPtt, setCapturingPtt] = useState(false);
+  const [capturingToggle, setCapturingToggle] = useState(false);
+  const [hotkeyMessage, setHotkeyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     void api.settings.get().then(({ settings: loaded }) => {
@@ -54,9 +61,46 @@ export function SettingsView(): JSX.Element {
     });
   }, [api]);
 
+  useEffect(() => {
+    void api.openRouterKey.status().then((status) => {
+      setKeyConfigured(status.configured);
+      setKeyStored(status.stored);
+    });
+  }, [api, keyEditing]);
+
   const update = (patch: Partial<Settings>): void => {
     void api.settings.update(patch).then(({ settings: updated }) => {
       setSettings(updated);
+    });
+  };
+
+  const saveKey = (): void => {
+    const key = keyInput.trim();
+    if (key.length === 0) return;
+    void api.openRouterKey.set(key).then((result) => {
+      if (result.ok) {
+        setKeyMessage("API key saved.");
+        setKeyEditing(false);
+        setKeyInput("");
+        void api.openRouterKey.status().then((status) => {
+          setKeyConfigured(status.configured);
+          setKeyStored(status.stored);
+        });
+      } else {
+        setKeyMessage(result.message ?? "Could not save the API key.");
+      }
+    });
+  };
+
+  const clearKey = (): void => {
+    void api.openRouterKey.clear().then((result) => {
+      if (result.ok) {
+        setKeyMessage("API key removed.");
+        setKeyConfigured(false);
+        setKeyStored(false);
+      } else {
+        setKeyMessage(result.message ?? "Could not clear the API key.");
+      }
     });
   };
 
@@ -119,15 +163,159 @@ export function SettingsView(): JSX.Element {
             </div>
           </Section>
 
+          <Section title="OpenRouter API key">
+            <p className="text-xs text-text-muted">
+              Stored encrypted with Windows DPAPI. The raw key never leaves the machine.
+            </p>
+            {keyEditing ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="password"
+                  value={keyInput}
+                  onChange={(event) => {
+                    setKeyInput(event.target.value);
+                    setKeyMessage(null);
+                  }}
+                  placeholder="sk-or-v1-..."
+                  className="w-full rounded-md border border-border bg-bg-sunken px-3 py-1.5 font-mono text-sm text-text placeholder:text-text-muted focus:border-border-focus focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={saveKey}
+                  disabled={keyInput.trim().length === 0}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent-solid px-3 py-1.5 text-sm font-medium text-text-inverse transition-colors duration-fast hover:bg-accent-solid-hover disabled:opacity-50"
+                >
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" /> Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKeyEditing(false);
+                    setKeyInput("");
+                    setKeyMessage(null);
+                  }}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" /> Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-sm text-text">
+                  <KeyRound className="h-4 w-4 text-accent-text" aria-hidden="true" />
+                  {keyConfigured
+                    ? keyStored
+                      ? "A key is stored"
+                      : "Configured via OPENROUTER_API_KEY"
+                    : "No API key configured"}
+                </span>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKeyEditing(true);
+                      setKeyMessage(null);
+                    }}
+                    className="rounded-md bg-accent-solid px-3 py-1.5 text-sm font-medium text-text-inverse transition-colors duration-fast hover:bg-accent-solid-hover"
+                  >
+                    {keyStored ? "Replace key" : "Add key"}
+                  </button>
+                  {keyStored && (
+                    <button
+                      type="button"
+                      onClick={clearKey}
+                      className="rounded-md border border-border px-3 py-1.5 text-sm text-text-muted transition-colors duration-fast hover:border-danger-soft hover:bg-danger-soft hover:text-danger"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {keyMessage !== null && (
+              <p className="text-xs text-text-muted">{keyMessage}</p>
+            )}
+          </Section>
+
           <Section title="Capture hotkey">
-            <div className="flex items-center gap-3">
-              <kbd className="rounded-md border border-border-strong bg-bg-sunken px-3 py-1.5 text-sm text-text">
-                {HOTKEY_LABEL}
-              </kbd>
-              <span className="text-xs text-text-muted">
-                Hold to record, release to transcribe. Reassignment lands in a later slice.
-              </span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-text">Hold to record</span>
+              <div className="flex items-center gap-2">
+                <kbd className="rounded-md border border-border-strong bg-bg-sunken px-3 py-1.5 font-mono text-sm text-text">
+                  {capturingPtt ? "Press a chord..." : settings.pttAccelerator}
+                </kbd>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCapturingPtt((current) => !current);
+                    setCapturingToggle(false);
+                    setHotkeyMessage(null);
+                  }}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text"
+                >
+                  {capturingPtt ? "Cancel" : "Change"}
+                </button>
+              </div>
             </div>
+            {capturingPtt && (
+              <button
+                type="button"
+                autoFocus
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-accent bg-accent-soft px-3 py-2 text-sm text-accent-text focus:outline-none"
+                onKeyDown={(event) => {
+                  event.preventDefault();
+                  const accelerator = domEventToAccelerator(event);
+                  if (accelerator === null) return;
+                  setCapturingPtt(false);
+                  update({ pttAccelerator: accelerator });
+                }}
+              >
+                <Keyboard className="h-4 w-4" aria-hidden="true" />
+                Click, then press the new hold-to-record chord
+              </button>
+            )}
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="text-sm text-text">Toggle capture</span>
+              <div className="flex items-center gap-2">
+                <kbd className="rounded-md border border-border-strong bg-bg-sunken px-3 py-1.5 font-mono text-sm text-text">
+                  {capturingToggle ? "Press a chord..." : settings.toggleAccelerator}
+                </kbd>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCapturingToggle((current) => !current);
+                    setCapturingPtt(false);
+                    setHotkeyMessage(null);
+                  }}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text"
+                >
+                  {capturingToggle ? "Cancel" : "Change"}
+                </button>
+              </div>
+            </div>
+            {capturingToggle && (
+              <button
+                type="button"
+                autoFocus
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-accent bg-accent-soft px-3 py-2 text-sm text-accent-text focus:outline-none"
+                onKeyDown={(event) => {
+                  event.preventDefault();
+                  const accelerator = domEventToAccelerator(event);
+                  if (accelerator === null) return;
+                  setCapturingToggle(false);
+                  update({ toggleAccelerator: accelerator });
+                }}
+              >
+                <Keyboard className="h-4 w-4" aria-hidden="true" />
+                Click, then press the new toggle chord
+              </button>
+            )}
+            <p className="text-xs text-text-muted">
+              Re-registers at runtime, no restart needed. Escape cancels a capture either way.
+            </p>
+            {hotkeyMessage !== null && (
+              <p className="text-xs text-danger">{hotkeyMessage}</p>
+            )}
           </Section>
 
           <Section title="Delivery">

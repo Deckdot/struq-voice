@@ -16,6 +16,9 @@ export interface SecretsStore {
   /** Stored key, then OPENROUTER_API_KEY, then unconfigured. */
   readOpenRouterKey: () => Promise<string | null>;
   writeOpenRouterKey: (key: string) => Promise<Result<void>>;
+  /** True only when a key is stored in safeStorage (not env-provided). */
+  hasStoredOpenRouterKey: () => Promise<boolean>;
+  clearOpenRouterKey: () => Promise<Result<void>>;
 }
 
 export const createSecretsStore = (): SecretsStore => {
@@ -36,6 +39,22 @@ export const createSecretsStore = (): SecretsStore => {
       const envKey = process.env["OPENROUTER_API_KEY"];
       if (envKey !== undefined && envKey.length > 0) return envKey;
       return null;
+    },
+    hasStoredOpenRouterKey: async (): Promise<boolean> => {
+      if (!safeStorage.isEncryptionAvailable()) return false;
+      const stored = await readStored();
+      return stored !== null && stored.length > 0;
+    },
+    clearOpenRouterKey: async (): Promise<Result<void>> => {
+      try {
+        await writeFile(keyPath(), Buffer.alloc(0));
+        return ok(undefined);
+      } catch {
+        return fail({
+          code: "UNKNOWN",
+          message: "Could not clear the API key. Restart the application and try again."
+        });
+      }
     },
     writeOpenRouterKey: async (key: string): Promise<Result<void>> => {
       if (!safeStorage.isEncryptionAvailable()) {

@@ -8,9 +8,9 @@ import { app, globalShortcut } from "electron";
 import { createPttHook, type PttHook } from "./ptt-hook";
 import {
   registerToggleShortcut,
-  unregisterToggleShortcut,
-  TOGGLE_SHORTCUT
+  unregisterToggleShortcut
 } from "./toggle-shortcut";
+import { parseAccelerator } from "../../shared/hotkeys";
 
 export interface HotkeyInput {
   readonly e2e: boolean;
@@ -25,6 +25,8 @@ export interface HotkeyController {
   setPaused: (paused: boolean) => void;
   registerEscape: (onEscape: () => void) => void;
   unregisterEscape: () => void;
+  /** Reconfigure PTT and toggle at runtime, without a restart. */
+  setHotkeys: (pttAccelerator: string, toggleAccelerator: string) => void;
 }
 
 export const createHotkeys = (input: HotkeyInput): HotkeyController => {
@@ -48,6 +50,16 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
         pttHook.start();
         registerToggleShortcut(input.onToggle);
       }
+    }
+  };
+
+  const setHotkeys = (pttAccelerator: string, toggleAccelerator: string): void => {
+    const chord = parseAccelerator(pttAccelerator);
+    if (chord !== null) {
+      pttHook.setChord(chord);
+    }
+    if (!paused && !input.e2e) {
+      registerToggleShortcut(input.onToggle, toggleAccelerator);
     }
   };
 
@@ -96,9 +108,8 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       globalShortcut.unregister("CommandOrControl+Q");
     },
     setPaused,
+    setHotkeys,
     registerEscape,
     unregisterEscape
   };
 };
-
-export { TOGGLE_SHORTCUT };

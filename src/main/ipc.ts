@@ -1,6 +1,7 @@
 import { BrowserWindow, app, clipboard, ipcMain } from "electron";
 import type { HistoryStore } from "./db/history-store";
 import type { ModelsService } from "./models";
+import type { SecretsStore } from "./store/secrets";
 import type { SettingsStore } from "./store/settings-store";
 import { migrateSettings } from "../shared/settings";
 import type {
@@ -8,6 +9,7 @@ import type {
   HistoryListRequest,
   HistorySearchRequest,
   ModelsModelRequest,
+  OpenRouterKeySetRequest,
   SettingsUpdateRequest
 } from "../shared/ipc";
 import {
@@ -22,6 +24,9 @@ import {
   modelsDownloadChannel,
   modelsDownloadProgressChannel,
   modelsListChannel,
+  openRouterKeyClearChannel,
+  openRouterKeySetChannel,
+  openRouterKeyStatusChannel,
   settingsChangedChannel,
   settingsGetChannel,
   settingsUpdateChannel,
@@ -38,9 +43,36 @@ import {
 export const registerIpcHandlers = (
   history: HistoryStore | null,
   models: ModelsService | null,
-  settingsStore: SettingsStore | null
+  settingsStore: SettingsStore | null,
+  secrets: SecretsStore | null
 ): void => {
   ipcMain.handle(appGetVersionChannel, () => app.getVersion());
+
+  ipcMain.handle(openRouterKeyStatusChannel, async () => {
+    if (secrets === null) return { configured: false, stored: false };
+    const key = await secrets.readOpenRouterKey();
+    const stored = await secrets.hasStoredOpenRouterKey();
+    return { configured: key !== null && key.length > 0, stored };
+  });
+
+  ipcMain.handle(
+    openRouterKeySetChannel,
+    async (_event, request: OpenRouterKeySetRequest) => {
+      if (secrets === null) return { ok: false, message: "Secrets unavailable." };
+      const outcome = await secrets.writeOpenRouterKey(request.key);
+      return outcome.ok
+        ? { ok: true }
+        : { ok: false, message: outcome.error.message };
+    }
+  );
+
+  ipcMain.handle(openRouterKeyClearChannel, async () => {
+    if (secrets === null) return { ok: false, message: "Secrets unavailable." };
+    const outcome = await secrets.clearOpenRouterKey();
+    return outcome.ok
+      ? { ok: true }
+      : { ok: false, message: outcome.error.message };
+  });
 
   ipcMain.on(windowMinimizeChannel, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();

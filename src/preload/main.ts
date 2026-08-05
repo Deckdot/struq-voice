@@ -113,6 +113,23 @@ const api: MainWindowApi = {
         ipcRenderer.removeListener(channels.settings.changed, handler);
       };
     }
+  },
+  openRouterKey: {
+    status: () =>
+      ipcRenderer.invoke(channels.openRouterKey.status) as Promise<{
+        configured: boolean;
+        stored: boolean;
+      }>,
+    set: (key: string) =>
+      ipcRenderer.invoke(channels.openRouterKey.set, { key }) as Promise<{
+        ok: boolean;
+        message?: string;
+      }>,
+    clear: () =>
+      ipcRenderer.invoke(channels.openRouterKey.clear) as Promise<{
+        ok: boolean;
+        message?: string;
+      }>
   }
 };
 

@@ -105,7 +105,7 @@ if (!gotLock) {
       autostart.setEnabled(settings.autostart);
     });
 
-    registerIpcHandlers(history, models, settingsStore);
+    registerIpcHandlers(history, models, settingsStore, secrets);
 
     const recorderWindow = createRecorderWindow({ e2e });
     const bridge = createRecorderBridge();
@@ -270,6 +270,17 @@ if (!gotLock) {
         session.stop();
       },
       onToggle: toggleCapture,
+    });
+
+    // Apply the configured hotkeys and re-register at runtime when the user
+    // changes them in Settings. The PTT hook chord is applied immediately;
+    // the toggle accelerator re-registers via globalShortcut.
+    hotkeys.setHotkeys(
+      settingsStore.get().pttAccelerator,
+      settingsStore.get().toggleAccelerator
+    );
+    settingsStore.subscribe((latest) => {
+      hotkeys?.setHotkeys(latest.pttAccelerator, latest.toggleAccelerator);
     });
 
     session.subscribe((state) => {

@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  PTT_KEYCODE,
+  DEFAULT_CHORD,
   decidePttAction,
-  isPttChord,
+  matchesChordModifiers,
   type PttEventKind,
   type PttKeyboardEvent
 } from "./ptt-hook";
 
+const TRIGGER = DEFAULT_CHORD.keycode;
+
 const keydown = (overrides: Partial<PttKeyboardEvent> = {}): PttKeyboardEvent => ({
-  keycode: PTT_KEYCODE,
+  keycode: TRIGGER,
   ctrlKey: true,
   shiftKey: false,
   altKey: false,
@@ -67,8 +69,20 @@ describe("ptt decision logic", () => {
     expect(decide(keydown({ metaKey: true }), "down", false)).toBe("none");
   });
 
-  it("recognises the chord", () => {
-    expect(isPttChord(keydown())).toBe(true);
-    expect(isPttChord(keydown({ shiftKey: true }))).toBe(false);
+  it("matches modifiers exactly", () => {
+    expect(matchesChordModifiers(keydown(), DEFAULT_CHORD)).toBe(true);
+    expect(matchesChordModifiers(keydown({ shiftKey: true }), DEFAULT_CHORD)).toBe(false);
+  });
+
+  it("honours a custom chord", () => {
+    const custom = { keycode: 47, ctrlKey: true, shiftKey: true, altKey: false, metaKey: false };
+    expect(
+      decidePttAction(
+        { keycode: 47, ctrlKey: true, shiftKey: true, altKey: false, metaKey: false },
+        "down",
+        false,
+        custom
+      )
+    ).toBe("start");
   });
 });

@@ -162,6 +162,26 @@ export interface SettingsChangedEvent {
   readonly settings: Settings;
 }
 
+export const openRouterKeyStatusChannel = "secrets:openrouter-status" as const;
+export const openRouterKeySetChannel = "secrets:openrouter-set" as const;
+export const openRouterKeyClearChannel = "secrets:openrouter-clear" as const;
+
+export interface OpenRouterKeyStatusResult {
+  /** True when a key is stored, or env-provided. */
+  readonly configured: boolean;
+  /** True only when stored in safeStorage (a "Replace key" placeholder shows). */
+  readonly stored: boolean;
+}
+
+export interface OpenRouterKeySetRequest {
+  readonly key: string;
+}
+
+export interface OpenRouterKeyMutationResult {
+  readonly ok: boolean;
+  readonly message?: string;
+}
+
 /**
  * The channels sandboxed preloads need at runtime, in one object. Sandboxed
  * preloads cannot load shared modules (the bundle must be a single file), so
@@ -197,6 +217,11 @@ export const PRELOAD_CHANNELS = {
     get: settingsGetChannel,
     update: settingsUpdateChannel,
     changed: settingsChangedChannel
+  },
+  openRouterKey: {
+    status: openRouterKeyStatusChannel,
+    set: openRouterKeySetChannel,
+    clear: openRouterKeyClearChannel
   },
   models: {
     list: modelsListChannel,

@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { DEFAULT_PTT_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
 
 export const dictionaryEntrySchema = z.object({
   from: z.string().min(1),
@@ -33,6 +34,10 @@ export const settingsSchema = z.object({
   restoreClipboardDelayMs: z.number().int().min(0).max(5000).default(400),
   /** Start with Windows, hidden to the tray. */
   autostart: z.boolean().default(false),
+  /** Press-and-hold accelerator ("CommandOrControl+Space"). */
+  pttAccelerator: z.string().min(1).default(DEFAULT_PTT_ACCELERATOR),
+  /** Toggle accelerator ("CommandOrControl+Shift+Space"). */
+  toggleAccelerator: z.string().min(1).default(DEFAULT_TOGGLE_ACCELERATOR),
   engine: z
     .object({
       primary: z.string().min(1).default("mock"),

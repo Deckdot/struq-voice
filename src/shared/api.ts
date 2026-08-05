@@ -51,6 +51,11 @@ export interface MainWindowApi {
     update: (patch: Partial<Settings>) => Promise<{ settings: Settings }>;
     onChange: (listener: (settings: Settings) => void) => () => void;
   };
+  readonly openRouterKey: {
+    status: () => Promise<{ configured: boolean; stored: boolean }>;
+    set: (key: string) => Promise<{ ok: boolean; message?: string }>;
+    clear: () => Promise<{ ok: boolean; message?: string }>;
+  };
 }
 
 export interface OverlayWindowApi {

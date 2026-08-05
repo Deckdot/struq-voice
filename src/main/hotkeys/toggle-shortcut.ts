@@ -1,22 +1,34 @@
 /**
- * The global capture toggle: Ctrl+Shift+Space.
+ * The global capture toggle. Default Ctrl+Shift+Space; reconfigurable through
+ * the key-capture widget in Settings.
  * globalShortcut fires on key-down only, which is exactly right for a toggle.
  */
 
 import { globalShortcut } from "electron";
+import { DEFAULT_TOGGLE_ACCELERATOR } from "../../shared/hotkeys";
 
-export const TOGGLE_SHORTCUT = "CommandOrControl+Shift+Space";
+let current = DEFAULT_TOGGLE_ACCELERATOR;
+let registered = false;
 
-export const registerToggleShortcut = (callback: () => void): boolean => {
-  const registered = globalShortcut.register(TOGGLE_SHORTCUT, callback);
-  if (!registered) {
+export const registerToggleShortcut = (callback: () => void, accelerator = current): boolean => {
+  // Re-registering the same accelerator is a no-op; a different one must be
+  // unregistered first or globalShortcut refuses the new binding.
+  if (registered && accelerator === current) return true;
+  if (registered) unregisterToggleShortcut();
+  current = accelerator;
+  const ok = globalShortcut.register(current, callback);
+  registered = ok;
+  if (!ok) {
     console.warn(
-      `[hotkeys] Could not register toggle shortcut "${TOGGLE_SHORTCUT}". It may already be bound to another application.`
+      `[hotkeys] Could not register toggle shortcut "${current}". It may already be bound to another application.`
     );
   }
-  return registered;
+  return ok;
 };
 
 export const unregisterToggleShortcut = (): void => {
-  globalShortcut.unregister(TOGGLE_SHORTCUT);
+  if (registered) {
+    globalShortcut.unregister(current);
+  }
+  registered = false;
 };

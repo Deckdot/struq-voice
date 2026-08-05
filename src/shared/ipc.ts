@@ -6,6 +6,7 @@
 
 import type { CaptureState } from "./capture";
 import type { ModelStatus } from "./models";
+import type { Settings } from "./settings";
 
 export const appGetVersionChannel = "app:get-version" as const;
 
@@ -141,6 +142,26 @@ export interface ModelsDownloadProgressEvent {
   readonly totalBytes: number;
 }
 
+export const settingsGetChannel = "settings:get" as const;
+export const settingsUpdateChannel = "settings:update" as const;
+export const settingsChangedChannel = "settings:changed" as const;
+
+export interface SettingsGetResult {
+  readonly settings: Settings;
+}
+
+export interface SettingsUpdateRequest {
+  readonly patch: Record<string, unknown>;
+}
+
+export interface SettingsUpdateResult {
+  readonly settings: Settings;
+}
+
+export interface SettingsChangedEvent {
+  readonly settings: Settings;
+}
+
 /**
  * The channels sandboxed preloads need at runtime, in one object. Sandboxed
  * preloads cannot load shared modules (the bundle must be a single file), so
@@ -171,6 +192,11 @@ export const PRELOAD_CHANNELS = {
   },
   clipboard: {
     copy: clipboardCopyChannel
+  },
+  settings: {
+    get: settingsGetChannel,
+    update: settingsUpdateChannel,
+    changed: settingsChangedChannel
   },
   models: {
     list: modelsListChannel,

@@ -95,7 +95,7 @@ if (!gotLock) {
     const history = openDatabase(app.getPath("userData"));
     const models = createModelsService(join(app.getPath("userData"), "models"));
 
-    registerIpcHandlers(history, models);
+    registerIpcHandlers(history, models, settingsStore);
 
     const recorderWindow = createRecorderWindow({ e2e });
     const bridge = createRecorderBridge();

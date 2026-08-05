@@ -1,11 +1,14 @@
 import { BrowserWindow, app, clipboard, ipcMain } from "electron";
 import type { HistoryStore } from "./db/history-store";
 import type { ModelsService } from "./models";
+import type { SettingsStore } from "./store/settings-store";
+import { migrateSettings } from "../shared/settings";
 import type {
   HistoryDeleteRequest,
   HistoryListRequest,
   HistorySearchRequest,
-  ModelsModelRequest
+  ModelsModelRequest,
+  SettingsUpdateRequest
 } from "../shared/ipc";
 import {
   appGetVersionChannel,
@@ -19,6 +22,9 @@ import {
   modelsDownloadChannel,
   modelsDownloadProgressChannel,
   modelsListChannel,
+  settingsChangedChannel,
+  settingsGetChannel,
+  settingsUpdateChannel,
   windowCloseChannel,
   windowMinimizeChannel,
   windowToggleMaximizeChannel
@@ -31,7 +37,8 @@ import {
  */
 export const registerIpcHandlers = (
   history: HistoryStore | null,
-  models: ModelsService | null
+  models: ModelsService | null,
+  settingsStore: SettingsStore | null
 ): void => {
   ipcMain.handle(appGetVersionChannel, () => app.getVersion());
 
@@ -100,6 +107,28 @@ export const registerIpcHandlers = (
       return { ok: (await models?.deleteModel(request.modelId)) ?? false };
     }
   );
+
+  ipcMain.handle(settingsGetChannel, () => {
+    return { settings: settingsStore?.get() ?? migrateSettings({}) };
+  });
+
+  ipcMain.handle(
+    settingsUpdateChannel,
+    (_event, request: SettingsUpdateRequest) => {
+      settingsStore?.update(request.patch);
+      return { settings: settingsStore?.get() ?? migrateSettings({}) };
+    }
+  );
+
+  if (settingsStore !== null) {
+    settingsStore.subscribe((settings) => {
+      const window = BrowserWindow.getAllWindows().find((candidate) =>
+        candidate.webContents.getURL().includes("main/index.html"),
+      );
+      if (window === undefined) return;
+      window.webContents.send(settingsChangedChannel, { settings });
+    });
+  }
 
   if (models !== null) {
     models.subscribe((listed) => {

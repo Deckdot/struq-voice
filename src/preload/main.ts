@@ -11,9 +11,13 @@ import type {
   ModelsModelRequest,
   ModelsListResult,
   ModelsModelResult,
-  ModelsDownloadProgressEvent
+  ModelsDownloadProgressEvent,
+  SettingsGetResult,
+  SettingsUpdateResult,
+  SettingsChangedEvent
 } from "../shared/ipc";
 import type { PreloadChannels } from "../shared/ipc";
+import type { Settings } from "../shared/settings";
 
 /**
  * Sandboxed preloads cannot load shared modules (the bundle must be one
@@ -88,6 +92,26 @@ const api: MainWindowApi = {
   clipboard: {
     copy: (text: string) => {
       ipcRenderer.send(channels.clipboard.copy, text);
+    }
+  },
+  settings: {
+    get: () =>
+      ipcRenderer.invoke(channels.settings.get) as Promise<SettingsGetResult>,
+    update: (patch: Partial<Settings>) =>
+      ipcRenderer.invoke(channels.settings.update, {
+        patch: patch as Record<string, unknown>
+      }) as Promise<SettingsUpdateResult>,
+    onChange: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: SettingsChangedEvent
+      ): void => {
+        listener(payload.settings);
+      };
+      ipcRenderer.on(channels.settings.changed, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.settings.changed, handler);
+      };
     }
   }
 };

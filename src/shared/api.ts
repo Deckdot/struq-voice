@@ -7,6 +7,7 @@
 import type { CaptureState } from "./capture";
 import type { TranscriptRecord } from "./ipc";
 import type { ModelsListResult, ModelsModelResult } from "./ipc";
+import type { Settings } from "./settings";
 
 export interface MainWindowApi {
   readonly windowKind: "main";
@@ -44,6 +45,11 @@ export interface MainWindowApi {
   };
   readonly clipboard: {
     copy: (text: string) => void;
+  };
+  readonly settings: {
+    get: () => Promise<{ settings: Settings }>;
+    update: (patch: Partial<Settings>) => Promise<{ settings: Settings }>;
+    onChange: (listener: (settings: Settings) => void) => () => void;
   };
 }
 

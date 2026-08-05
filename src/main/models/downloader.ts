@@ -15,7 +15,13 @@ import { dirname, join } from "node:path";
 import type { ModelDownloadState, ModelFile, ModelInfo } from "../../shared/models";
 
 const ZERO_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
-const MAX_CONCURRENT_FILES = 3;
+/**
+ * Concurrent transfers across all models. A single connection to the CDN is
+ * throttled well below a typical link, so the ceiling here is what determines
+ * throughput far more than any per-connection tuning. Six keeps a large model
+ * saturating the link without opening an unreasonable number of sockets.
+ */
+export const MAX_CONCURRENT_FILES = 6;
 const PROGRESS_INTERVAL_MS = 250;
 
 export interface DownloadDeps {
@@ -208,8 +214,13 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
         progress.current = received;
         emitThrottled(model, run);
         if (!canContinue) {
+          // Both listeners must come off whichever way this settles. Leaving
+          // the loser attached adds one listener per backpressure pause, which
+          // is thousands over a large model and trips the MaxListeners warning.
           await new Promise<void>((resolve) => {
             const done = (): void => {
+              stream.off("drain", done);
+              stream.off("error", done);
               resolve();
             };
             stream.once("drain", done);
@@ -222,8 +233,14 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
         throw failure;
       }
       await new Promise<void>((resolve, reject) => {
-        stream.once("error", reject);
-        stream.end(resolve);
+        const onError = (error: Error): void => {
+          reject(error);
+        };
+        stream.once("error", onError);
+        stream.end(() => {
+          stream.off("error", onError);
+          resolve();
+        });
       });
       return received;
     } catch (error) {
@@ -366,14 +383,21 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
             });
           }
         }
-        for (const file of model.files) {
-          if (isCancelled(run)) {
-            break;
-          }
-          setDownloading(model, run);
-          const outcome = await downloadFile(model, file, run);
-          if (outcome === "failed" || outcome === "aborted") {
-            break;
+        // Files download concurrently, bounded by the shared slot semaphore.
+        // A single connection to the CDN is bandwidth limited well below the
+        // link, so running the files in parallel is several times faster than
+        // awaiting them one at a time.
+        setDownloading(model, run);
+        const outcomes = await Promise.all(
+          model.files.map(async (file) => {
+            if (isCancelled(run)) return "aborted" as const;
+            return await downloadFile(model, file, run);
+          })
+        );
+        if (outcomes.some((outcome) => outcome === "failed" || outcome === "aborted")) {
+          // One failure aborts the rest; the partials stay for a later resume.
+          for (const controller of run.controllers) {
+            controller.abort();
           }
         }
         const current = states.get(model.id);

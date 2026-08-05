@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import type { ModelFile, ModelInfo } from "../../shared/models";
-import { createDownloader } from "./downloader";
+import { MAX_CONCURRENT_FILES, createDownloader } from "./downloader";
 
 interface FakeResponse {
   status: number;
@@ -337,11 +337,13 @@ describe("model downloader", () => {
     });
   });
 
-  it("caps concurrent file downloads at three", async () => {
+  it("caps concurrent file downloads at the slot limit", async () => {
     await withRoot(async (root) => {
-      const entries = ["a", "b", "c", "d"].map((letter) => ({
-        path: `${letter}.bin`,
-        content: `content-${letter}`
+      // One more model than the cap, so the last one has to wait for a slot.
+      const count = MAX_CONCURRENT_FILES + 1;
+      const entries = Array.from({ length: count }, (_unused, index) => ({
+        path: `${String(index)}.bin`,
+        content: `content-${String(index)}`
       }));
       const built = entries.map((entry) => modelFromEntries([entry]));
       const contentByPath = new Map(
@@ -357,21 +359,53 @@ describe("model downloader", () => {
       const downloader = createDownloader(root, { fetch, emitProgress: () => {} });
 
       const handles = built.map((b) => downloader.start(b.model));
-      await waitFor(() => issued >= 3);
-      expect(issued).toBe(3);
+      await waitFor(() => issued >= MAX_CONCURRENT_FILES);
+      expect(issued).toBe(MAX_CONCURRENT_FILES);
 
+      // Freeing one slot lets exactly one more start.
       resolveGate(0, gates, calls, contentByPath);
-      await waitFor(() => issued >= 4);
-      expect(issued).toBe(4);
+      await waitFor(() => issued >= count);
+      expect(issued).toBe(count);
 
-      resolveGate(1, gates, calls, contentByPath);
-      resolveGate(2, gates, calls, contentByPath);
-      resolveGate(3, gates, calls, contentByPath);
+      for (let index = 1; index < count; index += 1) {
+        resolveGate(index, gates, calls, contentByPath);
+      }
       await Promise.all(handles.map((handle) => handle.done));
 
       for (const b of built) {
         expect(downloader.state(b.model.id)).toEqual({ state: "done" });
       }
+    });
+  });
+
+  // Files within one model must overlap: downloading them one at a time is
+  // several times slower, because a single CDN connection is throttled.
+  it("downloads the files of a model concurrently", async () => {
+    await withRoot(async (root) => {
+      const built = modelFromEntries([
+        { path: "one.bin", content: "content-one" },
+        { path: "two.bin", content: "content-two" },
+        { path: "three.bin", content: "content-three" }
+      ]);
+      const gates = [0, 1, 2].map(() => deferred<FakeResponse>());
+      let issued = 0;
+      const { fetch, calls } = makeFetch((_url) => {
+        const index = issued;
+        issued += 1;
+        return gates[index]!.promise;
+      });
+      const downloader = createDownloader(root, { fetch, emitProgress: () => {} });
+      const handle = downloader.start(built.model);
+
+      // All three requests are in flight before any of them resolves.
+      await waitFor(() => issued >= 3);
+      expect(issued).toBe(3);
+
+      for (let index = 0; index < 3; index += 1) {
+        resolveGate(index, gates, calls, built.contentByPath);
+      }
+      await handle.done;
+      expect(downloader.state(built.model.id)).toEqual({ state: "done" });
     });
   });
 

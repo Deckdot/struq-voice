@@ -1,0 +1,8 @@
+node_modules
+out
+release
+test-results
+playwright-report
+docs
+HANDOFF_PROMPT.md
+README.md

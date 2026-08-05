@@ -1,0 +1,22 @@
+node_modules/
+out/
+release/
+dist/
+test-results/
+playwright-report/
+.vite/
+*.log
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+*.local
+
+# Model files, sidecar binaries, recordings. Never committed.
+*.onnx
+*.gguf
+*.enc
+
+.DS_Store
+Thumbs.db

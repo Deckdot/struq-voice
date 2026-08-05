@@ -1,0 +1,13 @@
+appId: com.struq.voice
+productName: Struq Voice
+directories:
+  buildResources: resources
+  output: release
+files:
+  - out/**
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: true
+  perMachine: false

@@ -57,6 +57,20 @@ function file(
   };
 }
 
+/**
+ * HF_WHISPER_ROOT already names the repo, so a whisper file resolves directly
+ * off it. Routing these through file() would insert the file name as a repo
+ * segment and every url would 404.
+ */
+function whisperFile(path: string, bytes: number, sha256: string): ModelFile {
+  return {
+    path,
+    url: `${HF_WHISPER_ROOT}/resolve/main/${path}`,
+    bytes,
+    sha256
+  };
+}
+
 const ZERO_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
 
 /** Whisper size tiers, smallest to largest. Used to order and label the catalog. */
@@ -154,9 +168,7 @@ const buildWhisperModel = (variant: WhisperVariant): ModelInfo => {
     languages: variant.englishOnly ? "English only" : "99 languages",
     whenToUse: `${TIER_GUIDANCE[variant.tier]} ${quantNote}`,
     license: "MIT (OpenAI weights)",
-    files: [
-      file(variant.fileName, variant.fileName, variant.bytes, variant.sha256, HF_WHISPER_ROOT)
-    ]
+    files: [whisperFile(variant.fileName, variant.bytes, variant.sha256)]
   };
 };
 

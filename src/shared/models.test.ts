@@ -52,11 +52,36 @@ describe("model catalog", () => {
     }
   });
 
-  it("points every whisper file at the whisper.cpp repo", () => {
+  // The exact resolve url matters: an extra path segment still ends with the
+  // file name and still contains the repo, but 404s on every download.
+  it("builds the exact whisper.cpp resolve url", () => {
     for (const model of whisper) {
       for (const file of model.files) {
-        expect(file.url).toContain("ggerganov/whisper.cpp");
+        expect(file.url).toBe(
+          `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${file.path}`
+        );
+      }
+    }
+  });
+
+  it("builds the exact parakeet resolve url", () => {
+    const parakeet = MODEL_CATALOG.filter((model) => model.engine === "parakeet");
+    for (const model of parakeet) {
+      for (const file of model.files) {
+        expect(file.url).toMatch(
+          /^https:\/\/huggingface\.co\/csukuangfj\/[^/]+\/resolve\/main\/[^/]+$/
+        );
         expect(file.url.endsWith(file.path)).toBe(true);
+      }
+    }
+  });
+
+  it("never doubles a path segment in a model url", () => {
+    for (const model of MODEL_CATALOG) {
+      for (const file of model.files) {
+        const afterHost = file.url.replace("https://huggingface.co/", "");
+        expect(afterHost.split("/resolve/main/")).toHaveLength(2);
+        expect(afterHost).not.toContain(`${file.path}/`);
       }
     }
   });

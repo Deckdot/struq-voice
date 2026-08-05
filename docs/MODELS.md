@@ -40,16 +40,40 @@ whisper.cpp runs as a sidecar process (`whisper-cli.exe`), not a Node binding,
 so a crash inside the model cannot take the app down and swapping in a faster
 build is trivial.
 
-| Model | Size | Notes |
-|---|---:|---|
-| `ggml-large-v3-turbo-q5_0.bin` | ~574MB | Default whisper model |
-| `ggml-base.bin` | ~148MB | Light option |
+The full ggml catalog is available, 29 builds from tiny to large. Sizes and
+sha256 hashes are taken from the Hugging Face API tree for
+`ggerganov/whisper.cpp`, so every file is verifiable.
 
-The **runtime** (`whisper-cli.exe`, CPU build from the whisper.cpp v1.9.2
-release) and the model both download on demand from the Models view. The
-runtime is a zip, downloaded and sha256-verified, then only `whisper-cli.exe`
-is extracted into `userData/runtimes/whisper-cpp/`. If the CUDA build cannot
-start (missing runtime DLLs), the engine falls back to CPU and says so once.
+| Tier | Range | When to use it |
+|---|---:|---|
+| tiny | 32 to 78MB | Fastest and smallest. Draft quality |
+| base | 60 to 148MB | Light and quick, fine for clear speech |
+| small | 190 to 488MB | The usual sweet spot |
+| medium | 539MB to 1.5GB | High accuracy, slower, more RAM |
+| large | 574MB to 3.1GB | Best accuracy, slowest |
+
+Each tier offers quantised builds (`q5_1`, `q5_0`, `q8_0`) and the
+full-precision weights. Quantised trades a little accuracy for a much smaller
+download; `q8_0` is the closest to full. English-only builds (`.en`) are
+better at English and useless for anything else. The Models view filters by
+tier and by English-only so the list stays navigable.
+
+The default is `whisper-base-q5_1` (60MB): multilingual, and comfortable on
+any machine before the user has picked a size. Change it in
+Settings > Whisper model, which writes `whisperModelId`. The engine reads that
+setting per transcription, so a change applies without a restart.
+
+The **runtime** is `whisper-cli.exe`, the CPU build from the whisper.cpp
+v1.9.2 release. It **installs automatically in the background on first run**,
+so selecting the engine works without a manual step; the button in the Models
+view remains as the retry path if that install failed. The runtime is a zip,
+downloaded and sha256-verified, then only `whisper-cli.exe` is extracted into
+`userData/runtimes/whisper-cpp/`. A failed install never blocks boot: it
+leaves an error the Models view renders. If the CUDA build cannot start
+(missing runtime DLLs), the engine falls back to CPU and says so once.
+
+Models themselves still download on demand from the Models view; only the
+runtime is automatic.
 
 ## Measured speed
 

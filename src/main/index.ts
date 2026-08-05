@@ -103,6 +103,13 @@ if (!gotLock) {
     );
     const autostart = createAutostart();
 
+    // Fetch the whisper.cpp runtime in the background on a fresh install, so
+    // selecting the engine works without a manual trip to Models. Skipped
+    // under e2e: the suite must not reach the network.
+    if (!e2e) {
+      models.ensureWhisperRuntime();
+    }
+
     // Keep the login-item flag in sync with the setting. Applied at boot so
     // an external change or a fresh install settles, then on every change.
     autostart.setEnabled(settingsStore.get().autostart);
@@ -128,7 +135,11 @@ if (!gotLock) {
     const openrouterEngine = createOpenRouterEngine({
       getApiKey: () => secrets.readOpenRouterKey()
     });
-    const whisperCppEngine = createWhisperCppEngine({ runtimeRoot, modelsRoot });
+    const whisperCppEngine = createWhisperCppEngine({
+      runtimeRoot,
+      modelsRoot,
+      getModelId: () => settingsStore.get().whisperModelId
+    });
     const engines = new Map<string, TranscriptionEngine>([
       [mockEngine.id, mockEngine],
       [parakeetEngine.id, parakeetEngine],

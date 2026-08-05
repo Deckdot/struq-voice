@@ -40,6 +40,8 @@ export interface ModelsService {
   cancelDownload: (modelId: string) => boolean;
   deleteModel: (modelId: string) => Promise<boolean>;
   installWhisperRuntime: () => Promise<void>;
+  /** Install the runtime in the background at boot if it is missing. */
+  ensureWhisperRuntime: () => void;
   /** Copy and verify catalog files from an existing local directory. */
   importFromDirectory: (modelId: string, sourceDir: string) => Promise<Result<void>>;
   subscribe: (listener: (listed: ModelList) => void) => () => void;
@@ -49,11 +51,15 @@ export interface ModelsService {
 export const createModelsService = (
   modelsRoot: string,
   runtimeRoot: string,
-  deps?: { emitProgress?: (event: ModelProgressEvent) => void }
+  deps?: {
+    emitProgress?: (event: ModelProgressEvent) => void;
+    /** Injected so tests can exercise the runtime install without a network. */
+    fetch?: typeof fetch;
+  }
 ): ModelsService => {
   const installer: ModelInstaller = createModelInstaller(modelsRoot);
   const runtimeDownloader: RuntimeDownloader = createRuntimeDownloader(runtimeRoot, {
-    fetch: globalThis.fetch
+    fetch: deps?.fetch ?? globalThis.fetch
   });
   const listeners = new Set<(listed: ModelList) => void>();
   let runtimeState: RuntimeState = { state: "idle" };
@@ -155,6 +161,21 @@ export const createModelsService = (
     }
   };
 
+  /**
+   * Fetch the whisper runtime at boot so the engine is usable the first time
+   * the user selects it, rather than failing with "runtime not installed" and
+   * making them find the button in Models. Already-installed is a no-op, and a
+   * failure only leaves runtimeState in error: boot is never blocked, and the
+   * manual button in Models remains the retry path.
+   */
+  const ensureWhisperRuntime = (): void => {
+    if (runtimeDownloader.isInstalled()) {
+      runtimeState = { state: "done" };
+      return;
+    }
+    void installWhisperRuntime();
+  };
+
   const importFromDirectory = async (
     modelId: string,
     sourceDir: string
@@ -206,6 +227,7 @@ export const createModelsService = (
     cancelDownload,
     deleteModel,
     installWhisperRuntime,
+    ensureWhisperRuntime,
     importFromDirectory,
     subscribe,
     dispose

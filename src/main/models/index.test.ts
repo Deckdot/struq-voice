@@ -120,3 +120,70 @@ describe("model service", () => {
     });
   });
 });
+
+/**
+ * Boot-time runtime install. A fresh profile should end up with whisper-cli.exe
+ * without the user hunting for the button in Models, and an already-installed
+ * runtime must not re-download.
+ */
+describe("ensureWhisperRuntime", () => {
+  const installCli = (runtimeRoot: string): void => {
+    mkdirSync(join(runtimeRoot, "whisper-cpp"), { recursive: true });
+    writeFileSync(join(runtimeRoot, "whisper-cpp", "whisper-cli.exe"), "fake", "utf8");
+  };
+
+  it("does not fetch when the runtime is already installed", async () => {
+    await withRoot((root) => {
+      const runtimeRoot = join(root, "runtimes");
+      installCli(runtimeRoot);
+      let fetched = 0;
+      const service = createModelsService(root, runtimeRoot, {
+        fetch: (() => {
+          fetched += 1;
+          throw new Error("should not fetch");
+        }) as unknown as typeof fetch
+      });
+      service.ensureWhisperRuntime();
+      expect(fetched).toBe(0);
+      expect(service.list().whisperRuntime.state).toBe("done");
+      service.dispose();
+    });
+  });
+
+  it("starts a download when the runtime is missing", async () => {
+    await withRoot(async (root) => {
+      const runtimeRoot = join(root, "runtimes");
+      let fetched = 0;
+      const service = createModelsService(root, runtimeRoot, {
+        fetch: (() => {
+          fetched += 1;
+          return Promise.reject(new Error("offline"));
+        }) as unknown as typeof fetch
+      });
+      service.ensureWhisperRuntime();
+      // The install runs detached and awaits mkdir before fetching, so poll
+      // rather than assuming a fixed number of ticks.
+      const deadline = Date.now() + 2000;
+      while (fetched === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(fetched).toBe(1);
+      service.dispose();
+    });
+  });
+
+  // A failed install must not crash boot; it leaves an error the Models view
+  // renders, and the manual button stays available as the retry.
+  it("records an error instead of throwing when the download fails", async () => {
+    await withRoot(async (root) => {
+      const runtimeRoot = join(root, "runtimes");
+      const service = createModelsService(root, runtimeRoot, {
+        fetch: (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch
+      });
+      await service.installWhisperRuntime();
+      const state = service.list().whisperRuntime;
+      expect(state.state).toBe("error");
+      service.dispose();
+    });
+  });
+});

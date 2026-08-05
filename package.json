@@ -11,6 +11,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "brand:generate": "node scripts/generate-brand-assets.mjs",
+    "docs:art": "node scripts/generate-readme-art.mjs",
+    "docs:shots": "node scripts/capture-screenshots.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint .",
     "format": "prettier --write .",

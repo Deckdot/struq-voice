@@ -6,6 +6,12 @@ import { BrandLockup } from "./Brand";
 /**
  * The custom title bar of the frameless main window. Draggable via the
  * native -webkit-app-region, which requires the buttons to opt out.
+ *
+ * Every control is wrapped in an arrow function rather than passed as a bare
+ * reference. React hands the click handler its SyntheticEvent, and a
+ * contextBridge function forwards its arguments over IPC, where a
+ * SyntheticEvent fails to structured-clone: the call throws "An object could
+ * not be cloned" and the send never happens. The wrapper drops the argument.
  */
 export function TitleBar(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
@@ -20,7 +26,9 @@ export function TitleBar(): JSX.Element {
         <button
           type="button"
           aria-label="Minimize"
-          onClick={api.window.minimize}
+          onClick={() => {
+            api.window.minimize();
+          }}
           className="flex h-7 w-9 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text"
         >
           <Minus className="h-4 w-4" aria-hidden="true" />
@@ -28,7 +36,9 @@ export function TitleBar(): JSX.Element {
         <button
           type="button"
           aria-label="Toggle maximize"
-          onClick={api.window.toggleMaximize}
+          onClick={() => {
+            api.window.toggleMaximize();
+          }}
           className="flex h-7 w-9 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-surface-hover hover:text-text"
         >
           <Square className="h-3.5 w-3.5" aria-hidden="true" />
@@ -36,7 +46,9 @@ export function TitleBar(): JSX.Element {
         <button
           type="button"
           aria-label="Close"
-          onClick={api.window.close}
+          onClick={() => {
+            api.window.close();
+          }}
           className="flex h-7 w-9 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-danger-soft hover:text-danger"
         >
           <X className="h-4 w-4" aria-hidden="true" />

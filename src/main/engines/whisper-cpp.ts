@@ -11,6 +11,7 @@ import { existsSync } from "node:fs";
 import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { findModel } from "../../shared/models";
 import type { Result, VoiceError, VoiceErrorCode } from "../../shared/result";
 import { fail, ok } from "../../shared/result";
 import type {
@@ -56,6 +57,11 @@ export interface WhisperCppEngineOptions {
   readonly modelsRoot: string;
   /** Catalog id of the whisper model; defaults to whisper-large-v3-turbo-q5_0. */
   readonly modelId?: string;
+  /**
+   * Read the selected model id at call time. Takes precedence over modelId so
+   * changing the model in Settings applies without rebuilding the engine.
+   */
+  readonly getModelId?: () => string;
   readonly onWarmup?: (state: "cold" | "warming" | "warm" | "failed") => void;
   readonly deps?: WhisperCppDeps;
 }
@@ -132,10 +138,16 @@ export const createWhisperCppEngine = (
   const fileExists = options.deps?.exists ?? existsSync;
 
   const binaryPath = join(options.runtimeRoot, "whisper-cpp", "whisper-cli.exe");
+
   // The model lives in the catalog download tree: modelsRoot/<modelId>/<file>.
-  // Defaults to the whisper-large-v3-turbo-q5_0 entry.
-  const modelId = options.modelId ?? DEFAULT_MODEL_ID;
-  const modelPath = join(options.modelsRoot, modelId, DEFAULT_MODEL_FILE);
+  // Resolved per call, because the user can change the model in Settings, and
+  // the file name comes from the catalog so every whisper size resolves.
+  // Hardcoding one name only ever finds the model it was named after.
+  const currentModelId = (): string =>
+    options.getModelId?.() ?? options.modelId ?? DEFAULT_MODEL_ID;
+
+  const modelPathFor = (id: string): string =>
+    join(options.modelsRoot, id, findModel(id)?.files[0]?.path ?? DEFAULT_MODEL_FILE);
 
   const detectCuda = async (): Promise<"cuda" | "cpu"> => {
     if (cudaCache !== null) return cudaCache;
@@ -148,7 +160,7 @@ export const createWhisperCppEngine = (
     if (!fileExists(binaryPath)) {
       return { ready: false, reason: NOT_INSTALLED_MESSAGE, action: "install-runtime" };
     }
-    if (!fileExists(modelPath)) {
+    if (!fileExists(modelPathFor(currentModelId()))) {
       return { ready: false, reason: NOT_DOWNLOADED_MESSAGE, action: "download-model" };
     }
     return { ready: true };
@@ -172,12 +184,13 @@ export const createWhisperCppEngine = (
         `struq-voice-whisper-${String(Date.now())}-${Math.random().toString(36).slice(2)}.wav`
       );
       const startedAt = Date.now();
+      const modelId = currentModelId();
       return (async () => {
         try {
           await writeAudio(tempWav, buildWav(request.pcm));
 
           const args: string[] = [
-            "-m", modelPath,
+            "-m", modelPathFor(modelId),
             "-f", tempWav,
             "-t", "8",
             "--output-json",
@@ -202,7 +215,7 @@ export const createWhisperCppEngine = (
             text: parseTranscript(stdout),
             language: request.language ?? null,
             engineId: WHISPER_CPP_ENGINE_ID,
-            modelId: DEFAULT_MODEL_FILE,
+            modelId,
             inferenceMs,
             realtimeFactor: inferenceMs / Math.max(request.durationMs, 1),
             costUsd: null

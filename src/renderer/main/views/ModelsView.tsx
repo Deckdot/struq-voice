@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { Download, Check, Trash2, Loader2, HardDrive, FolderOpen } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { ModelsListResult } from "../../../shared/ipc";
-import type { ModelStatus } from "../../../shared/models";
+import type { ModelStatus, WhisperTier } from "../../../shared/models";
+import { WHISPER_TIER_ORDER, whisperVariant } from "../../../shared/models";
 
 /**
  * The Models view: a card per catalog model with install state, live
@@ -22,12 +23,58 @@ const formatBytes = (bytes: number): string => {
 const formatPercent = (received: number, total: number): string =>
   total > 0 ? `${String(Math.round((received / total) * 100))}%` : "0%";
 
+/** Size filter across the whisper tiers. Parakeet models always show. */
+type TierFilter = WhisperTier | "all";
+
+const TIER_LABEL: Record<TierFilter, string> = {
+  all: "All sizes",
+  tiny: "Tiny",
+  base: "Base",
+  small: "Small",
+  medium: "Medium",
+  large: "Large"
+};
+
+/**
+ * Order: parakeet first (the default engine), then whisper smallest tier to
+ * largest, and inside a tier the smallest download first. Quantised builds
+ * sort ahead of the full-precision weights because they are what most people
+ * should take.
+ */
+const sortModels = (items: readonly ModelStatus[]): ModelStatus[] =>
+  [...items].sort((a, b) => {
+    const va = whisperVariant(a.model.id);
+    const vb = whisperVariant(b.model.id);
+    if (va === null && vb === null) return a.model.name.localeCompare(b.model.name);
+    if (va === null) return -1;
+    if (vb === null) return 1;
+    const tierDelta =
+      WHISPER_TIER_ORDER.indexOf(va.tier) - WHISPER_TIER_ORDER.indexOf(vb.tier);
+    if (tierDelta !== 0) return tierDelta;
+    return a.model.bytes - b.model.bytes;
+  });
+
 export function ModelsView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const [statuses, setStatuses] = useState<readonly ModelStatus[]>([]);
   const [diskUsed, setDiskUsed] = useState<number | null>(null);
   const [runtime, setRuntime] = useState<ModelsListResult["whisperRuntime"]>({ state: "idle" });
   const [measuredRtf, setMeasuredRtf] = useState<Record<string, number>>({});
+  const [tier, setTier] = useState<TierFilter>("all");
+  const [englishOnly, setEnglishOnly] = useState(false);
+
+  const visible = useMemo(() => {
+    const filtered = statuses.filter((status) => {
+      const variant = whisperVariant(status.model.id);
+      // Tier and English-only are whisper distinctions, so a non-whisper model
+      // (parakeet) only belongs in the unfiltered list.
+      if (variant === null) return tier === "all" && !englishOnly;
+      if (tier !== "all" && variant.tier !== tier) return false;
+      if (englishOnly && !variant.englishOnly) return false;
+      return true;
+    });
+    return sortModels(filtered);
+  }, [statuses, tier, englishOnly]);
 
   const refresh = (): void => {
     void api.models.list().then(({ items, totalDiskUsed, whisperRuntime }) => {
@@ -76,6 +123,39 @@ export function ModelsView(): JSX.Element {
           Local engines, downloaded to your machine. OpenRouter is the zero-setup
           cloud path and never appears here.
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {(["all", ...WHISPER_TIER_ORDER] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={tier === option}
+              onClick={() => {
+                setTier(option);
+              }}
+              className={`rounded-full border px-2.5 py-1 text-xs transition-colors duration-fast ${
+                tier === option
+                  ? "border-accent bg-accent-soft text-accent-text"
+                  : "border-border text-text-muted hover:bg-surface-hover hover:text-text"
+              }`}
+            >
+              {TIER_LABEL[option]}
+            </button>
+          ))}
+          <label className="ml-1 flex cursor-pointer items-center gap-1.5 text-xs text-text-muted">
+            <input
+              type="checkbox"
+              checked={englishOnly}
+              onChange={(event) => {
+                setEnglishOnly(event.target.checked);
+              }}
+              className="accent-[var(--color-accent)]"
+            />
+            English-only builds
+          </label>
+          <span className="ml-auto text-xs text-text-muted">
+            {String(visible.length)} of {String(statuses.length)}
+          </span>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
@@ -86,6 +166,7 @@ export function ModelsView(): JSX.Element {
                 <h2 className="text-base font-medium text-text">Whisper runtime</h2>
                 <p className="mt-0.5 text-sm text-text-muted">
                   whisper-cli.exe, required for the Whisper.cpp models. CPU build, ~8MB.
+                  Installs automatically on first run; use the button if that failed.
                 </p>
               </div>
               {runtimeDone && (
@@ -132,7 +213,7 @@ export function ModelsView(): JSX.Element {
             </div>
           </article>
 
-          {statuses.map((status) => {
+          {visible.map((status) => {
             const downloading = status.download.state === "downloading";
             const verifying = status.download.state === "verifying";
             const done = status.installed;

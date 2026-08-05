@@ -151,3 +151,74 @@ describe("whisper-cpp engine", () => {
     expect(calls.deletes).toHaveLength(1);
   });
 });
+
+/**
+ * Model selection. The engine builds modelsRoot/<modelId>/<catalog file name>,
+ * so every catalog size resolves; a hardcoded file name only ever finds the
+ * one model it was named after.
+ */
+describe("model selection", () => {
+  const modelArg = (calls: { execs: Array<{ args: string[] }> }): string => {
+    const args = calls.execs[0]?.args ?? [];
+    return args[args.indexOf("-m") + 1] ?? "";
+  };
+
+  it("resolves the ggml file name for a small model", async () => {
+    const { deps, calls } = makeDeps();
+    const engine = createWhisperCppEngine({
+      runtimeRoot,
+      modelsRoot,
+      modelId: "whisper-small-q5_1",
+      deps
+    });
+    await engine.transcribe(request());
+    expect(modelArg(calls)).toContain("whisper-small-q5_1");
+    expect(modelArg(calls)).toContain("ggml-small-q5_1.bin");
+  });
+
+  it("resolves a large model to its own file, not the default", async () => {
+    const { deps, calls } = makeDeps();
+    const engine = createWhisperCppEngine({
+      runtimeRoot,
+      modelsRoot,
+      modelId: "whisper-large-v3",
+      deps
+    });
+    await engine.transcribe(request());
+    expect(modelArg(calls)).toContain("ggml-large-v3.bin");
+    expect(modelArg(calls)).not.toContain("turbo");
+  });
+
+  it("reads getModelId at call time so a Settings change applies", async () => {
+    const { deps, calls } = makeDeps();
+    let selected = "whisper-tiny-q5_1";
+    const engine = createWhisperCppEngine({
+      runtimeRoot,
+      modelsRoot,
+      getModelId: () => selected,
+      deps
+    });
+    await engine.transcribe(request());
+    expect(modelArg(calls)).toContain("ggml-tiny-q5_1.bin");
+
+    selected = "whisper-medium-q8_0";
+    calls.execs.length = 0;
+    await engine.transcribe(request());
+    expect(modelArg(calls)).toContain("ggml-medium-q8_0.bin");
+  });
+
+  it("reports the selected model id on the result", async () => {
+    const { deps } = makeDeps();
+    const engine = createWhisperCppEngine({
+      runtimeRoot,
+      modelsRoot,
+      modelId: "whisper-base-q5_1",
+      deps
+    });
+    const outcome = await engine.transcribe(request());
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.value.modelId).toBe("whisper-base-q5_1");
+    }
+  });
+});

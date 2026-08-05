@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
-import { Plus, Trash2, KeyRound, Check, X, Keyboard, Mic } from "lucide-react";
+import { Plus, Trash2, KeyRound, Check, X, Keyboard, Mic, Sparkles } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { DictionaryEntry, Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
+import { MODEL_CATALOG } from "../../../shared/models";
 import { domEventToAccelerator } from "../../../shared/hotkeys";
+
+const WHISPER_MODELS = MODEL_CATALOG.filter((model) => model.engine === "whisper-cpp");
+
+const formatModelBytes = (bytes: number): string =>
+  bytes < 1024 * 1024 * 1024
+    ? `${String(Math.round(bytes / (1024 * 1024)))} MB`
+    : `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 
 const ENGINE_OPTIONS: readonly { id: string; label: string; hint: string }[] = [
   {
@@ -171,6 +179,31 @@ export function SettingsView(): JSX.Element {
               })}
             </div>
           </Section>
+
+          {settings.engine.primary === "whisper-cpp" && (
+            <Section title="Whisper model">
+              <label className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 shrink-0 text-accent-text" aria-hidden="true" />
+                <select
+                  value={settings.whisperModelId}
+                  onChange={(event) => {
+                    update({ whisperModelId: event.target.value });
+                  }}
+                  className="w-full rounded-md border border-border bg-bg-sunken px-3 py-1.5 text-sm text-text focus:border-border-focus focus:outline-none"
+                >
+                  {WHISPER_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} ({formatModelBytes(model.bytes)})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="text-xs text-text-muted">
+                Bigger is more accurate and slower. Download the model in Models
+                first; the engine reports what is missing.
+              </p>
+            </Section>
+          )}
 
           <Section title="OpenRouter API key">
             <p className="text-xs text-text-muted">

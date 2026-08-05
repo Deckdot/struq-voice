@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { DEFAULT_PTT_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
+import { DEFAULT_WHISPER_MODEL_ID } from "./models";
 
 export const dictionaryEntrySchema = z.object({
   from: z.string().min(1),
@@ -44,6 +45,8 @@ export const settingsSchema = z.object({
       fallback: z.string().nullable().default(null)
     })
     .default({ primary: "mock", fallback: null }),
+  /** Catalog id of the whisper.cpp model the engine loads. */
+  whisperModelId: z.string().min(1).default(DEFAULT_WHISPER_MODEL_ID),
   post: postProcessingSchema.default({
     dictionary: [],
     removeFillers: false,

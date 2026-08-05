@@ -9,19 +9,22 @@ import { app } from "electron";
 
 export interface AutostartController {
   setEnabled: (enabled: boolean) => void;
-  isEnabled: () => boolean;
 }
+
+export const AUTOSTART_HIDDEN_ARG = "--struq-start-hidden";
+
+export const isAutostartLaunch = (argv: readonly string[] = process.argv): boolean =>
+  argv.includes(AUTOSTART_HIDDEN_ARG);
 
 export const createAutostart = (): AutostartController => {
   const setEnabled = (enabled: boolean): void => {
     app.setLoginItemSettings({
       openAtLogin: enabled,
-      openAsHidden: true
+      args: [AUTOSTART_HIDDEN_ARG]
     });
   };
 
   return {
-    setEnabled,
-    isEnabled: () => app.getLoginItemSettings().openAtLogin
+    setEnabled
   };
 };

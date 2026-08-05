@@ -19,17 +19,41 @@ const readChannels = (argv: readonly string[]): PreloadChannels => {
 
 const channels = readChannels(process.argv);
 
+type CaptureStateListener = (
+  state: CaptureState,
+  liveTranscription: boolean
+) => void;
+
+let latestCaptureState: CaptureStateChangedEvent | null = null;
+const captureStateListeners = new Set<CaptureStateListener>();
+
+// The main process replays the current state on did-finish-load, before React
+// effects are guaranteed to subscribe. Listen from preload startup and retain
+// the event so the first capture cannot disappear between those two moments.
+ipcRenderer.on(
+  channels.captureStateChanged,
+  (_event: IpcRendererEvent, payload: CaptureStateChangedEvent): void => {
+    latestCaptureState = payload;
+    for (const listener of captureStateListeners) {
+      listener(payload.state, payload.liveTranscription ?? false);
+    }
+  }
+);
+
 const api: OverlayWindowApi = {
   windowKind: "overlay",
   onCaptureStateChanged: (
-    listener: (state: CaptureState, liveTranscription: boolean) => void
+    listener: CaptureStateListener
   ) => {
-    const wrapped = (_event: IpcRendererEvent, payload: CaptureStateChangedEvent): void => {
-      listener(payload.state, payload.liveTranscription ?? false);
-    };
-    ipcRenderer.on(channels.captureStateChanged, wrapped);
+    captureStateListeners.add(listener);
+    if (latestCaptureState !== null) {
+      listener(
+        latestCaptureState.state,
+        latestCaptureState.liveTranscription ?? false
+      );
+    }
     return () => {
-      ipcRenderer.removeListener(channels.captureStateChanged, wrapped);
+      captureStateListeners.delete(listener);
     };
   },
   onCaptureLevelsChanged: (listener: (data: { bands: readonly number[]; level: number }) => void) => {

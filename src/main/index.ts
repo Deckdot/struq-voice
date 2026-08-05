@@ -54,7 +54,10 @@ import { createTray } from "./tray";
 import { createMainWindow } from "./windows/main-window";
 import { createOverlayWindowController } from "./windows/overlay-window";
 import { createRecorderWindow } from "./windows/recorder-window";
-import { createAutostart } from "./platform/win32/autostart";
+import {
+  createAutostart,
+  isAutostartLaunch
+} from "./platform/win32/autostart";
 import { MOCK_ENGINE, MOCK_ENGINE_ID } from "../shared/engines";
 import { ONBOARDING_VERSION } from "../shared/settings";
 import type { HardwareProfile } from "../shared/hardware";
@@ -70,6 +73,12 @@ const hookTest = process.env["STRUQ_VOICE_HOOK_TEST"] === "1";
 const userDataOverride = process.env["STRUQ_VOICE_USERDATA"];
 if (userDataOverride !== undefined) {
   app.setPath("userData", userDataOverride);
+}
+
+// Keep Windows notifications and shell grouping attached to the same identity
+// that electron-builder registers for the installed application.
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.struq.voice");
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -554,7 +563,10 @@ if (!gotLock) {
     // main window. A tray-resident app popping a window over the desktop on
     // every boot is exactly the kind of interruption the product is against.
     const startedAtLogin =
-      !e2e && !hookTest && autostart.isEnabled() && process.env["STRUQ_VOICE_START_HIDDEN"] !== "0";
+      !e2e &&
+      !hookTest &&
+      isAutostartLaunch() &&
+      process.env["STRUQ_VOICE_START_HIDDEN"] !== "0";
     if (startedAtLogin) {
       mainWindow = null;
     } else {

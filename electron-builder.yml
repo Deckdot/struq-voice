@@ -6,8 +6,16 @@ directories:
 files:
   - out/**
 win:
+  icon: resources/icon.png
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
 nsis:
   oneClick: true
   perMachine: false
+  allowToChangeInstallationDirectory: false
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Struq Voice

@@ -218,4 +218,12 @@ for (const [name, shape, color] of [
   console.log(`  wrote ${name}.png and ${name}@2x.png`);
 }
 
+// The app icon: the idle ring shape at 512px, plus a Windows .ico with a
+// small embedded PNG. electron-builder wants resources/icon.png (>=512px)
+// and derives .ico itself; we still ship a matching .ico for the tray tooltip
+// and any custom window icons.
+const APP_ICON_PNG = render(512, "ring", IDLE, RIM);
+writeFileSync(join(OUT_DIR, "..", "icon.png"), APP_ICON_PNG);
+console.log("  wrote icon.png");
+
 console.log("Done.");

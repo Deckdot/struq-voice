@@ -31,6 +31,8 @@ export const settingsSchema = z.object({
   restoreClipboard: z.boolean().default(true),
   /** How long to wait before restoring the clipboard (ms). */
   restoreClipboardDelayMs: z.number().int().min(0).max(5000).default(400),
+  /** Start with Windows, hidden to the tray. */
+  autostart: z.boolean().default(false),
   engine: z
     .object({
       primary: z.string().min(1).default("mock"),

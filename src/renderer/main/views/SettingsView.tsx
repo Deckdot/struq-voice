@@ -134,6 +134,19 @@ export function SettingsView(): JSX.Element {
             <label className="flex cursor-pointer items-center gap-3">
               <input
                 type="checkbox"
+                checked={settings.autostart}
+                onChange={(event) => {
+                  update({ autostart: event.target.checked });
+                }}
+                className="accent-[var(--color-accent)]"
+              />
+              <span className="text-sm text-text">
+                Start Struq Voice with Windows
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-3">
+              <input
+                type="checkbox"
                 checked={settings.restoreClipboard}
                 onChange={(event) => {
                   update({ restoreClipboard: event.target.checked });

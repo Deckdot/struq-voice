@@ -40,6 +40,7 @@ import { createTray } from "./tray";
 import { createMainWindow } from "./windows/main-window";
 import { createOverlayWindowController } from "./windows/overlay-window";
 import { createRecorderWindow } from "./windows/recorder-window";
+import { createAutostart } from "./platform/win32/autostart";
 import { MOCK_ENGINE, MOCK_ENGINE_ID } from "../shared/engines";
 
 const e2e = process.env["STRUQ_VOICE_E2E"] === "1";
@@ -95,6 +96,14 @@ if (!gotLock) {
     const secrets = createSecretsStore();
     const history = openDatabase(app.getPath("userData"));
     const models = createModelsService(join(app.getPath("userData"), "models"));
+    const autostart = createAutostart();
+
+    // Keep the login-item flag in sync with the setting. Applied at boot so
+    // an external change or a fresh install settles, then on every change.
+    autostart.setEnabled(settingsStore.get().autostart);
+    settingsStore.subscribe((settings) => {
+      autostart.setEnabled(settings.autostart);
+    });
 
     registerIpcHandlers(history, models, settingsStore);
 
@@ -307,15 +316,24 @@ if (!gotLock) {
       void parakeetEngine.warmup();
     }
 
-    mainWindow = createMainWindow();
-    mainWindow.on("close", (event) => {
-      if (!isQuitting) {
-        // Close hides, it does not quit. Quit from the tray or Ctrl+Q.
-        event.preventDefault();
-        mainWindow?.hide();
-        tray.notifyFirstHide();
-      }
-    });
+    // Start hidden to the tray when launched at login; otherwise show the
+    // main window. A tray-resident app popping a window over the desktop on
+    // every boot is exactly the kind of interruption the product is against.
+    const startedAtLogin =
+      !e2e && !hookTest && autostart.isEnabled() && process.env["STRUQ_VOICE_START_HIDDEN"] !== "0";
+    if (startedAtLogin) {
+      mainWindow = null;
+    } else {
+      mainWindow = createMainWindow();
+      mainWindow.on("close", (event) => {
+        if (!isQuitting) {
+          // Close hides, it does not quit. Quit from the tray or Ctrl+Q.
+          event.preventDefault();
+          mainWindow?.hide();
+          tray.notifyFirstHide();
+        }
+      });
+    }
 
     if (e2e || hookTest) {
       installTestHook({

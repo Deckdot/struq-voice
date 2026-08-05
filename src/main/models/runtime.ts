@@ -10,8 +10,9 @@
 
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { mkdir, readdir, rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
 import * as yauzl from "yauzl";
 
 export const WHISPER_RUNTIME_DIR = "whisper-cpp";
@@ -60,6 +61,10 @@ export const createRuntimeDownloader = (
       const zipPath = join(runtimeRoot, WHISPER_RUNTIME_DIR, "whisper-bin-x64.zip");
       const extractDir = join(runtimeRoot, WHISPER_RUNTIME_DIR, ".extract");
       await mkdir(join(runtimeRoot, WHISPER_RUNTIME_DIR), { recursive: true });
+      // Clear anything a previous failed attempt left behind, so a retry never
+      // appends to a truncated zip or trips over a stale extract.
+      await rm(zipPath, { force: true });
+      await rm(extractDir, { recursive: true, force: true });
       await mkdir(extractDir, { recursive: true });
 
       const response = await deps.fetch(RUNTIME_URL);
@@ -70,26 +75,24 @@ export const createRuntimeDownloader = (
       const headerTotal = Number(response.headers.get("content-length") ?? "0");
       const total = headerTotal > 0 ? headerTotal : 8194445;
       let received = 0;
-      const writer = createWriteStream(zipPath);
-      const reader = response.body.getReader();
-      try {
-        for (;;) {
-          const chunk = await reader.read();
-          if (chunk.done) break;
-          received += chunk.value.byteLength;
-          writer.write(chunk.value);
-          emit(received, total);
-        }
-        await new Promise<void>((resolve, reject) => {
-          writer.on("error", reject);
-          writer.end(() => {
-            resolve();
-          });
-        });
-      } catch (error) {
-        writer.destroy();
-        throw error;
-      }
+      const body = response.body;
+
+      // pipeline honours backpressure and destroys both ends on failure.
+      // Writing straight from the read loop buffers the whole zip in memory
+      // and leaves the stream dangling when something throws.
+      await pipeline(
+        (async function* emitAsRead(): AsyncGenerator<Uint8Array> {
+          const reader = body.getReader();
+          for (;;) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            received += chunk.value.byteLength;
+            emit(received, total);
+            yield chunk.value;
+          }
+        })(),
+        createWriteStream(zipPath)
+      );
 
       // sha256 verify the zip before touching anything else.
       const hash = createHash("sha256");
@@ -109,45 +112,52 @@ export const createRuntimeDownloader = (
       }
 
       // Extract only whisper-cli.exe. yauzl reads the central directory.
-      await new Promise<void>((resolve, reject) => {
+      // With lazyEntries the first entry is only emitted after an explicit
+      // readEntry(); without that initial call nothing is ever emitted, the
+      // zipfile never closes and the install hangs at 100 percent.
+      const extracted = await new Promise<string>((resolve, reject) => {
         yauzl.open(zipPath, { lazyEntries: true }, (openError: Error | null, zipfile?: yauzl.ZipFile) => {
           if (openError !== null || zipfile === undefined) {
             reject(openError ?? new Error("could not open runtime zip"));
             return;
           }
+          let extractedPath: string | null = null;
           zipfile.on("error", reject);
           zipfile.on("close", () => {
-            void readdir(extractDir).then(() => {
-              resolve();
-            });
+            if (extractedPath === null) {
+              reject(new Error(`${WHISPER_CLI_FILE} was not found in the runtime zip.`));
+              return;
+            }
+            resolve(extractedPath);
           });
           zipfile.on("entry", (entry: yauzl.Entry) => {
-            if (entry.fileName.endsWith(WHISPER_CLI_FILE)) {
-              zipfile.openReadStream(entry, (readError: Error | null, readStream?: NodeJS.ReadableStream) => {
-                if (readError !== null || readStream === undefined) {
-                  reject(readError ?? new Error("could not open runtime entry"));
-                  return;
-                }
-                const baseName = entry.fileName.split("/").pop();
-                const target = join(extractDir, baseName ?? WHISPER_CLI_FILE);
-                const out = createWriteStream(target);
-                readStream.pipe(out);
-                out.on("close", () => {
-                  zipfile.readEntry();
-                });
-                out.on("error", (error: Error) => {
-                  reject(error);
-                });
-              });
-            } else {
+            // The binary sits under a Release/ directory in the release zip,
+            // so match on the trailing name, not the full path.
+            if (!entry.fileName.endsWith(WHISPER_CLI_FILE)) {
               zipfile.readEntry();
+              return;
             }
+            zipfile.openReadStream(entry, (readError: Error | null, readStream?: NodeJS.ReadableStream) => {
+              if (readError !== null || readStream === undefined) {
+                reject(readError ?? new Error("could not open runtime entry"));
+                return;
+              }
+              const target = join(extractDir, WHISPER_CLI_FILE);
+              const out = createWriteStream(target);
+              readStream.on("error", reject);
+              out.on("error", reject);
+              out.on("close", () => {
+                extractedPath = target;
+                zipfile.readEntry();
+              });
+              readStream.pipe(out);
+            });
           });
+          zipfile.readEntry();
         });
       });
 
       // Move whisper-cli.exe into place and clean up.
-      const extracted = join(extractDir, WHISPER_CLI_FILE);
       await rename(extracted, cliPath);
       await rm(zipPath, { force: true });
       await rm(extractDir, { recursive: true, force: true });

@@ -309,3 +309,101 @@ describe("update flow", () => {
     expect(first.phase).toBe("ready");
   });
 });
+
+describe("install timing", () => {
+  const readyUpdater = (
+    auto: AutoUpdaterLike,
+    isBusy: () => boolean
+  ): ReturnType<typeof createUpdater> =>
+    createUpdater({
+      autoUpdater: auto,
+      isPackaged: true,
+      verify: () => Promise.resolve({ ok: true }),
+      isBusy
+    });
+
+  // Quitting mid-capture discards audio the user has already spoken. The click
+  // is accepted, the restart is not immediate.
+  it("holds the install while a capture is in flight", async () => {
+    const auto = fakeAutoUpdater();
+    const updater = readyUpdater(auto, () => true);
+    await updater.check();
+
+    expect(updater.install()).toBe(true);
+    expect(auto.installs).toEqual([]);
+  });
+
+  it("runs the held install once the capture ends", async () => {
+    const auto = fakeAutoUpdater();
+    let busy = true;
+    const updater = readyUpdater(auto, () => busy);
+    await updater.check();
+    updater.install();
+
+    busy = false;
+    updater.notifyIdle();
+    expect(auto.installs).toEqual([true]);
+  });
+
+  it("installs immediately when nothing is in flight", async () => {
+    const auto = fakeAutoUpdater();
+    const updater = readyUpdater(auto, () => false);
+    await updater.check();
+
+    expect(updater.install()).toBe(true);
+    expect(auto.installs).toEqual([true]);
+  });
+
+  // notifyIdle fires on every capture. Without a prior click it must do
+  // nothing, or the app would restart itself the moment an update was ready.
+  it("never installs on idle without a click", async () => {
+    const auto = fakeAutoUpdater();
+    const updater = readyUpdater(auto, () => false);
+    await updater.check();
+
+    updater.notifyIdle();
+    updater.notifyIdle();
+    expect(auto.installs).toEqual([]);
+  });
+
+  it("runs a held install only once", async () => {
+    const auto = fakeAutoUpdater();
+    let busy = true;
+    const updater = readyUpdater(auto, () => busy);
+    await updater.check();
+    updater.install();
+
+    busy = false;
+    updater.notifyIdle();
+    updater.notifyIdle();
+    expect(auto.installs).toEqual([true]);
+  });
+
+  it("announces a ready update once, not on every check", async () => {
+    const ready = vi.fn();
+    const updater = createUpdater({
+      autoUpdater: fakeAutoUpdater(),
+      isPackaged: true,
+      verify: () => Promise.resolve({ ok: true }),
+      onReady: ready
+    });
+
+    await updater.check();
+    await updater.check();
+    expect(ready).toHaveBeenCalledTimes(1);
+    expect(ready).toHaveBeenCalledWith("1.2.0");
+  });
+
+  it("does not announce an update that was refused", async () => {
+    const ready = vi.fn();
+    const updater = createUpdater({
+      autoUpdater: fakeAutoUpdater(),
+      isPackaged: true,
+      verify: () => Promise.resolve({ ok: false, reason: "signature does not verify" }),
+      onReady: ready
+    });
+
+    await updater.check();
+    expect(ready).not.toHaveBeenCalled();
+  });
+});

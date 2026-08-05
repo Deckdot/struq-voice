@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { Rail } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
 import { CommandPalette } from "./components/CommandPalette";
+import { UpdateDialog } from "./components/UpdateDialog";
 import { Onboarding } from "./onboarding/Onboarding";
 import { useMainStore } from "./store/use-main-store";
 import { DictateView } from "./views/DictateView";
@@ -83,6 +84,8 @@ export function App(): JSX.Element {
         onOpenChange={setPaletteOpen}
         onNavigate={setRoute}
       />
+      {/* Not during onboarding: a first run has nothing to update from. */}
+      {!onboarding && <UpdateDialog api={api} />}
     </div>
   );
 }

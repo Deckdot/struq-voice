@@ -5,7 +5,7 @@
  */
 
 import { join } from "node:path";
-import { app, BrowserWindow, clipboard, Menu } from "electron";
+import { app, BrowserWindow, clipboard, Menu, Notification } from "electron";
 import { openDatabase } from "./db/client";
 import { createEngineRouter } from "./engines/router";
 import { createMockEngine } from "./engines/mock";
@@ -89,6 +89,31 @@ const showMainWindow = (): void => {
   mainWindow.focus();
 };
 
+/**
+ * Tell the user an update is waiting, from outside the app.
+ *
+ * The main window is usually closed: Struq Voice lives in the tray, and a
+ * dialog in a window nobody has open is a prompt that never arrives. A toast
+ * reaches them either way, and clicking it opens the window onto the dialog
+ * that actually installs. The toast itself installs nothing, so a stray click
+ * on a notification can never restart the app.
+ */
+const notifyUpdateReady = (version: string): void => {
+  if (!Notification.isSupported()) return;
+  try {
+    const notification = new Notification({
+      title: "Struq Voice update ready",
+      body: `Version ${version} is verified and ready to install.`
+    });
+    notification.on("click", () => {
+      showMainWindow();
+    });
+    notification.show();
+  } catch {
+    // Notifications can fail on locked-down desktops. Settings still shows it.
+  }
+};
+
 const gotLock = app.requestSingleInstanceLock();
 
 if (!gotLock) {
@@ -135,11 +160,23 @@ if (!gotLock) {
     });
 
     // The update channel. Nothing installs without passing the signature gate
-    // in updater.ts, and nothing restarts without a click in Settings. Skipped
-    // under e2e so the suite never reaches the network.
+    // in updater.ts, and nothing restarts without a click. Skipped under e2e so
+    // the suite never reaches the network.
+    //
+    // isBusy is read through a late binding because the capture session is
+    // built further down, and the updater has to exist before the IPC handlers
+    // that reference it. It is only ever called on a click, long after boot.
+    let captureBusy = (): boolean => false;
     const updater = e2e
       ? null
-      : createUpdater({ autoUpdater, isPackaged: app.isPackaged });
+      : createUpdater({
+          autoUpdater,
+          isPackaged: app.isPackaged,
+          isBusy: () => captureBusy(),
+          onReady: (version) => {
+            notifyUpdateReady(version);
+          }
+        });
 
     // Hardware detection feeds the onboarding recommendation. It runs once,
     // in the background, and never blocks boot: until it resolves the
@@ -354,9 +391,16 @@ if (!gotLock) {
       hotkeys?.setHotkeys(latest.pttAccelerator, latest.toggleAccelerator);
     });
 
+    // An install clicked mid-capture waits for this. "idle" and "error" are
+    // both terminal: an errored capture has nothing left to lose by restarting.
+    captureBusy = () => session.state.phase !== "idle" && session.state.phase !== "error";
+
     session.subscribe((state) => {
       tray.setState(state);
       overlay?.update(state);
+      if (state.phase === "idle" || state.phase === "error") {
+        updater?.notifyIdle();
+      }
       if (state.phase === "listening") {
         // Escape cancels a capture. Registered only for the duration of the
         // capture, since the overlay cannot receive key events.

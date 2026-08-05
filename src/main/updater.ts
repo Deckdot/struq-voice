@@ -161,6 +161,11 @@ export interface UpdaterController {
   subscribe: (listener: (state: UpdateState) => void) => () => void;
   check: () => Promise<UpdateState>;
   install: () => boolean;
+  /**
+   * Called when a capture ends, so an install that was asked for mid-capture
+   * can run at the first safe moment.
+   */
+  notifyIdle: () => void;
 }
 
 export interface UpdaterOptions {
@@ -170,6 +175,14 @@ export interface UpdaterOptions {
   readonly feedUrl?: string;
   readonly deps?: UpdaterDeps;
   readonly verify?: (input: VerifyInput, deps?: UpdaterDeps) => Promise<VerifyOutcome>;
+  /**
+   * True while a capture is in flight. Quitting then would drop audio the user
+   * has already spoken, so the install waits instead. Injected rather than
+   * imported so the gate stays unit testable without a session.
+   */
+  readonly isBusy?: () => boolean;
+  /** Fires once when a verified update becomes ready, for the notification. */
+  readonly onReady?: (version: string) => void;
 }
 
 export const createUpdater = (options: UpdaterOptions): UpdaterController => {
@@ -179,6 +192,10 @@ export const createUpdater = (options: UpdaterOptions): UpdaterController => {
   let state: UpdateState = INITIAL_UPDATE_STATE;
   let announcedVersion: string | null = null;
   let checking = false;
+  /** Set when a person clicked Install during a capture. Runs on notifyIdle. */
+  let pendingInstall = false;
+  /** The version already announced, so a re-check does not re-notify. */
+  let notifiedVersion: string | null = null;
 
   const setState = (next: UpdateState): void => {
     state = next;
@@ -239,6 +256,12 @@ export const createUpdater = (options: UpdaterOptions): UpdaterController => {
       }
 
       setState({ phase: "ready", version });
+      // Once per version. The boot check and a manual check both land here,
+      // and a second toast for an update already offered is just noise.
+      if (notifiedVersion !== version) {
+        notifiedVersion = version;
+        options.onReady?.(version);
+      }
       return state;
     } catch (error) {
       // An unreachable feed is not something to shout about: the app works
@@ -253,19 +276,46 @@ export const createUpdater = (options: UpdaterOptions): UpdaterController => {
   /**
    * Install and restart, only when a person asks.
    *
-   * No auto-restart, deliberately. Dictation runs while other work is in
-   * progress, and an app that restarts itself mid-sentence is worse than one
-   * running last week's build for another hour.
+   * No auto-restart without a click, deliberately. Dictation runs while other
+   * work is in progress, and an app that restarts itself mid-sentence is worse
+   * than one running last week's build for another hour.
+   *
+   * The click itself can still land mid-capture, though: the prompt is a
+   * notification that can arrive at any moment, including while the user is
+   * holding the key. Quitting then would discard audio already spoken, so the
+   * install is held and `notifyIdle` runs it when the capture ends.
    *
    * isSilent passes /S so the installer runs with no UI for an update the
    * person already agreed to, and isForceRunAfter passes --force-run, which
    * relaunches afterwards. Both are load-bearing: silent without force-run
    * installs correctly and never comes back, which looks exactly like a crash.
    */
+  const runInstall = (): void => {
+    options.autoUpdater.quitAndInstall(true, true);
+  };
+
   const install = (): boolean => {
     if (state.phase !== "ready") return false;
-    options.autoUpdater.quitAndInstall(true, true);
+    if (options.isBusy?.() === true) {
+      pendingInstall = true;
+      return true;
+    }
+    runInstall();
     return true;
+  };
+
+  /**
+   * The capture returned to idle. Only a click that was already made is
+   * honoured here: this must never turn into "restarts on its own".
+   */
+  const notifyIdle = (): void => {
+    if (!pendingInstall) return;
+    if (state.phase !== "ready") {
+      pendingInstall = false;
+      return;
+    }
+    pendingInstall = false;
+    runInstall();
   };
 
   return {
@@ -277,6 +327,7 @@ export const createUpdater = (options: UpdaterOptions): UpdaterController => {
       };
     },
     check,
-    install
+    install,
+    notifyIdle
   };
 };

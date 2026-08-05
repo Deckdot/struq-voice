@@ -57,12 +57,23 @@ const ACCENT = oklchToHex(0.535, 0.12, 45);
 const DEEP_FOREST = oklchToHex(0.27, 0.03, 152);
 const MUTED = oklchToHex(0.52, 0.018, 150);
 
-/**
- * The tray renders at 16px, where the mark's thin bars and its 336x304 bounding
- * box inside a 512 viewBox would leave it small and muddy. Cropping to the art
- * and letting it fill the frame is what keeps it legible at that size.
- */
+/** The mark's true bounding box inside the 512 master viewBox. */
 const MARK_BOX = { x: 60, y: 112, w: 336, h: 304 };
+
+/**
+ * The tray icon is the app tile, not the bare mark.
+ *
+ * A transparent forest-ink mark disappears into a dark taskbar, which is the
+ * default on Windows 11. Carrying the linen field with it means the icon has
+ * its own background and therefore guaranteed contrast on any theme, light or
+ * dark, rather than depending on what the user's taskbar happens to be.
+ *
+ * That is also why the tile stays linen in every state: the state is carried
+ * by the mark's colour on top of it, never by the field.
+ */
+const TILE = "#F6F4EB";
+// --color-border-strong, the same hairline the interface uses on linen.
+const EDGE = oklchToHex(0.795, 0.014, 140);
 
 const variantSvg = (source, markColor, dotColor) => {
   // The master paints the bars via a <g fill> and the accent dot separately,
@@ -70,10 +81,31 @@ const variantSvg = (source, markColor, dotColor) => {
   const recoloured = source
     .replace('<g fill="#294638">', `<g fill="${markColor}">`)
     .replace('fill="#A65332"', `fill="${dotColor}"`);
-  // Crop to the mark itself, with a small breathing margin.
-  const pad = 12;
-  const viewBox = `${MARK_BOX.x - pad} ${MARK_BOX.y - pad} ${MARK_BOX.w + pad * 2} ${MARK_BOX.h + pad * 2}`;
-  return recoloured.replace('viewBox="0 0 512 512"', `viewBox="${viewBox}"`);
+
+  // Fit the mark into a square tile with a margin, centred on the art's own
+  // bounding box: the mark is not centred inside its 512 viewBox, so centring
+  // the viewBox would sit it high and to the left.
+  const size = 512;
+  const target = 0.66;
+  const scale = (size * target) / Math.max(MARK_BOX.w, MARK_BOX.h);
+  const tx = (size - MARK_BOX.w * scale) / 2 - MARK_BOX.x * scale;
+  const ty = (size - MARK_BOX.h * scale) / 2 - MARK_BOX.y * scale;
+
+  const inner = recoloured
+    .replace(/^[\s\S]*?<svg[^>]*>/, "")
+    .replace(/<\/svg>\s*$/, "")
+    .replace(/<title[\s\S]*?<\/title>/, "");
+
+  // rx is 20% of the tile, matching struq-app-icon.svg's 104/512.
+  //
+  // The hairline edge is what gives the tile a silhouette on a light taskbar,
+  // where linen on near-white would otherwise dissolve into the background.
+  // Inset by half the stroke so it is not clipped by the viewBox.
+  const stroke = size * 0.028;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">
+  <rect x="${stroke / 2}" y="${stroke / 2}" width="${size - stroke}" height="${size - stroke}" rx="${size * 0.203}" fill="${TILE}" stroke="${EDGE}" stroke-width="${stroke}" />
+  <g transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(4)})">${inner}</g>
+</svg>`;
 };
 
 const browser = await chromium.launch({ headless: true });
@@ -100,16 +132,13 @@ const VARIANTS = [
   ["transcribing", DEEP_FOREST, MUTED]
 ];
 
-// The mark is wider than it is tall, so the frame follows it rather than
-// forcing a square that would shrink the art to fit.
-const aspect = (MARK_BOX.w + 24) / (MARK_BOX.h + 24);
-
 console.log(`Generating tray icons into ${outDir}`);
 for (const [name, markColor, dotColor] of VARIANTS) {
   const svg = variantSvg(source, markColor, dotColor);
-  for (const [suffix, height] of [["", 16], ["@2x", 32]]) {
-    const width = Math.round(height * aspect);
-    await renderSvg(svg, join(outDir, `${name}${suffix}.png`), width, height);
+  // Square, because the tile is square. Windows scales the tray icon into a
+  // square slot, and a non-square source would be letterboxed.
+  for (const [suffix, size] of [["", 16], ["@2x", 32]]) {
+    await renderSvg(svg, join(outDir, `${name}${suffix}.png`), size, size);
   }
   console.log(`  wrote ${name}.png and ${name}@2x.png (${markColor})`);
 }

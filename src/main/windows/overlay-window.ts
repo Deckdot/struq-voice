@@ -78,6 +78,19 @@ export interface OverlayWindowController {
 let overlayWindow: BrowserWindow | null = null;
 
 /**
+ * The last state broadcast, replayed to the panel once its renderer is ready.
+ *
+ * The window is created lazily, on the first capture, and a capture starts by
+ * broadcasting `listening` and showing the panel in the same tick. On a cold
+ * start the renderer has not loaded yet, so that first broadcast arrives
+ * before anything is listening for it and is lost: the panel came up blank on
+ * the first capture of a session and worked on every one after, because by
+ * then the window already existed.
+ */
+let lastState: CaptureState = { phase: "idle" };
+let lastLiveTranscription = false;
+
+/**
  * Where the user last dragged the panel. Held in memory and pushed to the
  * caller's persistence hook, so it survives both the window being destroyed
  * between captures and a restart.
@@ -133,6 +146,18 @@ const createOverlayWindow = (height: number): BrowserWindow => {
   // The constructor option is a hint; this is the actual promotion on Windows.
   window.setAlwaysOnTop(true, "floating");
 
+  // Replay the current state as soon as the renderer can receive it. The
+  // broadcast that started this capture went out before this window existed,
+  // so without this the first capture of a session shows an empty panel.
+  window.webContents.once("did-finish-load", () => {
+    if (window.isDestroyed()) return;
+    const payload: CaptureStateChangedEvent = {
+      state: lastState,
+      liveTranscription: lastLiveTranscription
+    };
+    window.webContents.send(captureStateChangedChannel, payload);
+  });
+
   const rendererUrl = process.env["ELECTRON_RENDERER_URL"];
   if (rendererUrl !== undefined) {
     void window.loadURL(`${rendererUrl}/overlay/index.html`);
@@ -181,6 +206,8 @@ const setOverlayVisible = (window: BrowserWindow | null, visible: boolean): void
 };
 
 const broadcastState = (state: CaptureState, liveTranscription: boolean): void => {
+  lastState = state;
+  lastLiveTranscription = liveTranscription;
   const payload: CaptureStateChangedEvent = { state, liveTranscription };
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {

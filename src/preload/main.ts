@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { MainWindowApi } from "../shared/api";
 import type {
+  AppReadiness,
   HistoryListRequest,
   HistorySearchRequest,
   HistoryDeleteRequest,
@@ -8,6 +9,7 @@ import type {
   HistorySearchResult,
   HistoryDeleteResult,
   HistoryClearResult,
+  HistoryStatsResult,
   ModelsModelRequest,
   ModelsListResult,
   ModelsModelResult,
@@ -37,11 +39,35 @@ const readChannels = (argv: readonly string[]): PreloadChannels => {
   return JSON.parse(arg.slice("--struq-channels=".length)) as PreloadChannels;
 };
 
+/**
+ * A sandboxed preload gets only contextBridge, ipcRenderer, webFrame and
+ * nativeImage from the electron module, so nativeTheme cannot be read here.
+ * Main resolves the theme and serialises it into argv alongside the channels.
+ * Falling back to light keeps a missing argument cosmetic rather than fatal.
+ */
+const readTheme = (argv: readonly string[]): "light" | "dark" =>
+  argv.includes("--struq-theme=dark") ? "dark" : "light";
+
 const channels = readChannels(process.argv);
 
 const api: MainWindowApi = {
   windowKind: "main",
+  initialTheme: readTheme(process.argv),
   getAppVersion: () => ipcRenderer.invoke(channels.appGetVersion),
+  getReadiness: () =>
+    ipcRenderer.invoke(channels.appReadiness.get) as Promise<AppReadiness>,
+  onReadinessChanged: (listener) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      state: AppReadiness
+    ): void => {
+      listener(state);
+    };
+    ipcRenderer.on(channels.appReadiness.changed, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.appReadiness.changed, handler);
+    };
+  },
   window: {
     minimize: () => {
       ipcRenderer.send(channels.window.minimize);
@@ -82,7 +108,9 @@ const api: MainWindowApi = {
     remove: (request: HistoryDeleteRequest) =>
       ipcRenderer.invoke(channels.history.delete, request) as Promise<HistoryDeleteResult>,
     clear: () =>
-      ipcRenderer.invoke(channels.history.clear) as Promise<HistoryClearResult>
+      ipcRenderer.invoke(channels.history.clear) as Promise<HistoryClearResult>,
+    stats: () =>
+      ipcRenderer.invoke(channels.history.stats) as Promise<HistoryStatsResult>
   },
   models: {
     list: () =>

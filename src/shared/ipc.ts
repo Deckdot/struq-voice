@@ -11,6 +11,13 @@ import type { Settings } from "./settings";
 import type { UpdateState } from "./updates";
 
 export const appGetVersionChannel = "app:get-version" as const;
+export const appGetReadinessChannel = "app:get-readiness" as const;
+export const appReadinessChangedChannel = "app:readiness-changed" as const;
+
+export interface AppReadiness {
+  readonly microphone: { readonly live: boolean; readonly reason?: string };
+  readonly hotkeysActive: boolean;
+}
 
 export const windowMinimizeChannel = "window:minimize" as const;
 export const windowToggleMaximizeChannel = "window:toggle-maximize" as const;
@@ -181,6 +188,34 @@ export const historyListChannel = "history:list" as const;
 export const historySearchChannel = "history:search" as const;
 export const historyDeleteChannel = "history:delete" as const;
 export const historyClearChannel = "history:clear" as const;
+export const historyStatsChannel = "history:stats" as const;
+
+/** One day of dictation, local time, for the activity sparkline. */
+export interface HistoryStatsDay {
+  readonly dayStartMs: number;
+  readonly words: number;
+  readonly durationMs: number;
+}
+
+/**
+ * Aggregates over the whole transcript table, computed in SQL because the
+ * renderer must never pull every row to count words. Every field is derived
+ * from columns that already exist; nothing here is estimated.
+ */
+export interface HistoryStatsResult {
+  readonly todayWords: number;
+  readonly todayDurationMs: number;
+  readonly todayCount: number;
+  /** Words per minute of speech over the last 30 days, 0 when unknown. */
+  readonly wpm: number;
+  /** Consecutive local days, ending today, with at least one transcript. */
+  readonly streakDays: number;
+  readonly totalTranscripts: number;
+  readonly totalWords: number;
+  readonly totalDurationMs: number;
+  /** Oldest first, one entry per day, gaps included as zeroes. */
+  readonly daily: readonly HistoryStatsDay[];
+}
 
 export interface HistoryListRequest {
   readonly limit?: number;
@@ -361,6 +396,10 @@ export interface OpenRouterKeyMutationResult {
  */
 export const PRELOAD_CHANNELS = {
   appGetVersion: appGetVersionChannel,
+  appReadiness: {
+    get: appGetReadinessChannel,
+    changed: appReadinessChangedChannel
+  },
   window: {
     minimize: windowMinimizeChannel,
     toggleMaximize: windowToggleMaximizeChannel,
@@ -389,7 +428,8 @@ export const PRELOAD_CHANNELS = {
     list: historyListChannel,
     search: historySearchChannel,
     delete: historyDeleteChannel,
-    clear: historyClearChannel
+    clear: historyClearChannel,
+    stats: historyStatsChannel
   },
   metrics: {
     measuredRtf: metricsMeasuredRtfChannel

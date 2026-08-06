@@ -1,14 +1,13 @@
 import type { JSX } from "react";
-import { cn } from "../../lib/cn";
 import { formatAccelerator } from "../../../../shared/hotkeys";
+import { cn } from "../../lib/cn";
 
 /**
- * A keycap. Accelerators are stored in Electron's format
- * ("CommandOrControl+Space") and shown in the form a Windows user recognises,
- * so the label always matches the key they will actually press.
+ * A keycap. The accelerator string is in Electron's portable format
+ * ("CommandOrControl+Shift+Space") and is shown in the form a Windows
+ * user recognises, so the label always matches the key they will press.
  */
 export interface KbdProps {
-  /** Accelerator string, formatted for display before rendering. */
   readonly accelerator: string;
   readonly size?: "sm" | "md";
   readonly className?: string;
@@ -18,8 +17,8 @@ export function Kbd({ accelerator, size = "sm", className }: KbdProps): JSX.Elem
   return (
     <kbd
       className={cn(
-        "inline-flex items-center rounded-sm border border-border-strong bg-bg-sunken font-mono text-text",
-        size === "sm" ? "px-1.5 py-0.5 text-xs" : "px-2.5 py-1 text-sm",
+        "inline-flex select-none items-center rounded-sm border border-border bg-bg-sunken font-sans font-semibold tabular-nums text-text",
+        size === "sm" ? "h-5 px-1.5 text-2xs" : "h-6 px-2 text-xs",
         className
       )}
     >

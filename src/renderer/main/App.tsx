@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import type { Variants } from "motion/react";
 import { Rail } from "./components/Rail";
 import { TitleBar } from "./components/TitleBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { UpdateDialog } from "./components/UpdateDialog";
+import { Splash } from "./components/Splash";
 import { Onboarding } from "./onboarding/Onboarding";
 import { useMainStore } from "./store/use-main-store";
 import { DictateView } from "./views/DictateView";
@@ -16,14 +19,44 @@ import { DEFAULT_SETTINGS } from "../../shared/settings";
 import { MOCK_ENGINE_ID } from "../../shared/engines";
 import { shouldRunOnboarding } from "../../shared/settings";
 
+/**
+ * The page turn. Enter slides in from the direction of travel, exit slides
+ * out the other side, so going forward reads as moving right and going back
+ * as moving left. Enter uses the enter ease, exit the exit ease.
+ */
+const PAGE_VARIANTS: Variants = {
+  initial: (direction: 1 | -1) => ({
+    opacity: 0,
+    x: direction * 12,
+    transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] }
+  }),
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] }
+  },
+  exit: (direction: 1 | -1) => ({
+    opacity: 0,
+    x: direction * -8,
+    transition: { duration: 0.16, ease: [0.7, 0, 0.84, 0] }
+  })
+};
+
+const REDUCED_PAGE_VARIANTS: Variants = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 }
+};
+
 export function App(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const route = useMainStore((state) => state.route);
-  const setRoute = useMainStore((state) => state.setRoute);
+  const routeDirection = useMainStore((state) => state.routeDirection);
   const capture = useMainStore((state) => state.capture);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [onboarding, setOnboarding] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -57,8 +90,11 @@ export function App(): JSX.Element {
     return api.settings.onChange(setSettings);
   }, [api]);
 
+  const variants = reducedMotion ? REDUCED_PAGE_VARIANTS : PAGE_VARIANTS;
+
   return (
     <div className="flex h-full flex-col bg-bg text-text">
+      <Splash />
       <TitleBar />
       {onboarding ? (
         <Onboarding
@@ -70,20 +106,28 @@ export function App(): JSX.Element {
         />
       ) : (
         <div className="flex min-h-0 flex-1">
-          <Rail route={route} onSelect={setRoute} />
-          <main className="min-h-0 flex-1 overflow-hidden bg-bg" data-selectable>
-            {route === "dictate" && <DictateView />}
-            {route === "history" && <HistoryView />}
-            {route === "models" && <ModelsView />}
-            {route === "settings" && <SettingsView />}
+          <Rail />
+          <main className="relative min-h-0 flex-1 overflow-hidden bg-bg" data-selectable>
+            <AnimatePresence mode="popLayout" initial={false} custom={routeDirection}>
+              <motion.div
+                key={route}
+                custom={routeDirection}
+                variants={variants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="h-full"
+              >
+                {route === "dictate" && <DictateView />}
+                {route === "history" && <HistoryView />}
+                {route === "models" && <ModelsView />}
+                {route === "settings" && <SettingsView />}
+              </motion.div>
+            </AnimatePresence>
           </main>
         </div>
       )}
-      <CommandPalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        onNavigate={setRoute}
-      />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       {/* Not during onboarding: a first run has nothing to update from. */}
       {!onboarding && <UpdateDialog api={api} />}
     </div>

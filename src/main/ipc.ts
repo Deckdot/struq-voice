@@ -7,10 +7,12 @@ import { ONBOARDING_VERSION, migrateSettings } from "../shared/settings";
 import type { HardwareProfile, ModelRecommendation } from "../shared/hardware";
 import { UNKNOWN_HARDWARE, recommendModel } from "../shared/hardware";
 import type {
+  AppReadiness,
   DevicesListResult,
   HistoryDeleteRequest,
   HistoryListRequest,
   HistorySearchRequest,
+  HistoryStatsResult,
   ModelsModelRequest,
   OnboardingCompleteResult,
   OnboardingProfileResult,
@@ -23,6 +25,7 @@ import type {
   UpdatesStateResult
 } from "../shared/ipc";
 import {
+  appGetReadinessChannel,
   appGetVersionChannel,
   onboardingCompleteChannel,
   onboardingProfileChannel,
@@ -33,6 +36,7 @@ import {
   historyDeleteChannel,
   historyListChannel,
   historySearchChannel,
+  historyStatsChannel,
   modelsCancelChannel,
   modelsDeleteChannel,
   modelsDownloadChannel,
@@ -76,6 +80,28 @@ export interface OverlayDeps {
   readonly moveTo: (x: number, y: number) => void;
 }
 
+/** The readiness snapshot the UI can poll or subscribe to. */
+export interface ReadinessDeps {
+  readonly getReadiness: () => AppReadiness;
+}
+
+const SAFE_EMPTY_READINESS: AppReadiness = {
+  microphone: { live: false },
+  hotkeysActive: false
+};
+
+const EMPTY_HISTORY_STATS: HistoryStatsResult = {
+  todayWords: 0,
+  todayDurationMs: 0,
+  todayCount: 0,
+  wpm: 0,
+  streakDays: 0,
+  totalTranscripts: 0,
+  totalWords: 0,
+  totalDurationMs: 0,
+  daily: []
+};
+
 export const registerIpcHandlers = (
   history: HistoryStore | null,
   models: ModelsService | null,
@@ -83,7 +109,8 @@ export const registerIpcHandlers = (
   secrets: SecretsStore | null,
   updater: UpdaterController | null = null,
   onboarding: OnboardingDeps | null = null,
-  overlay: OverlayDeps | null = null
+  overlay: OverlayDeps | null = null,
+  readiness: ReadinessDeps | null = null
 ): void => {
   const currentVersion = app.getVersion();
 
@@ -169,6 +196,11 @@ export const registerIpcHandlers = (
 
   ipcMain.handle(appGetVersionChannel, () => app.getVersion());
 
+  ipcMain.handle(
+    appGetReadinessChannel,
+    (): AppReadiness => readiness?.getReadiness() ?? SAFE_EMPTY_READINESS
+  );
+
   ipcMain.handle(openRouterKeyStatusChannel, async () => {
     if (secrets === null) return { configured: false, stored: false };
     const key = await secrets.readOpenRouterKey();
@@ -238,6 +270,10 @@ export const registerIpcHandlers = (
     history?.removeAll();
     return { ok: true };
   });
+
+  // Without a database there is nothing to count, so the dashboard shows
+  // zeroes rather than failing: history is a degradable feature.
+  ipcMain.handle(historyStatsChannel, () => history?.stats() ?? EMPTY_HISTORY_STATS);
 
   ipcMain.handle(metricsMeasuredRtfChannel, () => {
     return { byEngine: history?.measuredRtf() ?? {} };

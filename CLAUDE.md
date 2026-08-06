@@ -11,7 +11,7 @@ speak, release, and the transcript appears in the focused field. Windows 11
 x64 only. Electron 39 pinned, React 19, Tailwind v4, TypeScript strict.
 
 The single design document that binds every UI decision is
-`docs/DESIGN_SYSTEM.md` (Velden Linen Forest). Build views against it or
+`docs/DESIGN_SYSTEM.md` (Evergreen and Ember). Build views against it or
 you have a bug.
 
 ## First thing in every session

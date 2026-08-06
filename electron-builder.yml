@@ -1,6 +1,11 @@
 appId: com.struq.voice
 productName: Struq Voice
 copyright: Copyright (c) 2026 Struq
+# Windows Task Manager uses the executable's FileDescription as its process
+# label. Keep the longer package description for repository metadata, but make
+# the installed application identify itself by its product name.
+extraMetadata:
+  description: Struq Voice
 directories:
   buildResources: resources
   # Overridden by scripts/lib/release-dir.mjs at build time. electron-builder

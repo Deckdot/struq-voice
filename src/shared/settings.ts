@@ -40,6 +40,8 @@ export const ONBOARDING_VERSION = 1;
 
 export const settingsSchema = z.object({
   version: z.literal(1).default(1),
+  /** The appearance of every window: follow the OS, or force one mode. */
+  theme: z.enum(["system", "light", "dark"]).default("system"),
   /** Captures shorter than this (ms) are discarded silently. */
   minCaptureMs: z.number().int().min(100).max(5000).default(350),
   /** Force-stop a capture that ran this long (ms). */

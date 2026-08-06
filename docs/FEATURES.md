@@ -89,21 +89,53 @@ as `pnpm test:e2e`).
   Skipped entirely under `STRUQ_VOICE_E2E=1`.
 
 ### Interface
-- Main window shell: custom title bar, rail navigation (Dictate, History,
-  Models, Settings), Zustand store.
-- Shared component layer in `src/renderer/main/components/ui/`: Button (four
-  variants, no fifth), Card, Section, Field, Badge, StatusDot, ProgressBar,
-  Kbd, HotkeyCapture. Views build from these rather than re-typing Tailwind.
-- Dictate is a readiness home: microphone and engine state with the fix
-  offered inline, plus the last transcript in the serif reading face.
-- Settings groups into Capture, Transcription, Delivery and Text behind a
-  sub-nav, with the capture timing values (`minCaptureMs`, `maxCaptureMs`,
-  `prerollMs`, `restoreClipboardDelayMs`) exposed under Advanced
-  disclosures. They were previously in the schema but unreachable.
-- Models leads with "Recommended for this PC" and keeps the full catalog
-  below it.
-- Command palette (Ctrl+K).
-- Views built against Velden Linen Forest (`docs/DESIGN_SYSTEM.md`).
+- Application shell: branded custom title bar, left navigation rail with
+  Dictate, History, and Models at the top, Settings pinned at the bottom,
+  and a flexible content region. Ctrl+1..4 jumps between
+  pages, Ctrl+K opens the command palette, Esc closes any overlay.
+- Shared component layer in `src/renderer/main/components/ui/`: the
+  full component inventory (Button, IconButton, Badge, Kbd, Field,
+  SettingsGroup, SettingsRow, Switch, Checkbox, RadioGroup, Select,
+  TextInput, NumberInput, SearchInput, Slider, SegmentedControl, Tabs,
+  Tooltip, Popover, DropdownMenu, Dialog, Disclosure, ProgressBar,
+  Skeleton, EmptyState, InlineError, StatusDot, HotkeyRecorder,
+  TranscriptRow, ModelRow, Card, Section). Views build from these
+  rather than re-typing Tailwind.
+- Dictate is the readiness home: one headline that answers "is it
+  ready?", the hold and toggle chords side by side, a live
+  microphone meter, the last transcript, three "what lives where"
+  cards, and a status panel with the fix offered inline.
+- History is a virtualized list grouped by day (Today, Yesterday, then
+  weekday + date), with a search field, copy and a two-step delete per
+  row. Roving tabindex, Enter to copy, Delete to remove.
+- Models leads with the current selection and three recommendations based
+  on detected hardware. Tiny, Base, Small, Medium, and Large each show the
+  three strongest variants first, with every remaining variant available
+  on demand. NVIDIA and OpenAI marks identify the model provider. A PC specs
+  dialog shows the detected CPU, memory, graphics, CUDA state, and workload
+  profile.
+- Settings is six horizontal tabs: General, Capture, Transcription,
+  Delivery, Text, Appearance. Each is a SettingsGroup of related
+  rows. Advanced values (min/max capture, pre-roll, restore delay,
+  live transcript interval) live behind a Disclosure in their
+  category. The OpenRouter key field, the model picker, and the
+  words-to-fix editor all live in their category. The voice service
+  picker, the backup service picker, and the theme picker all
+  apply immediately. Capture includes a live level meter under the selected
+  microphone so input can be tested without starting a transcription.
+- The capture pill is the floating overlay window. Five states
+  with object continuity on the same canvas: arming, listening,
+  transcribing, delivering, error. The waveform decays into a thin
+  processing line during transcribing, so the user sees the audio
+  being worked on without a generic spinner. Listening uses a green
+  animated bouncing-ball mark and waveform. Delivery resolves to a drawn
+  check only.
+- Theme is System, Light, or Dark. System follows the Windows setting
+  live. Both themes are designed: light uses warm porcelain and evergreen,
+  while dark uses opaque graphite surfaces and terracotta emphasis. Verdigris
+  is reserved for recording and genuine success states.
+- Views built against Evergreen and Ember
+  (`docs/DESIGN_SYSTEM.md`).
 
 ### Platform
 - NSIS one-click per-user installer, app icon, tray icons.

@@ -1,31 +1,57 @@
 import type { JSX } from "react";
-import type { CapturePhase } from "../../../../shared/capture";
 import { cn } from "../../lib/cn";
+import { RecordingBall } from "../../../shared/RecordingBall";
 
 /**
- * The capture phase as a single dot, driven by the state tokens so every
- * surface that shows capture state agrees on the colour. Arming borrows the
- * listening tone: the machine is already committed to a capture.
+ * A small filled dot. Colour alone names the state of whatever it sits next
+ * to: red for an error, green for ready and live capture.
+ *
+ * Static states do not pulse. Listening replaces the dot with the supplied
+ * bouncing-ball mark because that motion represents a capture in progress.
  */
-const PHASE_TONE: Record<CapturePhase, string> = {
-  idle: "bg-state-idle",
-  arming: "bg-state-listening",
-  listening: "bg-state-listening",
-  transcribing: "bg-state-transcribing",
-  delivering: "bg-state-delivered",
-  error: "bg-state-error"
-};
+export type StatusState =
+  | "idle"
+  | "arming"
+  | "listening"
+  | "transcribing"
+  | "delivering"
+  | "error"
+  | "ready"
+  | "warning"
+  | "off";
 
 export interface StatusDotProps {
-  readonly phase: CapturePhase;
+  readonly state: StatusState;
+  readonly size?: "sm" | "md";
   readonly className?: string;
 }
 
-export function StatusDot({ phase, className }: StatusDotProps): JSX.Element {
+const STATE_COLOR: Record<StatusState, string> = {
+  idle: "bg-text-muted",
+  arming: "bg-ember",
+  listening: "bg-success",
+  transcribing: "bg-info",
+  delivering: "bg-success",
+  error: "bg-danger",
+  ready: "bg-success",
+  warning: "bg-warning",
+  off: "bg-border-strong"
+};
+
+export function StatusDot({ state, size = "md", className }: StatusDotProps): JSX.Element {
+  if (state === "listening") {
+    return (
+      <RecordingBall
+        className={cn(size === "sm" ? "h-3 w-3" : "h-4 w-4", className)}
+      />
+    );
+  }
+
+  const sizeClass = size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2";
   return (
     <span
+      className={cn("inline-flex shrink-0 rounded-pill", sizeClass, STATE_COLOR[state], className)}
       aria-hidden="true"
-      className={cn("h-1.5 w-1.5 shrink-0 rounded-full", PHASE_TONE[phase], className)}
     />
   );
 }

@@ -19,9 +19,9 @@ test("boots to the main window with zero console errors", async () => {
     expect(await testHook.recorder.isVisible(app)).toBe(false);
 
     // The theme is actually applied: the landing view renders and the body
-    // uses the linen background, not the white browser default. Onboarding is
-    // marked complete under e2e, so Dictate is what boot lands on.
-    await expect(window.locator("h1")).toHaveText("Dictate");
+    // uses the porcelain background, not the white browser default. Onboarding
+    // is marked complete under e2e, so Dictate is what boot lands on.
+    await expect(window.getByText("Hold to speak")).toBeVisible();
     await expect(
       window.getByRole("navigation", { name: "Struq Voice" }).getByText("Struq Voice")
     ).toBeVisible();

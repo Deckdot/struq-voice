@@ -256,14 +256,20 @@ try {
   await sleep(1500);
   await shoot("models");
 
+  await main.getByRole("button", { name: "PC specs", exact: true }).click();
+  await sleep(400);
+  await shoot("models-pc-specs");
+  await main.getByRole("button", { name: "Done", exact: true }).click();
+
   await goTo(main, "Settings");
   await sleep(400);
   await shoot("settings");
 
-  await main
-    .getByRole("navigation", { name: "Settings sections" })
-    .getByRole("button", { name: "Transcription", exact: true })
-    .click();
+  await main.getByRole("tab", { name: "Capture", exact: true }).click();
+  await sleep(700);
+  await shoot("settings-capture");
+
+  await main.getByRole("tab", { name: "Transcription", exact: true }).click();
   await sleep(500);
   await shoot("settings-transcription");
 
@@ -275,7 +281,20 @@ try {
   await main.keyboard.press("Control+k");
   await sleep(600);
   await shoot("command-palette");
-  await main.keyboard.press("Escape");
+  await main.locator(".fixed.inset-0.z-50").click({ position: { x: 8, y: 8 } });
+  await sleep(500);
+
+  await goTo(main, "Settings");
+  await main.getByRole("tab", { name: "Appearance", exact: true }).click();
+  await main.getByRole("tab", { name: "Dark", exact: true }).click();
+  await main.bringToFront();
+  await sleep(1000);
+  await shoot("settings-dark");
+  await main.getByRole("tab", { name: "Capture", exact: true }).click();
+  await sleep(700);
+  await shoot("settings-capture-dark");
+  await goTo(main, "Models");
+  await shoot("models-dark");
 
   // The overlay is created lazily on the first non-idle state, and the state
   // broadcast that created it went out before its renderer could subscribe.

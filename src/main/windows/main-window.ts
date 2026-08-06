@@ -4,11 +4,17 @@
  * in index.ts where the app-quitting state lives.
  */
 
-import { BrowserWindow } from "electron";
+import { BrowserWindow, nativeTheme } from "electron";
 import { join } from "node:path";
 import { PRELOAD_CHANNELS } from "../../shared/ipc";
 
 const channelsArg = `--struq-channels=${JSON.stringify(PRELOAD_CHANNELS)}`;
+
+const windowBackgroundColor = (): string =>
+  nativeTheme.shouldUseDarkColors ? "#101214" : "#f4f3ee";
+
+const themeArg = (): string =>
+  nativeTheme.shouldUseDarkColors ? "--struq-theme=dark" : "--struq-theme=light";
 
 export const createMainWindow = (): BrowserWindow => {
   const window = new BrowserWindow({
@@ -19,18 +25,30 @@ export const createMainWindow = (): BrowserWindow => {
     title: "Struq Voice",
     show: false,
     frame: false,
-    // The linen page colour, so there is no white flash before the renderer
-    // paints. Matches --color-bg in the theme.
-    backgroundColor: "#f6f4eb",
+    // The window background, resolved from the current theme so there is no
+    // flash of a mismatched colour before the renderer paints.
+    backgroundColor: windowBackgroundColor(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       preload: join(__dirname, "../preload/main.cjs"),
-      // The sandboxed preload reads channel names from argv; they are
-      // declared in src/shared/ipc.ts and nowhere else.
-      additionalArguments: [channelsArg]
+      // The sandboxed preload reads channel names and the theme from argv;
+      // they are declared in src/shared/ipc.ts and nowhere else.
+      additionalArguments: [channelsArg, themeArg()]
     }
+  });
+
+  // Track the system theme while the window lives so the background keeps
+  // matching the renderer, which switches its palette on nativeTheme changes.
+  const onThemeUpdated = (): void => {
+    if (!window.isDestroyed()) {
+      window.setBackgroundColor(windowBackgroundColor());
+    }
+  };
+  nativeTheme.on("updated", onThemeUpdated);
+  window.on("closed", () => {
+    nativeTheme.removeListener("updated", onThemeUpdated);
   });
 
   window.once("ready-to-show", () => {

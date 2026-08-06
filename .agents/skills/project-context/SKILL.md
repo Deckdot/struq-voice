@@ -14,7 +14,7 @@ x64 only. Electron 39 pinned, React 19, Tailwind v4, TypeScript strict.
 1. `AGENTS.md` (repo root) - the source of truth.
 2. `docs/FEATURES.md` - what is built, current state, known gaps.
 3. `docs/ARCHITECTURE.md` - process/window model and boundaries.
-4. For UI work: `docs/DESIGN_SYSTEM.md` (Velden Linen Forest, binding).
+4. For UI work: `docs/DESIGN_SYSTEM.md` (Evergreen and Ember, binding).
 
 ## Process model
 

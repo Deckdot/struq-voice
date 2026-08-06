@@ -18,7 +18,7 @@ Target: **Windows 11 x64 only.** Electron 39 pinned, React 19, Tailwind v4,
 TypeScript strict.
 
 The one design document that matters more than any other is
-`docs/DESIGN_SYSTEM.md` (Velden Linen Forest). Every UI decision in this
+`docs/DESIGN_SYSTEM.md` (Evergreen and Ember). Every UI decision in this
 repo is bound by it. If you build a view that fights it, you have a bug.
 
 ## 2. The product loop
@@ -203,7 +203,7 @@ Full detail, including the manual gate check, in `docs/RELEASING.md`.
 
 - `docs/IMPLEMENTATION_PLAN.md` - the full build plan (7 phases). The
   definitive reference for intended behavior.
-- `docs/DESIGN_SYSTEM.md` - Velden Linen Forest, binding.
+- `docs/DESIGN_SYSTEM.md` - Evergreen and Ember, binding.
 - `docs/FEATURES.md` - what is built, current state, known gaps.
 - `docs/MODELS.md` - engines, catalog, download pipeline.
 - `docs/TROUBLESHOOTING.md` - known failures and fixes.

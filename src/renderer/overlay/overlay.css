@@ -14,7 +14,7 @@ body,
    small, so the transcript well gets a hairline one. */
 .transcript-scroll {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-color: var(--sv-border-strong) transparent;
 }
 
 .transcript-scroll::-webkit-scrollbar {
@@ -26,14 +26,14 @@ body,
 }
 
 .transcript-scroll::-webkit-scrollbar-thumb {
-  background-color: var(--color-border-strong);
+  background-color: var(--sv-border-strong);
   border-radius: var(--radius-pill);
 }
 
 /* The panel arrives with a short rise and settle, never a bounce: it appears
    over whatever the user is working in, so it has to read as calm. */
 .panel-enter {
-  animation: panel-enter 180ms var(--ease-out-quart) 1 both;
+  animation: panel-enter 180ms var(--ease-enter) 1 both;
 }
 
 @keyframes panel-enter {
@@ -53,7 +53,7 @@ body,
   width: 100%;
   height: 3px;
   border-radius: var(--radius-pill);
-  background: var(--color-state-transcribing);
+  background: var(--sv-info);
   opacity: 0.35;
   overflow: hidden;
 }
@@ -65,12 +65,12 @@ body,
   background: linear-gradient(
     90deg,
     transparent,
-    var(--color-surface) 45%,
-    var(--color-surface) 55%,
+    var(--sv-surface) 45%,
+    var(--sv-surface) 55%,
     transparent
   );
   transform: translateX(-100%);
-  animation: shimmer-sweep 600ms var(--ease-in-out) 1 both;
+  animation: shimmer-sweep 600ms var(--ease-micro) 1 both;
 }
 
 @keyframes shimmer-sweep {
@@ -83,7 +83,7 @@ body,
 .checkmark-draw {
   stroke-dasharray: 24;
   stroke-dashoffset: 24;
-  animation: checkmark-draw 240ms var(--ease-out-quart) 1 forwards;
+  animation: checkmark-draw 240ms var(--ease-enter) 1 forwards;
 }
 
 @keyframes checkmark-draw {

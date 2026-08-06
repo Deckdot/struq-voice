@@ -1,16 +1,15 @@
 import type { JSX, ReactNode } from "react";
+import { Icon } from "@iconify/react";
 import { cn } from "../../lib/cn";
 
 /**
- * Label, control, help and error in one block. Help text stays attached to
- * the control it describes: an explanation that drifts away from its input
- * forces the reader to hold both halves in mind at once.
+ * Label, hint, optional error and the actual control, in one block. The hint
+ * sits next to the label it describes, not below the page.
  */
 export interface FieldProps {
   readonly label: string;
   readonly hint?: string;
   readonly error?: string;
-  /** Places the control beside the label instead of beneath it. */
   readonly inline?: boolean;
   readonly htmlFor?: string;
   readonly className?: string;
@@ -32,7 +31,7 @@ export function Field({
         {label}
       </label>
       {hint !== undefined && (
-        <p className="mt-0.5 text-sm leading-snug text-text-muted">{hint}</p>
+        <p className="mt-0.5 text-xs leading-snug text-text-muted">{hint}</p>
       )}
     </div>
   );
@@ -47,7 +46,11 @@ export function Field({
       {text}
       <div className={inline ? "shrink-0" : undefined}>{children}</div>
       {error !== undefined && (
-        <p className="text-sm text-danger" role="alert">
+        <p
+          role="alert"
+          className="mt-1 inline-flex items-center gap-1.5 text-xs text-danger"
+        >
+          <Icon icon="ph:warning-circle" className="h-3.5 w-3.5" aria-hidden="true" />
           {error}
         </p>
       )}

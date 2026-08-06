@@ -17,19 +17,55 @@ const readChannels = (argv: readonly string[]): PreloadChannels => {
   return JSON.parse(arg.slice("--struq-channels=".length)) as PreloadChannels;
 };
 
+/**
+ * A sandboxed preload gets only contextBridge, ipcRenderer, webFrame and
+ * nativeImage from the electron module, so nativeTheme cannot be read here.
+ * Main resolves the theme and serialises it into argv alongside the channels.
+ * Falling back to light keeps a missing argument cosmetic rather than fatal.
+ */
+const readTheme = (argv: readonly string[]): "light" | "dark" =>
+  argv.includes("--struq-theme=dark") ? "dark" : "light";
+
 const channels = readChannels(process.argv);
+
+const initialTheme = readTheme(process.argv);
+
+type CaptureStateListener = (
+  state: CaptureState,
+  liveTranscription: boolean
+) => void;
+
+let latestCaptureState: CaptureStateChangedEvent | null = null;
+const captureStateListeners = new Set<CaptureStateListener>();
+
+// The main process replays the current state on did-finish-load, before React
+// effects are guaranteed to subscribe. Listen from preload startup and retain
+// the event so the first capture cannot disappear between those two moments.
+ipcRenderer.on(
+  channels.captureStateChanged,
+  (_event: IpcRendererEvent, payload: CaptureStateChangedEvent): void => {
+    latestCaptureState = payload;
+    for (const listener of captureStateListeners) {
+      listener(payload.state, payload.liveTranscription ?? false);
+    }
+  }
+);
 
 const api: OverlayWindowApi = {
   windowKind: "overlay",
+  initialTheme,
   onCaptureStateChanged: (
-    listener: (state: CaptureState, liveTranscription: boolean) => void
+    listener: CaptureStateListener
   ) => {
-    const wrapped = (_event: IpcRendererEvent, payload: CaptureStateChangedEvent): void => {
-      listener(payload.state, payload.liveTranscription ?? false);
-    };
-    ipcRenderer.on(channels.captureStateChanged, wrapped);
+    captureStateListeners.add(listener);
+    if (latestCaptureState !== null) {
+      listener(
+        latestCaptureState.state,
+        latestCaptureState.liveTranscription ?? false
+      );
+    }
     return () => {
-      ipcRenderer.removeListener(channels.captureStateChanged, wrapped);
+      captureStateListeners.delete(listener);
     };
   },
   onCaptureLevelsChanged: (listener: (data: { bands: readonly number[]; level: number }) => void) => {

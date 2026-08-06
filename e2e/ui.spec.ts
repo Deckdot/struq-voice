@@ -32,21 +32,20 @@ test("every view renders and the rail navigates between them", async () => {
   try {
     await expect(window).toHaveTitle("Struq Voice", { timeout: 10_000 });
 
-    // Dictate is the landing route.
-    await expect(
-      window.getByRole("heading", { name: "Dictate", exact: true })
-    ).toBeVisible();
+    // Dictate is the landing route. It is the readiness home, so the page
+    // identifies itself through the "Hold to speak" card and the live
+    // microphone meter, not a single headline word.
+    await expect(window.getByText("Hold to speak")).toBeVisible();
+    await expect(window.getByLabel("Microphone level")).toBeVisible();
 
     for (const [route, heading] of [
       ["History", "History"],
       ["Models", "Models"],
       ["Settings", "Settings"],
-      ["Dictate", "Dictate"]
+      ["Dictate", "Hold to speak"]
     ] as const) {
       await goTo(window, route);
-      await expect(
-        window.getByRole("heading", { name: heading, exact: true }).first()
-      ).toBeVisible();
+      await expect(window.getByText(heading).first()).toBeVisible();
     }
 
     expect(consoleErrors).toEqual([]);
@@ -171,7 +170,7 @@ test("settings shows the update panel and the running version", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await settingsGroup(window, "Delivery");
+    await settingsGroup(window, "General");
 
     const updates = window
       .locator("section")

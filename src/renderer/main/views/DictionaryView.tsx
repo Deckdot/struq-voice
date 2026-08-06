@@ -8,7 +8,6 @@ import type { Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
 import { PageBody } from "../components/PageHeader";
 import {
-  Badge,
   Button,
   Dialog,
   EmptyState,
@@ -28,12 +27,36 @@ interface Draft {
   readonly wholeWord: boolean;
 }
 
-const EMPTY_DRAFT: Draft = { from: "", to: "", matchCase: false, wholeWord: true };
+/**
+ * Every rule is whole-word and case-insensitive, and neither is a choice.
+ *
+ * These were two toggles. Case matching earned nothing: speech has no
+ * capitalisation, so the engine decides it, and a case-sensitive rule for
+ * "struck" then misses "Struck" at the start of a sentence, which is exactly
+ * where it matters. Whole-word is the opposite, it must always be on: off, a
+ * rule for "cat" quietly rewrites the middle of "category", and the damage is
+ * invisible until someone reads the transcript.
+ *
+ * The schema keeps both fields so existing profiles parse unchanged.
+ */
+const RULE_MATCHING = { matchCase: false, wholeWord: true } as const;
 
+const EMPTY_DRAFT: Draft = { from: "", to: "", ...RULE_MATCHING };
+
+/**
+ * Examples for someone who has never written a rule.
+ *
+ * The old set was GitHub and PostgreSQL, which only reads as a useful idea if
+ * you already work in software. These are the corrections anyone dictating
+ * hits in their first week: an email address that comes out as words, a name
+ * spelled the common way instead of theirs, a phrase heard as the wrong word.
+ * They prefill the form rather than adding a rule, so nothing lands in the
+ * dictionary without a deliberate click.
+ */
 const STARTER_SUGGESTIONS: readonly { from: string; to: string }[] = [
-  { from: "struck", to: "Struq" },
-  { from: "get hub", to: "GitHub" },
-  { from: "post gress", to: "PostgreSQL" }
+  { from: "at gmail dot com", to: "@gmail.com" },
+  { from: "Sara", to: "Sarah" },
+  { from: "kind regards", to: "Kind regards," }
 ];
 
 export function DictionaryView(): JSX.Element {
@@ -290,35 +313,6 @@ export function DictionaryView(): JSX.Element {
                 />
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraft((curr) => ({ ...curr, matchCase: !curr.matchCase }));
-                  }}
-                  title={t("dictionary.matchCase")}
-                  className="cursor-pointer"
-                >
-                  <Badge tone={draft.matchCase ? "accent" : "neutral"}>
-                    <Icon icon="ph:text-aa" className="mr-1 inline h-3.5 w-3.5" />
-                    Aa
-                  </Badge>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraft((curr) => ({ ...curr, wholeWord: !curr.wholeWord }));
-                  }}
-                  title={t("dictionary.wholeWord")}
-                  className="cursor-pointer"
-                >
-                  <Badge tone={draft.wholeWord ? "accent" : "neutral"}>
-                    <Icon icon="ph:selection" className="mr-1 inline h-3.5 w-3.5" />
-                    ab|
-                  </Badge>
-                </button>
-              </div>
-
               <Button variant="primary" size="sm" onClick={handleAddOrUpdateRule}>
                 {editingFrom !== null ? t("dictionary.saveRule") : t("dictionary.addRule")}
               </Button>
@@ -409,12 +403,7 @@ export function DictionaryView(): JSX.Element {
                       key={sugg.from}
                       type="button"
                       onClick={() => {
-                        setDraft({
-                          from: sugg.from,
-                          to: sugg.to,
-                          matchCase: false,
-                          wholeWord: true
-                        });
+                        setDraft({ from: sugg.from, to: sugg.to, ...RULE_MATCHING });
                         fromInputRef.current?.focus();
                       }}
                       className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text transition-colors hover:border-accent hover:bg-surface-hover"
@@ -455,8 +444,6 @@ export function DictionaryView(): JSX.Element {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      {rule.matchCase && <Badge tone="accent">Aa</Badge>}
-                      {rule.wholeWord && <Badge tone="neutral">ab|</Badge>}
                       <IconButton
                         icon="ph:pencil-simple"
                         label={t("dictionary.editRuleLabel")}

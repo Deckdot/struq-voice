@@ -46,8 +46,6 @@ export const en = {
   "overlay.errorCopied": "Copied. Press Ctrl + V to paste.",
 
   // Dictate View
-  "dictate.blocker.mock.message": "Practice mode returns fixed text instead of transcribing.",
-  "dictate.blocker.mock.action": "Choose a service",
   "dictate.blocker.localMissing.message": "{model} is not on this computer yet.",
   "dictate.blocker.localMissing.action": "Download it",
   "dictate.blocker.cloudKey.message": "OpenRouter needs an API key before it can transcribe.",
@@ -69,6 +67,13 @@ export const en = {
   "dictate.phase.error": "That capture failed",
   "dictate.prompt.default": "Hold to speak, anywhere in Windows",
   "dictate.prompt.or": "or",
+  // Activity chart. "Pace" is words per minute for that day, the one quantity
+  // daily volume does not predict.
+  "dictate.chart.series.words": "Words",
+  "dictate.chart.series.pace": "Pace",
+  "dictate.chart.series.spoken": "Spoken",
+  "dictate.chart.pace.value": "{wpm} wpm",
+  "dictate.chart.pace.none": "Not enough speech",
   "dictate.recent.title": "Recent",
   "dictate.recent.viewAll": "View all",
   "dictate.recent.empty": "Nothing yet. Hold your key and say a sentence.",
@@ -289,8 +294,6 @@ export const en = {
   "dictionary.cancelEdit": "Cancel Edit",
   "dictionary.heardAs": "Heard as (e.g. struck)",
   "dictionary.shouldBe": "Should be (e.g. Struq)",
-  "dictionary.matchCase": "Match capitalisation",
-  "dictionary.wholeWord": "Whole words only",
   "dictionary.saveRule": "Save Rule",
   "dictionary.tryIt": "Try It",
   "dictionary.firingCount": "{firing} of {total} rules firing",

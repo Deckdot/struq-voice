@@ -19,6 +19,53 @@ describe("cleanupTranscript", () => {
     expect(cleanupTranscript("   ", DEFAULT_OPTIONS)).toBe("");
   });
 
+  /**
+   * Regression: "auto" is the detect-the-language sentinel, not a BCP47 tag,
+   * and Intl throws a RangeError on it. This reached users as "invalid
+   * language tag auto" on every capture with filler removal switched on.
+   */
+  it("does not throw when the speech language is the auto sentinel", () => {
+    expect(() =>
+      cleanupTranscript("um hello there", {
+        ...DEFAULT_OPTIONS,
+        removeFillers: true,
+        speechLanguage: "auto"
+      })
+    ).not.toThrow();
+  });
+
+  it("strips English fillers when the language is the auto sentinel", () => {
+    expect(
+      cleanupTranscript("um hello there", {
+        ...DEFAULT_OPTIONS,
+        removeFillers: true,
+        speechLanguage: "auto"
+      })
+    ).toBe("hello there");
+  });
+
+  it("falls back to English for any unusable language value", () => {
+    for (const language of ["", "   ", "not a locale", "xx-YY-ZZ-bogus", "123"]) {
+      expect(() =>
+        cleanupTranscript("um hello", {
+          ...DEFAULT_OPTIONS,
+          removeFillers: true,
+          speechLanguage: language
+        })
+      ).not.toThrow();
+    }
+  });
+
+  it("still uses the per-language filler table for a real tag", () => {
+    expect(
+      cleanupTranscript("ehm hallo daar", {
+        ...DEFAULT_OPTIONS,
+        removeFillers: true,
+        speechLanguage: "nl-NL"
+      })
+    ).toBe("hallo daar");
+  });
+
   it("applies case-insensitive whole-word replacements", () => {
     expect(
       cleanupTranscript("struck is a product", {

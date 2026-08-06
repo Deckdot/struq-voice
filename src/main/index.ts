@@ -292,9 +292,7 @@ if (!gotLock) {
       ? createSimulatedAudioSource(app.getAppPath())
       : createRecorderAudioSource(recorderWindow, bridge);
 
-    // Engines: cloud first per the plan, mock as the bootstrap default.
     const modelsRoot = join(app.getPath("userData"), "models");
-    const mockEngine = createMockEngine();
     const parakeetEngine = createParakeetEngine({
       modelsRoot,
       modelId: PARAKEET_DEFAULT_MODEL_ID
@@ -308,11 +306,18 @@ if (!gotLock) {
       getModelId: () => settingsStore.get().whisperModelId
     });
     const engines = new Map<string, TranscriptionEngine>([
-      [mockEngine.id, mockEngine],
       [parakeetEngine.id, parakeetEngine],
       [whisperCppEngine.id, whisperCppEngine],
       [openrouterEngine.id, openrouterEngine]
     ]);
+    // The mock exists for the e2e harness and nowhere else. Registering it
+    // only under the test flags means a packaged build has no code path that
+    // can reach it, so "practice mode" cannot be selected, fallen back to, or
+    // stumbled into by a user who has not finished setting up.
+    if (e2e || hookTest) {
+      const mockEngine = createMockEngine();
+      engines.set(mockEngine.id, mockEngine);
+    }
     const router = createEngineRouter({
       getEngine: (id) => engines.get(id),
       cloudFallbackOptIn: () => settingsStore.get().engine.fallback === "openrouter",
@@ -320,9 +325,9 @@ if (!gotLock) {
 
     const envEngineOverride = process.env["STRUQ_VOICE_ENGINE"];
     const settings = settingsStore.get();
-    // Bootstrap promotion: Parakeet becomes the primary once its model is
-    // downloaded; otherwise OpenRouter once a key exists; otherwise the mock
-    // stays until the user chooses in Settings. Skipped in test modes: the
+    // Bootstrap promotion: a profile still pointing at the retired mock is
+    // moved onto a real engine, preferring the local one once its model is on
+    // disk and OpenRouter once a key exists. Skipped in test modes: the
     // readiness check loads the sherpa native module, which is exactly the
     // native interference the hook spec isolates against.
     if (!e2e && !hookTest) {
@@ -334,15 +339,15 @@ if (!gotLock) {
           });
         }
       });
+      void secrets.readOpenRouterKey().then((key) => {
+        const latest = settingsStore.get();
+        if (key !== null && key.length > 0 && latest.engine.primary === MOCK_ENGINE_ID) {
+          settingsStore.update({
+            engine: { ...latest.engine, primary: OPENROUTER_ENGINE_ID },
+          });
+        }
+      });
     }
-    void secrets.readOpenRouterKey().then((key) => {
-      const latest = settingsStore.get();
-      if (key !== null && key.length > 0 && latest.engine.primary === MOCK_ENGINE_ID) {
-        settingsStore.update({
-          engine: { ...latest.engine, primary: OPENROUTER_ENGINE_ID },
-        });
-      }
-    });
     const primaryEngineId = envEngineOverride ?? settings.engine.primary;
 
     const sounds = createCaptureSoundPlayer({
@@ -399,7 +404,12 @@ if (!gotLock) {
           dictionary: current.post.dictionary,
           removeFillers: current.post.removeFillers,
           addTrailingPunctuation: current.post.addTrailingPunctuation,
-          speechLanguage: result.language ?? current.speechLanguage
+          // "auto" is a request to detect, not a language. Prefer what the
+          // engine actually reported; fall back to the configured language only
+          // when it names one, and to English when neither does.
+          speechLanguage:
+            result.language ??
+            (current.speechLanguage === "auto" ? "en" : current.speechLanguage)
         });
         return { text, meta };
       },

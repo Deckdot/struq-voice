@@ -38,8 +38,32 @@ const FILLER_TABLE: Record<string, readonly string[]> = {
   zh: ["那个", "就是", "嗯"]
 };
 
+/**
+ * The base subtag, but only when it is a language tag at all.
+ *
+ * `speechLanguage` carries the sentinel "auto" for detect-the-language, and an
+ * engine that detects nothing reports null, so "auto" reaches here as a real
+ * value. Intl rejects it: `"UM".toLocaleLowerCase("auto")` throws a RangeError,
+ * which surfaced as "invalid language tag auto" on every capture with filler
+ * removal switched on.
+ *
+ * Validated by asking Intl rather than by pattern matching, so anything Intl
+ * cannot use falls back to English instead of throwing mid-delivery. Losing
+ * a filler is a blemish; losing the transcript is the user's words gone.
+ */
+const resolveFillerLocale = (language: string): string => {
+  const base = language.split("-")[0]?.toLowerCase() ?? "";
+  if (base.length === 0) return "en";
+  try {
+    Intl.getCanonicalLocales(base);
+  } catch {
+    return "en";
+  }
+  return base;
+};
+
 const removeFillers = (text: string, language = "en"): string => {
-  const normalizedLocale = language.split("-")[0]?.toLowerCase() ?? "en";
+  const normalizedLocale = resolveFillerLocale(language);
   const fillersList = FILLER_TABLE[normalizedLocale] ?? FILLER_TABLE["en"] ?? [];
   const fillers = new Set(fillersList);
   return text

@@ -11,6 +11,7 @@ import { Onboarding } from "./onboarding/Onboarding";
 import { useMainStore } from "./store/use-main-store";
 import { DictateView } from "./views/DictateView";
 import { HistoryView } from "./views/HistoryView";
+import { DictionaryView } from "./views/DictionaryView";
 import { ModelsView } from "./views/ModelsView";
 import { SettingsView } from "./views/SettingsView";
 import type { MainWindowApi } from "../../shared/api";
@@ -150,6 +151,7 @@ export function App(): JSX.Element {
                 >
                   {route === "dictate" && <DictateView />}
                   {route === "history" && <HistoryView />}
+                  {route === "dictionary" && <DictionaryView />}
                   {route === "models" && <ModelsView />}
                   {route === "settings" && <SettingsView />}
                 </motion.div>

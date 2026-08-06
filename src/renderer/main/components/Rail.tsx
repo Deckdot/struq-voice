@@ -9,6 +9,7 @@ import { cn } from "../lib/cn";
 const ROUTE_ICONS: Record<Route, string> = {
   dictate: "ph:microphone",
   history: "ph:clock-counter-clockwise",
+  dictionary: "ph:book-open-text",
   models: "ph:cube",
   settings: "ph:gear"
 };

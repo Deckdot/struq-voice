@@ -9,13 +9,20 @@ import { INITIAL_CAPTURE_STATE } from "../../../shared/capture";
  * library.
  */
 
-export type Route = "dictate" | "history" | "models" | "settings";
+export type Route = "dictate" | "history" | "dictionary" | "models" | "settings";
 
-export const ROUTE_ORDER: readonly Route[] = ["dictate", "history", "models", "settings"];
+export const ROUTE_ORDER: readonly Route[] = [
+  "dictate",
+  "history",
+  "dictionary",
+  "models",
+  "settings"
+];
 
 export const ROUTE_LABELS: Record<Route, string> = {
   dictate: "Dictate",
   history: "History",
+  dictionary: "Dictionary",
   models: "Models",
   settings: "Settings"
 };

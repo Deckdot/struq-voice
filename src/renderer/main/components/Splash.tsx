@@ -31,12 +31,6 @@ const FRONT_SHEET: Variants = {
   lifted: { y: "-100%", transition: { duration: 0.64, ease: CURTAIN_EASE } }
 };
 
-/** Lags the front sheet, so a band of accent passes over the shell. */
-const TRAILING_SHEET: Variants = {
-  held: { y: "0%" },
-  lifted: { y: "-100%", transition: { duration: 0.64, delay: 0.09, ease: CURTAIN_EASE } }
-};
-
 const MARK: Variants = {
   held: { opacity: 1 },
   lifted: { opacity: 0, transition: { duration: 0.26, ease: EXIT_EASE } }
@@ -52,7 +46,7 @@ export interface SplashProps {
 
 /**
  * The first-paint cover. It holds the brand mark while the theme settles,
- * then lifts as a two-sheet curtain and unmounts. Shown once per window
+ * then lifts as a clean curtain and unmounts. Shown once per window
  * session: the sessionStorage gate makes every later mount a no-op.
  */
 export function Splash({ onReveal }: SplashProps): JSX.Element | null {
@@ -118,15 +112,11 @@ export function Splash({ onReveal }: SplashProps): JSX.Element | null {
       aria-hidden="true"
     >
       <motion.div
-        variants={TRAILING_SHEET}
-        className="absolute inset-0 bg-accent-soft"
+        variants={FRONT_SHEET}
+        className="absolute inset-0 flex items-center justify-center bg-bg"
         onAnimationComplete={() => {
           if (state === "lifting") setState("gone");
         }}
-      />
-      <motion.div
-        variants={FRONT_SHEET}
-        className="absolute inset-0 flex items-center justify-center bg-bg"
       >
         <motion.span variants={MARK} className="inline-flex">
           <BrandMarkAnimated size={64} className="text-accent" />

@@ -6,7 +6,7 @@ import type { DictionaryRule } from "../../../shared/dictionary";
 import { applyDictionary, countRuleHits, findRuleMatches } from "../../../shared/dictionary";
 import type { Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
-import { PageBody, PageHeader } from "../components/PageHeader";
+import { PageBody } from "../components/PageHeader";
 import {
   Badge,
   Button,
@@ -299,11 +299,9 @@ export function DictionaryView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <PageHeader
-        icon="ph:book-open-text"
-        title="Dictionary"
-        actions={
-          <div className="flex items-center gap-2">
+      <PageBody>
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-between gap-4">
             <SearchInput
               id={SEARCH_INPUT_ID}
               value={query}
@@ -312,20 +310,17 @@ export function DictionaryView(): JSX.Element {
                 setQuery("");
               }}
               placeholder="Search rules"
-              className="w-[200px]"
+              className="w-[240px]"
             />
-            <Button variant="secondary" size="sm" onClick={() => void handleImport()}>
-              Import
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => void handleExport()}>
-              Export
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => void handleImport()}>
+                Import
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => void handleExport()}>
+                Export
+              </Button>
+            </div>
           </div>
-        }
-      />
-
-      <PageBody>
-        <div className="flex flex-col gap-6">
           {statusMessage && (
             <div className="rounded-md border border-border bg-surface px-4 py-2.5 text-xs text-text">
               {statusMessage}

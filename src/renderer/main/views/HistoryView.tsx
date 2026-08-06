@@ -257,23 +257,22 @@ export function HistoryView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <div className="flex shrink-0 items-end justify-between gap-5 px-6 pb-4 pt-5">
-        <div>
-          <h1 className="font-display text-2xl font-normal tracking-tight text-text">History</h1>
-          <p className="mt-1 text-sm text-text-muted">Find, copy, and review every transcript.</p>
-        </div>
-        <div className="pb-0.5">
-          <SearchInput
-            id={SEARCH_INPUT_ID}
-            value={query}
-            onChange={setQuery}
-            onClear={() => {
-              setQuery("");
-            }}
-            placeholder="Search transcripts"
-            className="w-[280px]"
-          />
-        </div>
+      <div className="flex shrink-0 items-center justify-between gap-4 px-6 pb-3 pt-5">
+        <SearchInput
+          id={SEARCH_INPUT_ID}
+          value={query}
+          onChange={setQuery}
+          onClear={() => {
+            setQuery("");
+          }}
+          placeholder="Search transcripts"
+          className="w-[280px]"
+        />
+        {!loading && records.length > 0 && (
+          <span className="text-2xs text-text-muted" data-numeric>
+            {String(records.length)} transcript{records.length === 1 ? "" : "s"}
+          </span>
+        )}
       </div>
 
       <div

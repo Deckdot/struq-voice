@@ -198,7 +198,7 @@ function TranscribingView({
   return (
     <>
       <div className="flex min-h-0 flex-1 items-center justify-center gap-2.5 px-0.5">
-        <BlocksWave className="h-5 w-5 shrink-0 text-info" />
+        <BlocksWave className="h-5 w-5 shrink-0 text-success" />
       </div>
       {liveEnabled && (
         <div className="transcript-scroll min-h-0 flex-1 overflow-y-auto rounded-sm bg-bg-sunken px-2.5 py-1.5">

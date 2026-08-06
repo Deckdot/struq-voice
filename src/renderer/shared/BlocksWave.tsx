@@ -20,7 +20,7 @@ export function BlocksWave({ className = "h-5 w-5" }: BlocksWaveProps): JSX.Elem
 
   if (reducedMotion === true) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} shrink-0 text-info`} aria-hidden="true">
+      <svg viewBox="0 0 24 24" className={`${className} shrink-0 text-success`} aria-hidden="true">
         <rect x="8" y="8" width="8" height="8" fill="currentColor" />
       </svg>
     );
@@ -28,7 +28,7 @@ export function BlocksWave({ className = "h-5 w-5" }: BlocksWaveProps): JSX.Elem
 
   return (
     <span
-      className={`inline-flex shrink-0 text-info [&>svg]:h-full [&>svg]:w-full ${className}`}
+      className={`inline-flex shrink-0 text-success [&>svg]:h-full [&>svg]:w-full ${className}`}
       aria-hidden="true"
       dangerouslySetInnerHTML={{ __html: markup }}
     />

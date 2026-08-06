@@ -154,7 +154,6 @@ const variantLabel = (fileName: string): string =>
 
 const buildWhisperModel = (variant: WhisperVariant): ModelInfo => {
   const base = variantLabel(variant.fileName);
-  const quantSuffix = variant.quant === null ? "" : ` (${variant.quant})`;
   const englishSuffix = variant.englishOnly ? " English-only" : "";
   const quantNote = variant.quant === null
     ? "Full precision weights."
@@ -162,7 +161,7 @@ const buildWhisperModel = (variant: WhisperVariant): ModelInfo => {
 
   return {
     id: `whisper-${variant.fileName.replace(/^ggml-/, "").replace(/\.bin$/, "")}`,
-    name: `Whisper ${base}${englishSuffix}${quantSuffix}`,
+    name: `Whisper ${base}${englishSuffix}`,
     engine: "whisper-cpp",
     bytes: variant.bytes,
     languages: variant.englishOnly ? "English only" : "99 languages",

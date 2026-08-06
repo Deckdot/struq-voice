@@ -16,7 +16,17 @@ const windowBackgroundColor = (): string =>
 const themeArg = (): string =>
   nativeTheme.shouldUseDarkColors ? "--struq-theme=dark" : "--struq-theme=light";
 
-export const createMainWindow = (): BrowserWindow => {
+export interface MainWindowOptions {
+  readonly locale?: string;
+  readonly dir?: "ltr" | "rtl";
+}
+
+export const createMainWindow = (options?: MainWindowOptions): BrowserWindow => {
+  const locale = options?.locale ?? "en";
+  const dir = options?.dir ?? "ltr";
+  const localeArg = `--struq-locale=${locale}`;
+  const dirArg = `--struq-dir=${dir}`;
+
   const window = new BrowserWindow({
     width: 1100,
     height: 720,
@@ -33,9 +43,9 @@ export const createMainWindow = (): BrowserWindow => {
       nodeIntegration: false,
       sandbox: true,
       preload: join(__dirname, "../preload/main.cjs"),
-      // The sandboxed preload reads channel names and the theme from argv;
+      // The sandboxed preload reads channel names, theme, locale and dir from argv;
       // they are declared in src/shared/ipc.ts and nowhere else.
-      additionalArguments: [channelsArg, themeArg()]
+      additionalArguments: [channelsArg, themeArg(), localeArg, dirArg]
     }
   });
 

@@ -4,10 +4,9 @@ import type { JSX } from "react";
 /**
  * The listening visualiser: mirrored bars on a canvas, redrawn on rAF.
  *
- * Levels arrive at 60Hz and are interpolated between frames, with a
- * peak-hold cap above each bar, so the meter reads as continuous
- * rather than stepped. Attack is fast, release is slow: that is what
- * makes a meter read as responsive rather than mushy.
+ * Frequency bands arrive at 60Hz. Input is spatially smoothed across adjacent
+ * bands to create a fluid wave, and gain-boosted with soft compression so speech
+ * fills the vertical space smoothly ("bigger in feel") without sporadic jitter.
  */
 export interface WaveformProps {
   /** Band levels in 0..1, fed at 60Hz from the recorder's analyser. */
@@ -20,13 +19,12 @@ export interface WaveformProps {
   readonly decayMs?: number | null;
 }
 
-const BAR_COUNT = 32;
-const BAR_WIDTH = 2;
-const MIN_BAR = 2;
+const BAR_COUNT = 28;
+const MIN_BAR = 3;
 
-const ATTACK = 0.55;
-const RELEASE = 0.12;
-const PEAK_FALL_PER_FRAME = 0.012;
+const ATTACK = 0.32;
+const RELEASE = 0.09;
+const PEAK_FALL_PER_FRAME = 0.01;
 
 const resolveColor = (element: HTMLElement, token: string, fallback: string): string => {
   const value = getComputedStyle(element).getPropertyValue(token).trim();
@@ -53,7 +51,22 @@ export function Waveform({
   const decayFromRef = useRef<number[]>(Array.from({ length: BAR_COUNT }, () => 0));
 
   useEffect(() => {
-    targetRef.current = Array.from({ length: BAR_COUNT }, (_, i) => bands[i] ?? 0);
+    // Spatial smoothing: 3-tap Gaussian filter across neighboring bands
+    // to eliminate single-frequency jitter and create a smooth wave contour.
+    const smoothed = new Array<number>(BAR_COUNT);
+    const n = bands.length;
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const srcIdx = Math.floor((i / BAR_COUNT) * n);
+      const prev = bands[Math.max(0, srcIdx - 1)] ?? 0;
+      const curr = bands[srcIdx] ?? 0;
+      const next = bands[Math.min(n - 1, srcIdx + 1)] ?? 0;
+      const avg = prev * 0.25 + curr * 0.5 + next * 0.25;
+
+      // Non-linear gain boost: map quiet/normal speech into a prominent vertical height
+      const boosted = Math.pow(Math.min(1, avg * 2.4), 0.72);
+      smoothed[i] = boosted;
+    }
+    targetRef.current = smoothed;
   }, [bands]);
 
   useEffect(() => {
@@ -119,7 +132,7 @@ export function Waveform({
       const centerY = height / 2;
       const usableHalf = Math.max(1, height / 2 - 1);
       const step = width / BAR_COUNT;
-      const barWidth = Math.max(1, Math.min(BAR_WIDTH, step - 1));
+      const barWidth = Math.max(2, Math.min(3.5, step - 2.2));
       const originX = (step - barWidth) / 2;
 
       for (let i = 0; i < BAR_COUNT; i++) {
@@ -131,8 +144,8 @@ export function Waveform({
           goal = from * (1 - eased);
         } else if (isIdle) {
           goal = reducedMotion
-            ? 0.04
-            : 0.05 + Math.sin(elapsed * 1.6 - i * 0.28) * 0.028;
+            ? 0.06
+            : 0.08 + Math.sin(elapsed * 1.8 - i * 0.25) * 0.04;
         } else {
           goal = target[i] ?? 0;
         }
@@ -146,7 +159,8 @@ export function Waveform({
         peaks[i] = next >= peak ? next : Math.max(next, peak - PEAK_FALL_PER_FRAME);
 
         const level = Math.min(1, Math.max(0, next));
-        const half = Math.max(MIN_BAR / 2, level * usableHalf);
+        // Fill up to usableHalf smoothly, with a solid minimum baseline
+        const half = Math.max(MIN_BAR / 2, (0.08 + level * 0.92) * usableHalf);
         const x = originX + i * step;
 
         context.fillStyle = barColor;
@@ -156,8 +170,8 @@ export function Waveform({
 
         if (!isIdle && !reducedMotion && decayStart === null && usableHalf >= 12) {
           const peakLevel = Math.min(1, Math.max(0, peaks[i] ?? 0));
-          const peakHalf = Math.max(MIN_BAR / 2, peakLevel * usableHalf);
-          if (peakHalf > half + 1.5) {
+          const peakHalf = Math.max(MIN_BAR / 2, (0.08 + peakLevel * 0.92) * usableHalf);
+          if (peakHalf > half + 2) {
             context.fillStyle = resolveColor(canvas, "--color-border-strong", "#c0c4b8");
             context.beginPath();
             context.roundRect(x, centerY - peakHalf, barWidth, 1.5, 0.75);

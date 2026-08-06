@@ -5,63 +5,52 @@
  * No regex over user text without a test.
  */
 
+import { applyDictionary } from "../../shared/dictionary";
+
 export interface DictionaryEntry {
   readonly from: string;
   readonly to: string;
   readonly matchCase: boolean;
   readonly wholeWord: boolean;
+  readonly enabled?: boolean;
 }
 
 export interface CleanupOptions {
   readonly dictionary: readonly DictionaryEntry[];
   readonly removeFillers: boolean;
   readonly addTrailingPunctuation: boolean;
+  readonly speechLanguage?: string;
 }
 
-const FILLERS = new Set(["um", "uh", "erm", "er", "hmm"]);
-
-/** Escape a string for use inside a RegExp. */
-const escapeRegExp = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const buildWholeWordPattern = (word: string): RegExp =>
-  new RegExp(`\\b${escapeRegExp(word)}\\b`, "gi");
-
-const buildAnyPattern = (word: string): RegExp =>
-  new RegExp(escapeRegExp(word), "g");
-
-const buildCaseSensitivePattern = (word: string, wholeWord: boolean): RegExp =>
-  new RegExp(
-    `${wholeWord ? "\\b" : ""}${escapeRegExp(word)}${wholeWord ? "\\b" : ""}`,
-    "g"
-  );
-
-const applyDictionary = (text: string, entries: readonly DictionaryEntry[]): string => {
-  let output = text;
-  for (const entry of entries) {
-    if (entry.from.length === 0) continue;
-    if (entry.matchCase) {
-      output = output.replace(
-        buildCaseSensitivePattern(entry.from, entry.wholeWord),
-        entry.to
-      );
-    } else if (entry.wholeWord) {
-      output = output.replace(buildWholeWordPattern(entry.from), entry.to);
-    } else {
-      output = output.replace(buildAnyPattern(entry.from), entry.to);
-    }
-  }
-  return output;
+const FILLER_TABLE: Record<string, readonly string[]> = {
+  en: ["um", "uh", "erm", "er", "hmm"],
+  nl: ["eh", "ehm", "uhm", "uh"],
+  de: ["äh", "ähm", "hm"],
+  fr: ["euh", "ben", "hein", "bah"],
+  es: ["eh", "este"],
+  it: ["ehm"],
+  pt: ["hum"],
+  pl: ["yyy", "eee"],
+  sv: ["öh", "ehm"],
+  ru: ["э"],
+  tr: ["ııı", "şey"],
+  ja: ["えーと", "あの", "まあ"],
+  zh: ["那个", "就是", "嗯"]
 };
 
-const removeFillers = (text: string): string =>
-  text
+const removeFillers = (text: string, language = "en"): string => {
+  const normalizedLocale = language.split("-")[0]?.toLowerCase() ?? "en";
+  const fillersList = FILLER_TABLE[normalizedLocale] ?? FILLER_TABLE["en"] ?? [];
+  const fillers = new Set(fillersList);
+  return text
+    .normalize("NFC")
     .split(/\s+/)
     .filter((word) => {
-      const clean = word.replace(/[.,!?;:]+$/, "").toLowerCase();
-      return !FILLERS.has(clean);
+      const clean = word.replace(/[.,!?;:]+$/, "").toLocaleLowerCase(normalizedLocale);
+      return !fillers.has(clean);
     })
     .join(" ");
+};
 
 const addTrailingPunctuation = (text: string): string => {
   const trimmed = text.trim();
@@ -78,7 +67,7 @@ export const cleanupTranscript = (text: string, options: CleanupOptions): string
     output = applyDictionary(output, options.dictionary);
   }
   if (options.removeFillers) {
-    output = removeFillers(output);
+    output = removeFillers(output, options.speechLanguage ?? "en");
   }
   if (options.addTrailingPunctuation) {
     output = addTrailingPunctuation(output);

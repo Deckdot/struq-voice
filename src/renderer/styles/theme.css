@@ -61,8 +61,8 @@
   --color-state-delivered: var(--sv-success);
   --color-state-error: var(--sv-danger);
   --color-state-idle: var(--sv-text-muted);
-  --font-display: "Urbanist", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Urbanist", "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", "Yu Gothic UI", "Malgun Gothic", "Nirmala UI", "Leelawadee UI", system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", "Yu Gothic UI", "Malgun Gothic", "Nirmala UI", "Leelawadee UI", system-ui, sans-serif;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 9px;
@@ -90,12 +90,15 @@
   --ease-move: cubic-bezier(0.76, 0, 0.24, 1);
   --ease-panel: cubic-bezier(0.83, 0, 0.17, 1);
   --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-draw: cubic-bezier(0.34, 0.05, 0.2, 1);
   --duration-press: 120ms;
   --duration-hover: 180ms;
   --duration-control: 220ms;
   --duration-pop: 260ms;
   --duration-page: 320ms;
   --duration-splash: 650ms;
+  --duration-curtain: 640ms;
+  --duration-draw: 1600ms;
   --duration-capture: 300ms;
 }
 
@@ -138,17 +141,17 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --sv-bg: oklch(0.18 0.005 250);
-  --sv-bg-sunken: oklch(0.15 0.006 250);
-  --sv-surface: oklch(0.22 0.006 250);
-  --sv-surface-hover: oklch(0.255 0.007 250);
-  --sv-surface-active: oklch(0.285 0.008 250);
+  --sv-bg: oklch(0.23 0.006 250);
+  --sv-bg-sunken: oklch(0.23 0.006 250);
+  --sv-surface: oklch(0.27 0.007 250);
+  --sv-surface-hover: oklch(0.31 0.008 250);
+  --sv-surface-active: oklch(0.34 0.009 250);
   --sv-text: oklch(0.96 0.008 95);
-  --sv-text-secondary: oklch(0.8 0.008 95);
-  --sv-text-muted: oklch(0.65 0.008 250);
-  --sv-text-inverse: oklch(0.18 0.005 250);
-  --sv-border: oklch(0.31 0.008 250);
-  --sv-border-strong: oklch(0.4 0.01 250);
+  --sv-text-secondary: oklch(0.81 0.008 95);
+  --sv-text-muted: oklch(0.66 0.008 250);
+  --sv-text-inverse: oklch(0.23 0.006 250);
+  --sv-border: oklch(0.34 0.008 250);
+  --sv-border-strong: oklch(0.43 0.01 250);
   --sv-accent: oklch(0.7 0.13 43);
   --sv-accent-solid: oklch(0.63 0.14 43);
   --sv-accent-solid-hover: oklch(0.68 0.14 43);
@@ -209,18 +212,68 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* One focus ring for the entire application, accent-coloured, offset so
-     it never crowds the element it belongs to. Visible only for keyboard
-     users, present for all of them. */
+  /* Single, ultra-clean border focus transition.
+     Eliminates duplicate double rings by removing outer box-shadow outlines,
+     relying strictly on a single smooth border color shift. */
+  *,
+  *:focus,
+  *:focus-visible,
+  input:focus,
+  textarea:focus,
+  select:focus,
+  button:focus {
+    outline: none !important;
+    outline-style: none !important;
+  }
+
   :focus-visible {
-    outline: 2px solid var(--sv-accent);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
+    border-color: var(--sv-accent) !important;
+    box-shadow: none !important;
+    transition: border-color 180ms var(--ease-micro);
+  }
+
+  input,
+  textarea,
+  select {
+    transition: border-color 180ms var(--ease-micro), background-color 180ms var(--ease-micro);
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: var(--sv-accent) !important;
+    box-shadow: none !important;
   }
 
   ::selection {
     background-color: var(--sv-accent-soft);
     color: var(--sv-text);
+  }
+
+  /* Sleek custom scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sv-border-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+    margin-block: 12px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--sv-border-strong);
+    border-radius: 9999px;
+    transition: background-color 150ms var(--ease-micro);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--sv-accent);
   }
 
   /* Theme switches blend over 200ms instead of flashing. The transition is
@@ -251,6 +304,18 @@
     body {
       transition: none;
     }
+  }
+
+  /* Native <select> dropdowns: give the OS enough signal to use the right
+     palette. The option background and colour are the only properties the
+     OS will honour, and only when color-scheme matches the host page. */
+  select {
+    color-scheme: inherit;
+  }
+
+  select option {
+    background-color: var(--sv-surface);
+    color: var(--sv-text);
   }
 }
 

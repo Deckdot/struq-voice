@@ -4,8 +4,11 @@ import { Command } from "cmdk";
 import { AnimatePresence, motion } from "motion/react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
-import { ROUTE_LABELS, ROUTE_ORDER, useMainStore } from "../store/use-main-store";
+import { ROUTE_ORDER, useMainStore } from "../store/use-main-store";
 import type { Route } from "../store/use-main-store";
+
+import { useTranslation } from "../lib/useTranslation";
+import type { MessageKey } from "../../../shared/i18n";
 
 export interface CommandPaletteProps {
   readonly open: boolean;
@@ -15,17 +18,26 @@ export interface CommandPaletteProps {
 const ROUTE_ICONS: Record<Route, string> = {
   dictate: "ph:microphone",
   history: "ph:clock-counter-clockwise",
+  dictionary: "ph:book-open-text",
   models: "ph:cube",
   settings: "ph:gear"
 };
 
-const SETTINGS_CATEGORIES: readonly { id: string; label: string; icon: string }[] = [
-  { id: "general", label: "General", icon: "ph:sliders-horizontal" },
-  { id: "capture", label: "Capture", icon: "ph:microphone" },
-  { id: "transcription", label: "Transcription", icon: "ph:wave-sine" },
-  { id: "delivery", label: "Delivery", icon: "ph:clipboard-text" },
-  { id: "text", label: "Text", icon: "ph:text-t" },
-  { id: "appearance", label: "Appearance", icon: "ph:circle-half" }
+const ROUTE_KEYS: Record<Route, MessageKey> = {
+  dictate: "nav.dictate",
+  history: "nav.history",
+  dictionary: "nav.dictionary",
+  models: "nav.models",
+  settings: "nav.settings"
+};
+
+const SETTINGS_CATEGORIES: readonly { id: string; key: MessageKey; icon: string }[] = [
+  { id: "general", key: "settings.category.general", icon: "ph:sliders-horizontal" },
+  { id: "capture", key: "settings.category.capture", icon: "ph:microphone" },
+  { id: "transcription", key: "settings.category.transcription", icon: "ph:wave-sine" },
+  { id: "delivery", key: "settings.category.delivery", icon: "ph:clipboard-text" },
+  { id: "text", key: "settings.category.text", icon: "ph:text-t" },
+  { id: "appearance", key: "settings.category.appearance", icon: "ph:circle-half" }
 ];
 
 const ITEM_CLASS =
@@ -38,6 +50,7 @@ const ITEM_CLASS =
  */
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX.Element | null {
   const api = window.struqVoice as MainWindowApi;
+  const { t } = useTranslation();
   const setRoute = useMainStore((state) => state.setRoute);
   const [copied, setCopied] = useState(false);
 
@@ -105,21 +118,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                   aria-hidden="true"
                 />
                 <Command.Input
-                  placeholder="Type a command or search..."
+                  placeholder={t("commandPalette.searchPlaceholder")}
                   className="h-11 w-full bg-transparent text-base text-text placeholder:text-text-muted focus:outline-none"
                 />
               </div>
               <Command.List className="max-h-72 overflow-y-auto p-1.5">
                 <Command.Empty className="px-4 py-6 text-center text-sm text-text-muted">
-                  No results
+                  {t("commandPalette.empty")}
                 </Command.Empty>
 
-                <Command.Group heading="Pages">
+                <Command.Group heading={t("commandPalette.group.pages")}>
                   {ROUTE_ORDER.map((route, index) => {
                     return (
                       <Command.Item
                         key={route}
-                        value={`page-${ROUTE_LABELS[route]}`}
+                        value={`page-${t(ROUTE_KEYS[route])}`}
                         onSelect={() => {
                           navigate(route);
                         }}
@@ -131,7 +144,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                             className="h-4 w-4 shrink-0 text-text-muted"
                             aria-hidden="true"
                           />
-                          {ROUTE_LABELS[route]}
+                          {t(ROUTE_KEYS[route])}
                         </span>
                         <span className="text-xs text-text-muted">Ctrl+{index + 1}</span>
                       </Command.Item>
@@ -139,7 +152,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                   })}
                 </Command.Group>
 
-                <Command.Group heading="Actions">
+                <Command.Group heading={t("commandPalette.group.actions")}>
                   <Command.Item
                     value="copy-last-transcript"
                     onSelect={copyLast}
@@ -150,7 +163,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                       className="h-4 w-4 text-text-muted"
                       aria-hidden="true"
                     />
-                    {copied ? "Copied" : "Copy last transcript"}
+                    {copied ? t("commandPalette.action.copied") : t("commandPalette.action.copyLast")}
                   </Command.Item>
                   <Command.Item
                     value="check-updates"
@@ -165,7 +178,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                       className="h-4 w-4 text-text-muted"
                       aria-hidden="true"
                     />
-                    Check for updates
+                    {t("commandPalette.action.checkUpdates")}
                   </Command.Item>
                   <Command.Item
                     value="theme-system"
@@ -176,7 +189,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                     className={ITEM_CLASS}
                   >
                     <Icon icon="ph:circle-half" className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                    Use system theme
+                    {t("commandPalette.action.themeSystem")}
                   </Command.Item>
                   <Command.Item
                     value="theme-light"
@@ -187,7 +200,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                     className={ITEM_CLASS}
                   >
                     <Icon icon="ph:sun" className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                    Use light theme
+                    {t("commandPalette.action.themeLight")}
                   </Command.Item>
                   <Command.Item
                     value="theme-dark"
@@ -198,7 +211,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                     className={ITEM_CLASS}
                   >
                     <Icon icon="ph:moon" className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                    Use dark theme
+                    {t("commandPalette.action.themeDark")}
                   </Command.Item>
                   <Command.Item
                     value="reset-panel"
@@ -209,11 +222,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                     className={ITEM_CLASS}
                   >
                     <Icon icon="ph:monitor" className="h-4 w-4 text-text-muted" aria-hidden="true" />
-                    Reset panel position
+                    {t("commandPalette.action.resetPanel")}
                   </Command.Item>
                 </Command.Group>
 
-                <Command.Group heading="Settings">
+                <Command.Group heading={t("commandPalette.group.settings")}>
                   {SETTINGS_CATEGORIES.map((category) => {
                     return (
                       <Command.Item
@@ -229,7 +242,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                           className="h-4 w-4 text-text-muted"
                           aria-hidden="true"
                         />
-                        {category.label}
+                        {t(category.key)}
                       </Command.Item>
                     );
                   })}

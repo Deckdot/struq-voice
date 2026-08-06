@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Variants } from "motion/react";
@@ -11,6 +11,7 @@ import { Onboarding } from "./onboarding/Onboarding";
 import { useMainStore } from "./store/use-main-store";
 import { DictateView } from "./views/DictateView";
 import { HistoryView } from "./views/HistoryView";
+import { DictionaryView } from "./views/DictionaryView";
 import { ModelsView } from "./views/ModelsView";
 import { SettingsView } from "./views/SettingsView";
 import type { MainWindowApi } from "../../shared/api";
@@ -48,15 +49,39 @@ const REDUCED_PAGE_VARIANTS: Variants = {
   exit: { opacity: 0 }
 };
 
+/**
+ * The shell rises into the space the curtain vacates. The delay overlaps the
+ * lift rather than queueing behind it, so the two read as one gesture.
+ */
+const SHELL_VARIANTS: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  revealed: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.72, delay: 0.18, ease: [0.16, 1, 0.3, 1] }
+  }
+};
+
+const REDUCED_SHELL_VARIANTS: Variants = {
+  hidden: { opacity: 0 },
+  revealed: { opacity: 1, transition: { duration: 0.25 } }
+};
+
 export function App(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const route = useMainStore((state) => state.route);
   const routeDirection = useMainStore((state) => state.routeDirection);
   const capture = useMainStore((state) => state.capture);
+  const shellRevealed = useMainStore((state) => state.shellRevealed);
+  const setShellRevealed = useMainStore((state) => state.setShellRevealed);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [onboarding, setOnboarding] = useState(false);
   const reducedMotion = useReducedMotion();
+
+  const handleReveal = useCallback(() => {
+    setShellRevealed(true);
+  }, [setShellRevealed]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -94,39 +119,47 @@ export function App(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col bg-bg text-text">
-      <Splash />
+      <Splash onReveal={handleReveal} />
       <TitleBar />
-      {onboarding ? (
-        <Onboarding
-          settings={settings ?? DEFAULT_SETTINGS}
-          capture={capture}
-          onFinished={() => {
-            setOnboarding(false);
-          }}
-        />
-      ) : (
-        <div className="flex min-h-0 flex-1">
-          <Rail />
-          <main className="relative min-h-0 flex-1 overflow-hidden bg-bg" data-selectable>
-            <AnimatePresence mode="popLayout" initial={false} custom={routeDirection}>
-              <motion.div
-                key={route}
-                custom={routeDirection}
-                variants={variants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="h-full"
-              >
-                {route === "dictate" && <DictateView />}
-                {route === "history" && <HistoryView />}
-                {route === "models" && <ModelsView />}
-                {route === "settings" && <SettingsView />}
-              </motion.div>
-            </AnimatePresence>
-          </main>
-        </div>
-      )}
+      <motion.div
+        className="flex min-h-0 flex-1 flex-col"
+        variants={reducedMotion === true ? REDUCED_SHELL_VARIANTS : SHELL_VARIANTS}
+        initial="hidden"
+        animate={shellRevealed ? "revealed" : "hidden"}
+      >
+        {onboarding ? (
+          <Onboarding
+            settings={settings ?? DEFAULT_SETTINGS}
+            capture={capture}
+            onFinished={() => {
+              setOnboarding(false);
+            }}
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1">
+            <Rail />
+            <main className="relative min-h-0 flex-1 overflow-hidden bg-bg" data-selectable>
+              <AnimatePresence mode="wait" initial={false} custom={routeDirection}>
+                <motion.div
+                  key={route}
+                  custom={routeDirection}
+                  variants={variants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className="h-full"
+                >
+                  {route === "dictate" && <DictateView />}
+                  {route === "history" && <HistoryView />}
+                  {route === "dictionary" && <DictionaryView />}
+                  {route === "models" && <ModelsView />}
+                  {route === "settings" && <SettingsView />}
+                </motion.div>
+              </AnimatePresence>
+            </main>
+          </div>
+        )}
+      </motion.div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       {/* Not during onboarding: a first run has nothing to update from. */}
       {!onboarding && <UpdateDialog api={api} />}

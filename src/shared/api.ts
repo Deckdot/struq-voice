@@ -14,6 +14,8 @@ import type { UpdateState } from "./updates";
 export interface MainWindowApi {
   readonly windowKind: "main";
   readonly initialTheme: "light" | "dark";
+  readonly initialLocale: string;
+  readonly initialDir: "ltr" | "rtl";
   readonly getAppVersion: () => Promise<string>;
   readonly getReadiness: () => Promise<AppReadiness>;
   readonly onReadinessChanged: (listener: (state: AppReadiness) => void) => () => void;
@@ -68,6 +70,10 @@ export interface MainWindowApi {
     update: (patch: Partial<Settings>) => Promise<{ settings: Settings }>;
     onChange: (listener: (settings: Settings) => void) => () => void;
   };
+  readonly dictionary: {
+    export: () => Promise<{ ok: boolean; path?: string; message?: string }>;
+    import: () => Promise<{ ok: boolean; added: number; skipped: number; message?: string }>;
+  };
   readonly openRouterKey: {
     status: () => Promise<{ configured: boolean; stored: boolean }>;
     set: (key: string) => Promise<{ ok: boolean; message?: string }>;
@@ -94,6 +100,8 @@ export interface MainWindowApi {
 export interface OverlayWindowApi {
   readonly windowKind: "overlay";
   readonly initialTheme: "light" | "dark";
+  readonly initialLocale: string;
+  readonly initialDir: "ltr" | "rtl";
   readonly onCaptureStateChanged: (
     listener: (state: CaptureState, liveTranscription: boolean) => void
   ) => () => void;

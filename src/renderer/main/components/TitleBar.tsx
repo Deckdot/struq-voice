@@ -1,26 +1,10 @@
 import type { CSSProperties, JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
-import { BrandLockup } from "./Brand";
+import { BrandMark } from "./Brand";
 
-/**
- * The custom title bar of the frameless main window. Draggable via the
- * native -webkit-app-region, which requires the buttons to opt out.
- *
- * The caption buttons follow the Windows 11 metrics rather than a web
- * convention: 46x36, square, flush into the top-right corner with no gap
- * and no rounding, and close fills with the system red on hover. That red
- * is hard-coded because it is a Windows constant, not a brand colour, and
- * it stays the same in both themes.
- *
- * Every control is wrapped in an arrow function rather than passed as a bare
- * reference. React hands the click handler its SyntheticEvent, and a
- * contextBridge function forwards its arguments over IPC, where a
- * SyntheticEvent fails to structured-clone: the call throws "An object could
- * not be cloned" and the send never happens. The wrapper drops the argument.
- */
 const CONTROL_BASE =
-  "flex h-9 w-[46px] items-center justify-center text-text-secondary transition-colors duration-hover hover:bg-surface-hover hover:text-text active:bg-surface-active";
+  "flex h-9 w-[46px] items-center justify-center text-text-secondary transition-colors duration-hover hover:bg-border/70 hover:text-text active:bg-border-strong/80";
 
 export function TitleBar(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
@@ -30,7 +14,14 @@ export function TitleBar(): JSX.Element {
       className="relative flex h-9 shrink-0 items-center justify-between border-b border-border bg-bg"
       style={{ WebkitAppRegion: "drag" } as CSSProperties}
     >
-      <BrandLockup size={22} className="pointer-events-none ml-3" />
+      <BrandMark size={20} className="pointer-events-none ml-3 text-text dark:text-ember" />
+
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <span className="font-display text-xs font-normal tracking-wide text-text-muted">
+          Struq Voice
+        </span>
+      </div>
+
       <div
         className="relative flex items-center"
         style={{ WebkitAppRegion: "no-drag" } as CSSProperties}

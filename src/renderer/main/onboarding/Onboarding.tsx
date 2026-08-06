@@ -25,31 +25,9 @@ import { TryItStep } from "./TryItStep";
  * completion lands in settings.onboarding.completed.
  */
 
+import { useTranslation } from "../lib/useTranslation";
+
 const STEP_COUNT = 4;
-
-interface StepCopy {
-  readonly title: string;
-  readonly description: string;
-}
-
-const STEP_COPY: readonly StepCopy[] = [
-  {
-    title: "Your microphone",
-    description: "Already chosen. Say something to make sure the bar moves."
-  },
-  {
-    title: "Your keys",
-    description: "Already registered. Change them if they clash with something you use."
-  },
-  {
-    title: "Your model",
-    description: "Picked for this computer. It is downloading in the background while you read this."
-  },
-  {
-    title: "Try it",
-    description: "Hold your key, say a sentence, release. That is the whole product."
-  }
-];
 
 export interface OnboardingProps {
   readonly settings: Settings;
@@ -59,6 +37,7 @@ export interface OnboardingProps {
 
 export function Onboarding({ settings, capture, onFinished }: OnboardingProps): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
+  const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [local, setLocal] = useState<Settings>(settings);
   const [micReady, setMicReady] = useState(false);
@@ -69,6 +48,25 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
   const [transcript, setTranscript] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   const lastTick = useRef<{ atMs: number; bytes: number } | null>(null);
+
+  const stepCopy: readonly { title: string; description: string }[] = [
+    {
+      title: t("onboarding.step.mic.title"),
+      description: t("onboarding.step.mic.desc")
+    },
+    {
+      title: t("onboarding.step.keys.title"),
+      description: t("onboarding.step.keys.desc")
+    },
+    {
+      title: t("onboarding.step.model.title"),
+      description: t("onboarding.step.model.desc")
+    },
+    {
+      title: t("onboarding.step.try.title"),
+      description: t("onboarding.step.try.desc")
+    }
+  ];
 
   useEffect(() => {
     setLocal(settings);
@@ -138,7 +136,7 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
   const completed: readonly boolean[] = [micReady, true, installed, transcript !== null];
 
   const last = step === STEP_COUNT - 1;
-  const copy = STEP_COPY[step] ?? STEP_COPY[0] ?? { title: "", description: "" };
+  const copy = stepCopy[step] ?? stepCopy[0] ?? { title: "", description: "" };
 
   if (showDone) {
     return (
@@ -152,15 +150,14 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
           <span className="flex h-12 w-12 items-center justify-center rounded-pill border border-success bg-surface text-success">
             <Icon icon="ph:check" className="h-6 w-6" aria-hidden="true" />
           </span>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">
-            You are ready.
+          <h1 className="font-display text-2xl font-medium tracking-tight text-text">
+            {t("onboarding.done.title")}
           </h1>
           <p className="max-w-sm text-sm text-text-muted">
-            Struq Voice will sit in the tray, listen for your key, and put words where your cursor
-            is. You can change anything from Settings.
+            {t("onboarding.done.body")}
           </p>
           <Button variant="primary" size="lg" onClick={finish}>
-            Start using Struq Voice
+            {t("onboarding.done.startBtn")}
           </Button>
         </motion.div>
       </div>
@@ -188,7 +185,7 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
                 }
               }}
             >
-              {last ? "Skip" : "Skip setup"}
+              {last ? t("onboarding.skipLast") : t("onboarding.skip")}
             </Button>
             <div className="flex items-center gap-2">
               {step > 0 && (
@@ -199,7 +196,7 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
                     setStep((current) => current - 1);
                   }}
                 >
-                  Back
+                  {t("onboarding.back")}
                 </Button>
               )}
               <Button
@@ -217,7 +214,7 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
                   setStep((current) => current + 1);
                 }}
               >
-                {last ? "Finish" : "Continue"}
+                {last ? t("onboarding.finish") : t("onboarding.continue")}
               </Button>
             </div>
           </>

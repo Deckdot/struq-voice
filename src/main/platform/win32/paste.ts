@@ -38,6 +38,7 @@ const execFileAsync = promisify(execFile);
 export interface PasteOptions {
   readonly restoreClipboard: boolean;
   readonly restoreClipboardDelayMs: number;
+  readonly pressEnterAfterPaste?: boolean;
 }
 
 export interface PasteOutcome {
@@ -48,7 +49,9 @@ export interface PasteDeps {
   readonly getFocusedWindow: () => BrowserWindow | null;
   readonly clipboard: Pick<typeof clipboard, "readText" | "writeText">;
   readonly keyTap: () => void;
+  readonly keyTapEnter?: () => void;
   readonly execPowershell: () => Promise<void>;
+  readonly execPowershellEnter?: () => Promise<void>;
   readonly delay: (ms: number) => Promise<void>;
 }
 
@@ -73,6 +76,21 @@ const sendPasteKeystroke = async (): Promise<void> => {
   );
 };
 
+const sendEnterKeystroke = async (): Promise<void> => {
+  await execFileAsync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-WindowStyle",
+      "Hidden",
+      "-Command",
+      "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')",
+    ],
+    { timeout: 5_000, windowsHide: true },
+  );
+};
+
 const createDefaultDeps = (): PasteDeps => ({
   getFocusedWindow: () => BrowserWindow.getFocusedWindow(),
   clipboard: {
@@ -84,7 +102,11 @@ const createDefaultDeps = (): PasteDeps => ({
   keyTap: () => {
     uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]);
   },
+  keyTapEnter: () => {
+    uIOhook.keyTap(UiohookKey.Enter);
+  },
   execPowershell: sendPasteKeystroke,
+  execPowershellEnter: sendEnterKeystroke,
   delay: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
 
@@ -132,6 +154,19 @@ export const insertTextIntoActiveApp = async (
       // Ctrl+V" instead of failing the whole flow. Leave the clipboard as
       // it is so the manual paste still works.
       return ok({ inserted: false });
+    }
+  }
+
+  if (options.pressEnterAfterPaste === true) {
+    await deps.delay(50);
+    try {
+      deps.keyTapEnter?.();
+    } catch {
+      try {
+        await deps.execPowershellEnter?.();
+      } catch {
+        // Target app rejected enter synthesis
+      }
     }
   }
 

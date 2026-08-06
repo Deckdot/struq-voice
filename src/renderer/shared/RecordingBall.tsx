@@ -1,34 +1,46 @@
-import { useId } from "react";
 import type { JSX } from "react";
-import { useReducedMotion } from "motion/react";
-import bouncingBallSvg from "../../../bouncing-ball.svg?raw";
 
 export interface RecordingBallProps {
   readonly className?: string;
 }
 
-/** The supplied recording mark, themed through currentColor and static when motion is reduced. */
+/** The supplied recording mark, themed through currentColor with smooth infinite CSS keyframe bouncing animation. */
 export function RecordingBall({ className = "h-4 w-4" }: RecordingBallProps): JSX.Element {
-  const reducedMotion = useReducedMotion();
-  const instanceId = useId().replaceAll(":", "");
-  const markup = bouncingBallSvg
-    .replaceAll("spinner_jbYs", `${instanceId}_drop`)
-    .replaceAll("spinner_ADF4", `${instanceId}_squash`)
-    .replaceAll("spinner_JZdr", `${instanceId}_rise`);
-
-  if (reducedMotion === true) {
-    return (
-      <svg viewBox="0 0 24 24" className={`${className} shrink-0 text-success`} aria-hidden="true">
-        <circle cx="12" cy="12" r="4" fill="currentColor" />
-      </svg>
-    );
-  }
-
   return (
-    <span
-      className={`inline-flex shrink-0 text-success [&>svg]:h-full [&>svg]:w-full ${className}`}
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={`shrink-0 text-success ${className}`}
       aria-hidden="true"
-      dangerouslySetInnerHTML={{ __html: markup }}
-    />
+    >
+      <style>{`
+        @keyframes sv-bouncing-ball-anim {
+          0% {
+            transform: translateY(0px) scale(1, 1);
+            animation-timing-function: cubic-bezier(0.33, 0, 0.66, 0.33);
+          }
+          44% {
+            transform: translateY(14.5px) scale(1, 1);
+            animation-timing-function: cubic-bezier(0.33, 0, 0.66, 0.33);
+          }
+          50% {
+            transform: translateY(15.5px) scale(1.25, 0.72);
+            animation-timing-function: cubic-bezier(0.33, 0.66, 0.66, 1);
+          }
+          56% {
+            transform: translateY(14.5px) scale(0.92, 1.08);
+            animation-timing-function: cubic-bezier(0.33, 0.66, 0.66, 1);
+          }
+          100% {
+            transform: translateY(0px) scale(1, 1);
+          }
+        }
+        .sv-bouncing-ball-element {
+          transform-origin: 12px 20px;
+          animation: sv-bouncing-ball-anim 0.8s infinite;
+        }
+      `}</style>
+      <ellipse className="sv-bouncing-ball-element" cx="12" cy="4.5" rx="4" ry="4" fill="currentColor" />
+    </svg>
   );
 }

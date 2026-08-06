@@ -4,7 +4,8 @@ import { Icon } from "@iconify/react";
 import { useMainStore } from "../store/use-main-store";
 import { PageBody } from "../components/PageHeader";
 import { MicrophoneMeter } from "../components/MicrophoneMeter";
-import { Button, IconButton, Kbd, SettingsGroup, StatTile, Sparkline } from "../components/ui";
+import { Button, IconButton, Kbd, SettingsGroup, Skeleton, StatTile } from "../components/ui";
+import { HistoryChart } from "../components/HistoryChart";
 import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
@@ -41,13 +42,7 @@ const formatDuration = (ms: number): string => {
   return `${String(Math.floor(minutes / 60))}h ${String(minutes % 60)}m`;
 };
 
-const PHASE_LABEL: Record<string, string> = {
-  arming: "Starting the microphone",
-  listening: "Listening",
-  transcribing: "Writing it down",
-  delivering: "Delivered",
-  error: "That capture failed"
-};
+
 
 interface Blocker {
   readonly message: string;
@@ -55,14 +50,19 @@ interface Blocker {
   readonly run: () => void;
 }
 
+import { useTranslation } from "../lib/useTranslation";
+
 export function DictateView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
+  const { t } = useTranslation();
   const capture = useMainStore((state) => state.capture);
+  const shellRevealed = useMainStore((state) => state.shellRevealed);
   const setRoute = useMainStore((state) => state.setRoute);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [models, setModels] = useState<readonly ModelStatus[]>([]);
   const [recent, setRecent] = useState<readonly TranscriptRecord[]>([]);
   const [stats, setStats] = useState<HistoryStatsResult>(EMPTY_STATS);
+  const [statsLoaded, setStatsLoaded] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [level, setLevel] = useState(0);
   const [keyConfigured, setKeyConfigured] = useState(false);
@@ -89,7 +89,10 @@ export function DictateView(): JSX.Element {
     void api.history.list({ limit: 5 }).then(({ items }) => {
       setRecent(items);
     });
-    void api.history.stats().then(setStats);
+    void api.history.stats().then((result) => {
+      setStats(result);
+      setStatsLoaded(true);
+    });
   }, [api, capture.phase]);
 
   useEffect(() => {
@@ -128,38 +131,44 @@ export function DictateView(): JSX.Element {
 
   const blocker: Blocker | null = isMock
     ? {
-        message: "Practice mode returns fixed text instead of transcribing.",
-        action: "Choose a service",
+        message: t("dictate.blocker.mock.message"),
+        action: t("dictate.blocker.mock.action"),
         run: () => {
           openSettingsCategory("transcription");
         }
       }
     : isLocal && modelStatus?.installed !== true
       ? {
-          message: `${findModel(engineModelId)?.name ?? "The model"} is not on this computer yet.`,
-          action: "Download it",
+          message: t("dictate.blocker.localMissing.message", {
+            model: findModel(engineModelId)?.name ?? "Model"
+          }),
+          action: t("dictate.blocker.localMissing.action"),
           run: () => {
             setRoute("models");
           }
         }
       : isCloud && !keyConfigured
         ? {
-            message: "OpenRouter needs an API key before it can transcribe.",
-            action: "Add a key",
+            message: t("dictate.blocker.cloudKey.message"),
+            action: t("dictate.blocker.cloudKey.action"),
             run: () => {
               openSettingsCategory("transcription");
             }
           }
         : null;
 
-  const phaseLabel = PHASE_LABEL[capture.phase];
+  const phaseLabelMap: Record<string, string> = {
+    arming: t("dictate.phase.arming"),
+    listening: t("dictate.phase.listening"),
+    transcribing: t("dictate.phase.transcribing"),
+    delivering: t("dictate.phase.delivering"),
+    error: t("dictate.phase.error")
+  };
+  const phaseLabel = phaseLabelMap[capture.phase];
+
   return (
     <div className="flex h-full flex-col bg-bg">
       <PageBody>
-        <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">Dictate</h1>
-          <p className="mt-1 text-sm text-text-muted">Your voice workspace is ready wherever you type.</p>
-        </div>
         {blocker !== null && (
           <div className="flex items-center gap-3 rounded-lg border border-warning bg-warning-soft px-4 py-3">
             <Icon icon="ph:warning" className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
@@ -173,41 +182,53 @@ export function DictateView(): JSX.Element {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatTile
             icon="ph:article"
-            label="Words"
+            label={t("dictate.stats.words")}
             value={stats.todayWords.toLocaleString()}
-            hint="today"
+            hint={t("dictate.stats.today")}
           />
           <StatTile
             icon="ph:timer"
-            label="Spoken"
+            label={t("dictate.stats.spoken")}
             value={formatDuration(stats.todayDurationMs)}
-            hint="today"
+            hint={t("dictate.stats.today")}
           />
           <StatTile
             icon="ph:trend-up"
-            label="Pace"
+            label={t("dictate.stats.pace")}
             value={stats.wpm > 0 ? String(stats.wpm) : "--"}
-            hint="words per minute"
+            hint={t("dictate.stats.wpmHint")}
           />
           <StatTile
             icon="ph:flame"
-            label="Streak"
+            label={t("dictate.stats.streak")}
             value={String(stats.streakDays)}
-            hint={stats.streakDays === 1 ? "day" : "days"}
+            hint={stats.streakDays === 1 ? t("dictate.stats.day") : t("dictate.stats.days")}
           />
         </div>
 
-        {stats.totalTranscripts > 0 && (
-          <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3">
-            <Sparkline days={stats.daily} />
-            <div className="flex items-center justify-between text-2xs text-text-muted">
-              <span>Last 14 days</span>
-              <span data-numeric>
-                {stats.totalWords.toLocaleString()} words all time, over{" "}
-                {formatDuration(stats.totalDurationMs)}
-              </span>
+        {!statsLoaded || !shellRevealed ? (
+          <div className="flex h-52 flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3.5">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-36" />
             </div>
+            <Skeleton className="h-36 w-full rounded-md" />
           </div>
+        ) : (
+          stats.totalTranscripts > 0 && (
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-normal text-text-muted">{t("dictate.activity.title")}</span>
+                <span className="text-2xs font-normal text-text-muted" data-numeric>
+                  {t("dictate.activity.summary", {
+                    totalWords: stats.totalWords.toLocaleString(),
+                    duration: formatDuration(stats.totalDurationMs)
+                  })}
+                </span>
+              </div>
+              <HistoryChart days={stats.daily} />
+            </div>
+          )
         )}
 
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-4">
@@ -227,12 +248,12 @@ export function DictateView(): JSX.Element {
                 aria-hidden="true"
               />
               <span className="truncate text-sm font-medium text-text">
-                {phaseLabel ?? "Hold to speak, anywhere in Windows"}
+                {phaseLabel ?? t("dictate.prompt.default")}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Kbd accelerator={settings.pttAccelerator} size="md" />
-              <span className="text-xs text-text-muted">or</span>
+              <span className="text-xs text-text-muted">{t("dictate.prompt.or")}</span>
               <Kbd accelerator={settings.toggleAccelerator} size="md" />
             </div>
           </div>
@@ -240,7 +261,7 @@ export function DictateView(): JSX.Element {
         </div>
 
         <SettingsGroup
-          title="Recent"
+          title={t("dictate.recent.title")}
           actions={
             recent.length > 0 ? (
               <Button
@@ -250,7 +271,7 @@ export function DictateView(): JSX.Element {
                   setRoute("history");
                 }}
               >
-                View all
+                {t("dictate.recent.viewAll")}
                 <Icon icon="ph:arrow-right" className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
             ) : undefined
@@ -258,11 +279,19 @@ export function DictateView(): JSX.Element {
         >
           {recent.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-text-muted">
-              Nothing yet. Hold your key and say a sentence.
+              {t("dictate.recent.empty")}
             </p>
           ) : (
             recent.map((record) => (
-              <div key={record.id} className="group flex items-center gap-3 px-4 py-2.5">
+              <button
+                key={record.id}
+                type="button"
+                onClick={() => {
+                  api.clipboard.copy(record.text);
+                  setCopiedId(record.id);
+                }}
+                className="group flex w-full cursor-pointer items-center gap-3 rounded-md px-4 py-2.5 text-start transition-colors duration-hover hover:bg-surface-hover/80"
+              >
                 <p className="min-w-0 flex-1 truncate text-sm text-text">{record.text}</p>
                 <span className="shrink-0 text-2xs text-text-muted" data-numeric>
                   {formatRelativeTime(record.createdAtMs)}
@@ -274,7 +303,7 @@ export function DictateView(): JSX.Element {
                 ) : (
                   <IconButton
                     icon="ph:copy"
-                    label="Copy transcript"
+                    label={t("dictate.recent.copyTranscript")}
                     size="sm"
                     className="shrink-0"
                     onClick={() => {
@@ -283,7 +312,7 @@ export function DictateView(): JSX.Element {
                     }}
                   />
                 )}
-              </div>
+              </button>
             ))
           )}
         </SettingsGroup>

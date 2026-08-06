@@ -26,9 +26,21 @@ const readChannels = (argv: readonly string[]): PreloadChannels => {
 const readTheme = (argv: readonly string[]): "light" | "dark" =>
   argv.includes("--struq-theme=dark") ? "dark" : "light";
 
+const readLocale = (argv: readonly string[]): string => {
+  const arg = argv.find((entry) => entry.startsWith("--struq-locale="));
+  return arg !== undefined ? arg.slice("--struq-locale=".length) : "en";
+};
+
+const readDir = (argv: readonly string[]): "ltr" | "rtl" => {
+  const arg = argv.find((entry) => entry.startsWith("--struq-dir="));
+  return arg === "--struq-dir=rtl" ? "rtl" : "ltr";
+};
+
 const channels = readChannels(process.argv);
 
 const initialTheme = readTheme(process.argv);
+const initialLocale = readLocale(process.argv);
+const initialDir = readDir(process.argv);
 
 type CaptureStateListener = (
   state: CaptureState,
@@ -54,6 +66,8 @@ ipcRenderer.on(
 const api: OverlayWindowApi = {
   windowKind: "overlay",
   initialTheme,
+  initialLocale,
+  initialDir,
   onCaptureStateChanged: (
     listener: CaptureStateListener
   ) => {

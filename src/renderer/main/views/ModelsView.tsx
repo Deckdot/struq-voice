@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { HardwareProfile, MachineTier } from "../../../shared/hardware";
+import { cleanCpuModel, normalizeMemGb, recommendModel } from "../../../shared/hardware";
 import type { ModelStatus, WhisperTier } from "../../../shared/models";
 import { WHISPER_TIER_ORDER, whisperVariant } from "../../../shared/models";
 import {
@@ -17,6 +18,7 @@ import {
 } from "../components/ui";
 import type { SpeedLabel } from "../components/ui";
 import { ProviderMark } from "../components/ProviderMark";
+import { useTranslation } from "../lib/useTranslation";
 
 const TIER_LABEL: Record<WhisperTier, string> = {
   tiny: "Tiny",
@@ -27,11 +29,11 @@ const TIER_LABEL: Record<WhisperTier, string> = {
 };
 
 const TIER_GUIDANCE: Record<WhisperTier, string> = {
-  tiny: "Lowest load for older PCs and quick notes.",
-  base: "A light everyday model with stronger accuracy.",
-  small: "The best balance of speed, memory, and difficult speech.",
-  medium: "Higher accuracy for accents and noisy rooms.",
-  large: "Maximum local accuracy for capable hardware."
+  tiny: "Fastest, smallest download. Good for quick notes on older hardware.",
+  base: "Light and quick, handles clear speech well.",
+  small: "Best balance of speed and accuracy for most people.",
+  medium: "Higher accuracy for accents and noisy environments.",
+  large: "Maximum accuracy. Needs a capable PC and more RAM."
 };
 
 const TIER_SPEED: Record<WhisperTier, SpeedLabel> = {
@@ -52,12 +54,6 @@ const PICK_LABELS: Record<MachineTier, readonly [string, string, string]> = {
   light: ["Best fit", "Fastest", "More detail"],
   balanced: ["Best overall", "Fast and precise", "More accuracy"],
   performance: ["Best overall", "Fast large model", "Maximum accuracy"]
-};
-
-const TIER_NAME: Record<MachineTier, string> = {
-  light: "Light workload",
-  balanced: "Balanced workload",
-  performance: "Performance workload"
 };
 
 const largeRank = [
@@ -91,6 +87,31 @@ const progressFor = (status: ModelStatus): number | null => {
   );
 };
 
+/**
+ * Maps a model to a short, human-readable name that avoids all internal
+ * jargon. "Whisper large-v3-turbo (q8_0)" becomes "Whisper Large (Balanced)"
+ * so anyone can pick without knowing quantisation terminology.
+ */
+const formatVariantLabel = (fileName: string): string =>
+  fileName
+    .replace(/^ggml-/, "")
+    .replace(/\.bin$/, "")
+    .replace(/-q[58]_[01]$/, "")
+    .replace(/\.en$/, "");
+
+const humanModelName = (status: ModelStatus): string => {
+  if (status.model.engine === "parakeet") {
+    if (status.model.id.includes("v3")) return "Parakeet TDT v3";
+    if (status.model.id.includes("v2")) return "Parakeet TDT v2";
+    return "Parakeet";
+  }
+  const variant = whisperVariant(status.model.id);
+  if (variant === null) return status.model.name;
+  const base = formatVariantLabel(variant.fileName);
+  const englishNote = variant.englishOnly ? " · English only" : "";
+  return `Whisper ${base}${englishNote}`;
+};
+
 interface RecommendationCardProps {
   readonly status: ModelStatus;
   readonly label: string;
@@ -110,6 +131,7 @@ function RecommendationCard({
   onRetry,
   onSelect
 }: RecommendationCardProps): JSX.Element {
+  const { t } = useTranslation();
   const progress = progressFor(status);
   const downloading = status.download.state === "downloading";
   const verifying = status.download.state === "verifying";
@@ -117,46 +139,40 @@ function RecommendationCard({
 
   return (
     <Card
-      className={`flex min-h-[190px] flex-col gap-4 ${active ? "border-accent" : "border-border"}`}
+      className="flex min-h-[180px] flex-col gap-4 border-border hover:border-border-strong"
     >
       <div className="flex items-start justify-between gap-3">
         <ProviderMark engine={status.model.engine} className="h-7 w-7" />
-        <Badge tone={active ? "accent" : "neutral"} {...(active ? { icon: "ph:check" } : {})}>
-          {active ? "Selected" : label}
-        </Badge>
+        <Badge tone="neutral">{label}</Badge>
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="text-base font-semibold leading-snug text-text">{status.model.name}</h3>
-        <p className="mt-1 line-clamp-2 text-xs leading-snug text-text-muted">
-          {status.model.whenToUse}
-        </p>
-        <p className="mt-2 text-xs text-text-secondary" data-numeric>
+        <h3 className="text-base font-normal leading-snug text-text">
+          {humanModelName(status)}
+        </h3>
+        <p className="mt-2 text-xs text-text-muted" data-numeric>
           {formatBytes(status.model.bytes)} · {status.model.languages}
         </p>
       </div>
       {downloading && progress !== null && (
-        <ProgressBar value={progress} tone="accent" label="Downloading model" />
+        <ProgressBar value={progress} tone="accent" label={t("models.card.downloading")} />
       )}
-      <div className="flex min-h-8 items-center justify-between gap-2">
-        <span className="text-xs text-text-muted">
-          {status.installed ? "Available on this PC" : "Download required"}
-        </span>
+      <div className="flex min-h-8 items-center justify-end gap-2">
         {downloading || verifying ? (
           <Button variant="secondary" size="sm" onClick={onCancel} disabled={verifying}>
-            {verifying ? "Verifying" : "Cancel"}
+            {verifying ? t("models.card.verifying") : t("models.card.cancel")}
           </Button>
         ) : errored ? (
-          <Button variant="primary" size="sm" onClick={onRetry}>Retry</Button>
+          <Button variant="primary" size="sm" onClick={onRetry}>{t("models.card.retry")}</Button>
         ) : status.installed ? (
           active ? (
-            <Icon icon="ph:check-circle" className="h-5 w-5 text-accent" aria-hidden="true" />
+            <Button variant="ghost" size="sm" disabled>{t("models.card.active")}</Button>
           ) : (
-            <Button variant="primary" size="sm" onClick={onSelect}>Use model</Button>
+            <Button variant="primary" size="sm" onClick={onSelect}>{t("models.card.useModel")}</Button>
           )
         ) : (
           <Button variant="primary" size="sm" onClick={onDownload}>
             <Icon icon="ph:download-simple" className="h-3.5 w-3.5" aria-hidden="true" />
-            Download
+            {t("models.card.download")}
           </Button>
         )}
       </div>
@@ -305,7 +321,8 @@ export function ModelsView(): JSX.Element {
   const tierModels = sortTier(
     statuses.filter((status) => whisperVariant(status.model.id)?.tier === tier)
   );
-  const featuredTierModels = tierModels.slice(0, 3);
+  // Top 3 lightest in the selected tier (smallest download first)
+  const lightestTierModels = [...tierModels].sort((a, b) => a.model.bytes - b.model.bytes).slice(0, 3);
   const otherTierModels = tierModels.slice(3);
   const parakeetModels = statuses.filter((status) => status.model.engine === "parakeet");
 
@@ -316,37 +333,44 @@ export function ModelsView(): JSX.Element {
       ? Math.min(1, Math.max(0, (runtime.receivedBytes ?? 0) / runtime.totalBytes))
       : null;
 
+  const { t } = useTranslation();
+
+  const tierName: Record<MachineTier, string> = {
+    light: t("models.tierName.light"),
+    balanced: t("models.tierName.balanced"),
+    performance: t("models.tierName.performance")
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-bg" data-selectable>
-      <div className="mx-auto flex w-full max-w-[960px] flex-col gap-7 px-6 py-5">
-        <div className="flex items-end justify-between gap-5">
-          <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight text-text">Models</h1>
-            <p className="mt-1 text-sm text-text-muted">
-              Pick the local voice model that matches your work and this PC.
-            </p>
-          </div>
-          <Button variant="secondary" size="md" onClick={() => { setSpecsOpen(true); }}>
-            <Icon icon="ph:desktop-tower" className="h-4 w-4" aria-hidden="true" />
-            PC specs
-          </Button>
-        </div>
+      <div className="mx-auto flex w-full max-w-[960px] flex-col gap-6 px-6 py-5">
+        {/* Honest callout for light machines */}
+        {machineTier === "light" && (
+          <Card className="border-warning bg-warning-soft">
+            <div className="flex items-start gap-3">
+              <Icon icon="ph:warning-circle" className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-normal text-text">{t("models.lightPcWarning.title")}</p>
+                <p className="mt-1 text-xs text-text-muted">
+                  {t("models.lightPcWarning.body")}
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         <section>
           <div className="mb-2 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-display text-lg font-semibold text-text">Current selection</h2>
-              <p className="mt-0.5 text-xs text-text-muted">The model used for your next dictation.</p>
-            </div>
+            <h2 className="font-display text-lg font-normal text-text">{t("models.activeModel.title")}</h2>
           </div>
-          <Card className={currentStatus === undefined ? "" : "border-accent"}>
+          <Card>
             {currentStatus === undefined ? (
               <div className="flex items-center gap-3">
                 <Icon icon="ph:cloud" className="h-6 w-6 text-text-muted" aria-hidden="true" />
                 <div>
-                  <p className="text-sm font-medium text-text">No local model selected</p>
+                  <p className="text-sm font-normal text-text">{t("models.activeModel.noneTitle")}</p>
                   <p className="mt-0.5 text-xs text-text-muted">
-                    Choose an installed model below to run transcription on this computer.
+                    {t("models.activeModel.noneBody")}
                   </p>
                 </div>
               </div>
@@ -355,16 +379,14 @@ export function ModelsView(): JSX.Element {
                 <ProviderMark engine={currentStatus.model.engine} className="h-8 w-8" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate text-base font-semibold text-text">{currentStatus.model.name}</p>
-                    <Badge tone="accent" icon="ph:check">Selected</Badge>
+                    <p className="truncate text-base font-normal text-text">
+                      {humanModelName(currentStatus)}
+                    </p>
+                    <Badge tone="accent">{t("models.activeModel.badge")}</Badge>
                   </div>
                   <p className="mt-1 truncate text-xs text-text-muted" data-numeric>
-                    {currentStatus.model.languages} · {formatBytes(currentStatus.model.bytes)} · Runs locally
+                    {currentStatus.model.languages} · {formatBytes(currentStatus.model.bytes)}
                   </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-medium text-success">Ready for dictation</p>
-                  <p className="mt-0.5 text-2xs text-text-muted">Nothing leaves this PC</p>
                 </div>
               </div>
             )}
@@ -372,14 +394,22 @@ export function ModelsView(): JSX.Element {
         </section>
 
         <section>
-          <div className="mb-3">
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-lg font-semibold text-text">Recommended for this PC</h2>
-              <Badge tone="neutral">{TIER_NAME[machineTier]}</Badge>
+          <div className="mb-3 flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-display text-lg font-normal text-text">{t("models.recommended.title")}</h2>
+                <Badge tone="neutral">{tierName[machineTier]}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-text-muted">
+                {hardware !== null
+                  ? recommendModel(hardware).reason
+                  : (recommendation?.reason ?? t("models.recommended.reading"))}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-text-muted">
-              {recommendation?.reason ?? "Reading your processor, memory, and graphics hardware."}
-            </p>
+            <Button variant="secondary" size="sm" className="shrink-0" onClick={() => { setSpecsOpen(true); }}>
+              <Icon icon="ph:desktop-tower" className="h-3.5 w-3.5" aria-hidden="true" />
+              {t("models.recommended.specsBtn")}
+            </Button>
           </div>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {systemPicks.map((status, index) => (
@@ -405,83 +435,96 @@ export function ModelsView(): JSX.Element {
           </div>
         </section>
 
+        {/* Catalog Tiers */}
         <section>
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-4">
+          <div className="mb-3 flex items-center justify-between gap-4">
             <div>
-              <h2 className="font-display text-lg font-semibold text-text">Whisper by size</h2>
-              <p className="mt-0.5 text-xs text-text-muted">{TIER_GUIDANCE[tier]}</p>
+              <h2 className="font-display text-lg font-normal text-text">{t("models.whisper.title")}</h2>
+              <p className="mt-0.5 text-xs text-text-muted">
+                {TIER_GUIDANCE[tier]}
+              </p>
             </div>
             <SegmentedControl<WhisperTier>
-              options={WHISPER_TIER_ORDER.map((value) => ({ value, label: TIER_LABEL[value] }))}
+              options={WHISPER_TIER_ORDER.map((value) => ({
+                value,
+                label: TIER_LABEL[value]
+              }))}
               value={tier}
               onChange={(next) => {
                 setTier(next);
                 setShowAllTier(false);
               }}
-              size="md"
             />
           </div>
+
           <div className="flex flex-col gap-2">
-            {featuredTierModels.map(row)}
-            {showAllTier && otherTierModels.map(row)}
-          </div>
-          {otherTierModels.length > 0 && (
-            <div className="mt-3 flex justify-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { setShowAllTier((shown) => !shown); }}
-              >
-                <Icon
-                  icon={showAllTier ? "ph:caret-down" : "ph:plus"}
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                />
-                {showAllTier
-                  ? "Show the top 3 only"
-                  : `Show all ${String(tierModels.length)} ${TIER_LABEL[tier].toLowerCase()} variants`}
-              </Button>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-2xs font-semibold uppercase tracking-wider text-text-muted">
+                {t("models.whisper.lightest")}
+              </span>
             </div>
-          )}
+            {lightestTierModels.map(row)}
+
+            {otherTierModels.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                {!showAllTier ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="self-center text-xs text-text-muted hover:text-text"
+                    onClick={() => { setShowAllTier(true); }}
+                  >
+                    {t("models.whisper.showAll", { count: tierModels.length, tier: TIER_LABEL[tier].toLowerCase() })}
+                  </Button>
+                ) : (
+                  <>
+                    <div className="mb-1 flex items-center justify-between pt-2">
+                      <span className="text-2xs font-semibold uppercase tracking-wider text-text-muted">
+                        {t("models.whisper.allVariants", { tier: TIER_LABEL[tier].toLowerCase() })}
+                      </span>
+                    </div>
+                    {tierModels.map(row)}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </section>
 
+        {/* Parakeet section */}
         <section>
           <div className="mb-3 flex items-center gap-2">
             <ProviderMark engine="parakeet" className="h-5 w-5" />
             <div>
-              <h2 className="font-display text-lg font-semibold text-text">Parakeet by NVIDIA</h2>
-              <p className="mt-0.5 text-xs text-text-muted">Fast multilingual models tuned for local dictation.</p>
+              <h2 className="font-display text-lg font-normal text-text">{t("models.parakeet.title")}</h2>
+              <p className="mt-0.5 text-xs text-text-muted">{t("models.parakeet.subtitle")}</p>
             </div>
           </div>
           <div className="flex flex-col gap-2">{parakeetModels.map(row)}</div>
         </section>
 
-        <section>
-          <div className="mb-2 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-display text-lg font-semibold text-text">Whisper helper</h2>
-              <p className="mt-0.5 text-xs text-text-muted">Required once for every Whisper model.</p>
-            </div>
-          </div>
-          <Card>
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-text">
-                  {runtimeDone
-                    ? "Installed and ready"
-                    : runtimeDownloading
-                      ? "Installing the local Whisper helper"
-                      : runtime.state === "error"
-                        ? (runtime.message ?? "The helper install failed")
-                        : "Not installed yet"}
-                </p>
-                {runtimeDownloading && runtimeProgress !== null && (
-                  <ProgressBar value={runtimeProgress} tone="accent" className="mt-2" label="Installing helper" />
-                )}
+        {!runtimeDone && (
+          <section>
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-display text-lg font-normal text-text">{t("models.helper.title")}</h2>
+                <p className="mt-0.5 text-xs text-text-muted">{t("models.helper.subtitle")}</p>
               </div>
-              {runtimeDone ? (
-                <Badge tone="neutral" icon="ph:check-circle">On this PC</Badge>
-              ) : (
+            </div>
+            <Card>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-normal text-text">
+                    {runtimeDownloading
+                      ? t("models.helper.installing")
+                      : runtime.state === "error"
+                        ? (runtime.message ?? t("models.helper.failed"))
+                        : t("models.helper.notInstalled")}
+                  </p>
+                  {runtimeDownloading && runtimeProgress !== null && (
+                    <ProgressBar value={runtimeProgress} tone="accent" className="mt-2" label={t("models.helper.installing")} />
+                  )}
+                </div>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -493,70 +536,111 @@ export function ModelsView(): JSX.Element {
                     className={`h-3.5 w-3.5 ${runtimeDownloading ? "motion-safe:animate-spin" : ""}`}
                     aria-hidden="true"
                   />
-                  {runtimeDownloading ? "Installing" : "Install helper"}
+                  {runtimeDownloading ? t("models.helper.installingBtn") : t("models.helper.installBtn")}
                 </Button>
-              )}
-            </div>
-          </Card>
-        </section>
+              </div>
+            </Card>
+          </section>
+        )}
 
         <p className="flex items-center gap-1.5 text-xs text-text-muted" data-numeric>
           <Icon icon="ph:hard-drive" className="h-4 w-4" aria-hidden="true" />
-          {formatBytes(diskUsed)} used by local models
+          {t("models.diskUsed", { size: formatBytes(diskUsed) })}
         </p>
       </div>
 
       <Dialog
         open={specsOpen}
         onOpenChange={setSpecsOpen}
-        title="This PC"
-        description="The hardware Struq uses to rank local models."
+        title={t("models.specsDialog.title")}
+        description={t("models.specsDialog.description")}
         size="lg"
-        footer={<Button variant="secondary" size="md" onClick={() => { setSpecsOpen(false); }}>Done</Button>}
+        footer={
+          <Button variant="secondary" size="md" onClick={() => { setSpecsOpen(false); }}>
+            {t("models.specsDialog.done")}
+          </Button>
+        }
       >
         {hardware === null ? (
           <div className="flex items-center gap-3 rounded-lg border border-border bg-bg-sunken p-4">
             <Icon icon="ph:circle-notch" className="h-5 w-5 motion-safe:animate-spin text-accent" aria-hidden="true" />
-            <p className="text-sm text-text-secondary">Reading hardware details...</p>
+            <p className="text-sm text-text-secondary">{t("models.specsDialog.reading")}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="flex items-start gap-3">
-              <Icon icon="ph:cpu" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-text-muted">Processor</p>
-                <p className="mt-1 text-sm font-medium leading-snug text-text">{hardware.cpuModel}</p>
-                <p className="mt-1 text-xs text-text-secondary" data-numeric>{String(hardware.cpuCores)} logical cores</p>
+          <div className="flex flex-col gap-3">
+            {/* Summary Banner */}
+            <div className="flex items-center justify-between rounded-md border border-border bg-surface-hover/50 p-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-surface text-accent shadow-xs">
+                  <Icon icon="ph:desktop-tower" className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-text">
+                      {cleanCpuModel(hardware.cpuModel) || t("models.specsDialog.systemHardware")}
+                    </p>
+                    <Badge tone="accent">{tierName[machineTier]}</Badge>
+                  </div>
+                  <p className="mt-0.5 text-xs text-text-muted" data-numeric>
+                    {hardware.gpuName ?? t("models.specsDialog.gpuDefault")} · {String(hardware.cpuCores)} cores · {String(normalizeMemGb(hardware.totalMemGb))} GB RAM
+                  </p>
+                </div>
               </div>
-            </Card>
-            <Card className="flex items-start gap-3">
-              <Icon icon="ph:memory" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <div>
-                <p className="text-xs font-medium text-text-muted">Memory</p>
-                <p className="mt-1 text-lg font-semibold text-text" data-numeric>{String(hardware.totalMemGb)} GB RAM</p>
-                <p className="mt-1 text-xs text-text-secondary">Available to Windows and local models</p>
-              </div>
-            </Card>
-            <Card className="flex items-start gap-3">
-              <Icon icon="ph:graphics-card" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-text-muted">Graphics</p>
-                <p className="mt-1 text-sm font-medium leading-snug text-text">
-                  {hardware.gpuName ?? `${hardware.gpuVendor.toUpperCase()} graphics`}
-                </p>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {hardware.cudaRuntime ? "CUDA acceleration ready" : "CPU path available"}
-                </p>
-              </div>
-            </Card>
-            <Card className="flex items-start gap-3 border-accent">
-              <Icon icon="ph:gauge" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <div>
-                <p className="text-xs font-medium text-text-muted">Model profile</p>
-                <p className="mt-1 text-lg font-semibold text-text">{TIER_NAME[machineTier]}</p>
-                <p className="mt-1 text-xs text-text-secondary">Used to build your top three picks</p>
-              </div>
-            </Card>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="flex items-start gap-3">
+                <Icon icon="ph:cpu" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">{t("models.specsDialog.cpu")}</p>
+                  <p className="mt-1 text-sm font-medium leading-snug text-text">
+                    {cleanCpuModel(hardware.cpuModel) || hardware.cpuModel}
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary" data-numeric>
+                    {t("models.specsDialog.cpuCores", { cores: hardware.cpuCores })}
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="flex items-start gap-3">
+                <Icon icon="ph:graphics-card" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">{t("models.specsDialog.gpu")}</p>
+                  <p className="mt-1 text-sm font-medium leading-snug text-text">
+                    {hardware.gpuName ?? (hardware.gpuVendor !== "unknown" ? `${hardware.gpuVendor.toUpperCase()} graphics` : "Standard GPU")}
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {hardware.cudaRuntime ? t("models.specsDialog.gpuCuda") : t("models.specsDialog.gpuCpuPath")}
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="flex items-start gap-3">
+                <Icon icon="ph:memory" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">{t("models.specsDialog.ram")}</p>
+                  <p className="mt-1 text-base font-medium text-text" data-numeric>
+                    {String(normalizeMemGb(hardware.totalMemGb))} GB RAM
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {t("models.specsDialog.ramAllocated")}
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="flex items-start gap-3 border-accent/40 bg-accent-soft/10">
+                <Icon icon="ph:gauge" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">{t("models.specsDialog.profile")}</p>
+                  <p className="mt-1 text-base font-medium text-text">
+                    {tierName[machineTier]}
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {t("models.specsDialog.profileRank")}
+                  </p>
+                </div>
+              </Card>
+            </div>
           </div>
         )}
       </Dialog>

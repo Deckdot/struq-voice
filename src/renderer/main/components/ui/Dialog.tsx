@@ -52,17 +52,18 @@ export function Dialog({
               <motion.div
                 role="dialog"
                 aria-modal="true"
-                initial={{ opacity: 0, scale: 0.97, y: 8 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.97, y: 8 }}
-                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                initial={{ opacity: 0, scaleX: 0.2, scaleY: 0.88 }}
+                animate={{ opacity: 1, scaleX: 1, scaleY: 1 }}
+                exit={{ opacity: 0, scaleX: 0.2, scaleY: 0.88 }}
+                style={{ transformOrigin: "center center" }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                 className={cn(
                   "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
                   "rounded-xl border border-border bg-surface p-5 text-text shadow-float",
                   SIZES[size]
                 )}
               >
-                <RadixDialog.Title className="font-display text-xl font-semibold text-text">
+                <RadixDialog.Title className="font-display text-xl font-medium text-text">
                   {title}
                 </RadixDialog.Title>
                 {description !== undefined && (

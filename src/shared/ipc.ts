@@ -325,6 +325,37 @@ export const settingsGetChannel = "settings:get" as const;
 export const settingsUpdateChannel = "settings:update" as const;
 export const settingsChangedChannel = "settings:changed" as const;
 
+export const dictionaryExportChannel = "dictionary:export" as const;
+export const dictionaryImportChannel = "dictionary:import" as const;
+
+/** The on-disk interchange format. Versioned so a future shape can be read. */
+export interface DictionaryFile {
+  readonly kind: "struq-voice-dictionary";
+  readonly version: 1;
+  readonly entries: readonly {
+    readonly from: string;
+    readonly to: string;
+    readonly matchCase: boolean;
+    readonly wholeWord: boolean;
+    readonly enabled: boolean;
+  }[];
+}
+
+export interface DictionaryExportResult {
+  readonly ok: boolean;
+  /** Absent when the user cancelled the save dialog. */
+  readonly path?: string;
+  readonly message?: string;
+}
+
+export interface DictionaryImportResult {
+  readonly ok: boolean;
+  /** How many rules were added, ignoring ones that duplicate an existing from. */
+  readonly added: number;
+  readonly skipped: number;
+  readonly message?: string;
+}
+
 export interface SettingsGetResult {
   readonly settings: Settings;
 }
@@ -441,6 +472,10 @@ export const PRELOAD_CHANNELS = {
     get: settingsGetChannel,
     update: settingsUpdateChannel,
     changed: settingsChangedChannel
+  },
+  dictionary: {
+    export: dictionaryExportChannel,
+    import: dictionaryImportChannel
   },
   devices: {
     list: devicesListChannel

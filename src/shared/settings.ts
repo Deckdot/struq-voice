@@ -11,9 +11,17 @@ import { DEFAULT_WHISPER_MODEL_ID } from "./models";
 
 export const dictionaryEntrySchema = z.object({
   from: z.string().min(1),
-  to: z.string().min(1),
+  to: z.string(),
   matchCase: z.boolean().default(false),
-  wholeWord: z.boolean().default(true)
+  wholeWord: z.boolean().default(true),
+  /** Off keeps the rule in the list without applying it. */
+  enabled: z.boolean().default(true)
+});
+
+export const dictionaryFileSchema = z.object({
+  kind: z.literal("struq-voice-dictionary"),
+  version: z.literal(1),
+  entries: z.array(dictionaryEntrySchema)
 });
 
 export const postProcessingSchema = z.object({
@@ -40,18 +48,26 @@ export const ONBOARDING_VERSION = 1;
 
 export const settingsSchema = z.object({
   version: z.literal(1).default(1),
+  /** Whether the user has been notified once that close hides to the tray. */
+  firstHideNotified: z.boolean().default(false),
   /** The appearance of every window: follow the OS, or force one mode. */
   theme: z.enum(["system", "light", "dark"]).default("system"),
+  /** "system" follows the Windows language list; anything else forces a locale. */
+  locale: z.string().default("system"),
+  /** "auto" lets the engine detect; otherwise a BCP47 tag forced on the decoder. */
+  speechLanguage: z.string().default("auto"),
   /** Captures shorter than this (ms) are discarded silently. */
   minCaptureMs: z.number().int().min(100).max(5000).default(350),
-  /** Force-stop a capture that ran this long (ms). */
-  maxCaptureMs: z.number().int().min(5000).max(600000).default(120000),
+  /** Force-stop a capture that ran this long (ms). Defaults to 5 minutes (300,000 ms). */
+  maxCaptureMs: z.number().int().min(5000).max(600000).default(300000),
   /** Pre-roll: audio kept from before the key was pressed (ms). */
   prerollMs: z.number().int().min(0).max(1000).default(250),
   /** Restore the clipboard after a synthesized paste. */
   restoreClipboard: z.boolean().default(true),
   /** How long to wait before restoring the clipboard (ms). */
   restoreClipboardDelayMs: z.number().int().min(0).max(5000).default(400),
+  /** Synthesize an Enter keystroke into the active window after pasting. */
+  pressEnterAfterPaste: z.boolean().default(false),
   /** Start with Windows, hidden to the tray. */
   autostart: z.boolean().default(false),
   /** Press-and-hold accelerator ("CommandOrControl+Space"). */

@@ -64,19 +64,13 @@ export function ModelRow({
     <article
       className={cn(
         "relative flex items-center gap-3 overflow-hidden rounded-md border bg-surface px-4 py-3",
-        "transition-colors duration-hover",
-        active ? "border-accent" : "border-border hover:border-border-strong"
+        "transition-colors duration-hover border-border hover:border-border-strong"
       )}
     >
       <ProviderMark engine={status.model.engine} className="h-6 w-6" />
-      {/* Size, languages and speed live in the subtitle rather than in their
-          own fixed columns. Five fixed columns plus a name left too little
-          room at this width: the name collapsed to "P..." and the action
-          slot was clipped away by the row's overflow-hidden. */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="truncate text-sm font-medium text-text">{status.model.name}</h3>
-          {active && <Badge tone="accent" icon="ph:check">Selected</Badge>}
+          <h3 className="truncate text-sm font-normal text-text">{status.model.name}</h3>
         </div>
         <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-text-muted">
           <span className="tabular-nums" data-numeric>
@@ -108,9 +102,7 @@ export function ModelRow({
         ) : downloadError !== null ? (
           <Badge tone="danger">{downloadError}</Badge>
         ) : installed ? (
-          <Badge tone="neutral" icon="ph:check-circle">
-            On this PC
-          </Badge>
+          <Badge tone="neutral">Ready</Badge>
         ) : (
           <Badge tone="neutral">Not installed</Badge>
         )}

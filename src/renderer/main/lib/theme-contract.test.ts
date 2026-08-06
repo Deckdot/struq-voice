@@ -13,8 +13,8 @@ const darkTheme = (): string => {
 describe("dark theme contract", () => {
   it("uses neutral graphite surfaces and terracotta interaction emphasis", () => {
     const source = darkTheme();
-    expect(source).toContain("--sv-bg: oklch(0.18 0.005 250)");
-    expect(source).toContain("--sv-surface: oklch(0.22 0.006 250)");
+    expect(source).toContain("--sv-bg: oklch(0.23 0.006 250)");
+    expect(source).toContain("--sv-surface: oklch(0.27 0.007 250)");
     expect(source).toContain("--sv-accent: oklch(0.7 0.13 43)");
   });
 

@@ -70,6 +70,8 @@ export interface OverlayWindowOptions {
   readonly onPositionChange?: (position: OverlayPosition) => void;
   /** Read at broadcast time: the setting can change between captures. */
   readonly isLiveTranscriptionEnabled?: () => boolean;
+  readonly locale?: string;
+  readonly dir?: "ltr" | "rtl";
 }
 
 export interface OverlayWindowController {
@@ -109,7 +111,7 @@ let persistPosition: ((position: OverlayPosition) => void) | null = null;
 const workAreas = (): Rect[] =>
   screen.getAllDisplays().map((display) => display.workArea);
 
-const createOverlayWindow = (height: number): BrowserWindow => {
+const createOverlayWindow = (height: number, locale = "en", dir = "ltr"): BrowserWindow => {
   // The display under the cursor is where the user is working, so it is the
   // fallback when there is no usable stored position.
   const cursor = screen.getCursorScreenPoint();
@@ -145,9 +147,14 @@ const createOverlayWindow = (height: number): BrowserWindow => {
       nodeIntegration: false,
       sandbox: true,
       preload: join(__dirname, "../preload/overlay.cjs"),
-      // The sandboxed preload reads channel names and the theme from argv;
+      // The sandboxed preload reads channel names, theme, locale and dir from argv;
       // they are declared in src/shared/ipc.ts and nowhere else.
-      additionalArguments: [channelsArg, themeArg()]
+      additionalArguments: [
+        channelsArg,
+        themeArg(),
+        `--struq-locale=${locale}`,
+        `--struq-dir=${dir}`
+      ]
     }
   });
 
@@ -176,7 +183,10 @@ const createOverlayWindow = (height: number): BrowserWindow => {
   return window;
 };
 
-const ensureOverlayWindow = (height: number): BrowserWindow | null => {
+const ensureOverlayWindow = (
+  height: number,
+  options?: OverlayWindowOptions
+): BrowserWindow | null => {
   if (overlayWindow !== null && !overlayWindow.isDestroyed()) {
     // The setting can change between captures, so the window is resized to
     // match rather than rebuilt. Keep the top-left anchored: growing downward
@@ -194,7 +204,7 @@ const ensureOverlayWindow = (height: number): BrowserWindow | null => {
     return overlayWindow;
   }
   try {
-    overlayWindow = createOverlayWindow(height);
+    overlayWindow = createOverlayWindow(height, options?.locale ?? "en", options?.dir ?? "ltr");
     return overlayWindow;
   } catch {
     overlayWindow = null;
@@ -202,14 +212,25 @@ const ensureOverlayWindow = (height: number): BrowserWindow | null => {
   }
 };
 
+let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
 const setOverlayVisible = (window: BrowserWindow | null, visible: boolean): void => {
   if (window === null) return;
   if (visible) {
+    if (hideTimer !== null) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
     if (!window.isVisible()) {
       window.showInactive();
     }
-  } else if (window.isVisible()) {
-    window.hide();
+  } else if (window.isVisible() && hideTimer === null) {
+    hideTimer = setTimeout(() => {
+      hideTimer = null;
+      if (!window.isDestroyed()) {
+        window.hide();
+      }
+    }, 220);
   }
 };
 
@@ -256,7 +277,7 @@ export const createOverlayWindowController = (
       broadcastState(state, live);
 
       const active = isActiveCapture(state);
-      const window = ensureOverlayWindow(overlayHeight(live));
+      const window = ensureOverlayWindow(overlayHeight(live), options);
       if (window === null) {
         // Overlay construction blocked (always-on-top policy). Fall back to a
         // Notification so the user still has a cross-app signal.

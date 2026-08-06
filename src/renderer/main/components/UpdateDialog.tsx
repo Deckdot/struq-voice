@@ -17,11 +17,14 @@ import { Badge, Button, Dialog } from "./ui";
  * silence 0.2.0, and the state lives in this component because the main
  * process should not have to remember what a window was told.
  */
+import { useTranslation } from "../lib/useTranslation";
+
 export interface UpdateDialogProps {
   readonly api: MainWindowApi;
 }
 
 export function UpdateDialog({ api }: UpdateDialogProps): JSX.Element | null {
+  const { t } = useTranslation();
   const [state, setState] = useState<UpdateState | null>(null);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -44,11 +47,11 @@ export function UpdateDialog({ api }: UpdateDialogProps): JSX.Element | null {
       onOpenChange={(open) => {
         if (!open) setDismissedVersion(version);
       }}
-      title={`Version ${version} is ready to install`}
-      description="Struq Voice will install in the background and reopen itself. Your settings and history stay the same."
+      title={t("updateDialog.title", { version })}
+      description={t("updateDialog.description")}
     >
       <Badge tone="success" icon="ph:check-circle">
-        Verified against the release signature.
+        {t("updateDialog.verified")}
       </Badge>
       <div className="mt-5 flex justify-end gap-2">
         <Button
@@ -58,7 +61,7 @@ export function UpdateDialog({ api }: UpdateDialogProps): JSX.Element | null {
             setDismissedVersion(version);
           }}
         >
-          Later
+          {t("updateDialog.later")}
         </Button>
         <Button
           variant="primary"
@@ -70,14 +73,14 @@ export function UpdateDialog({ api }: UpdateDialogProps): JSX.Element | null {
             void api.updates.install();
           }}
         >
-          {installing ? "Installing..." : "Install and restart"}
+          {installing ? t("updateDialog.installing") : t("updateDialog.install")}
         </Button>
       </div>
       {installing && (
         // A click during a capture is held until the capture ends, so the
         // dialog says why nothing appears to be happening.
         <p className="mt-3 text-right text-xs text-text-muted">
-          Waiting for the current dictation to finish, if there is one.
+          {t("updateDialog.waiting")}
         </p>
       )}
     </Dialog>

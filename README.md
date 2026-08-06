@@ -325,8 +325,10 @@ one spec needs a real microphone and real OS focus.
 ## Design
 
 Every surface is built against one binding document,
-[`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md): **Velden Linen Forest**. A warm
-linen page, deep forest ink, one terracotta accent used only for primary actions.
+[`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md): **Evergreen and Ember**. A
+warm porcelain page and a deep green-undertoned charcoal dark theme, one
+pine accent for primary actions, and an ember color reserved for live
+capture feedback.
 Instrument Sans for the interface, Instrument Serif for prose and for the
 transcript itself, IBM Plex Mono for anything numeric.
 
@@ -342,7 +344,7 @@ interface, and no error message that names a problem without naming the fix.
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | The source of truth: what this project is, the rules, how work is gated |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Process and window model, boundaries |
-| [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md) | Velden Linen Forest, binding on every view |
+| [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md) | Evergreen and Ember, binding on every view |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | What is built, current state, known gaps |
 | [`docs/MODELS.md`](docs/MODELS.md) | Engines, catalog, download pipeline |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Cut, sign, verify, publish, and why updates are signed |

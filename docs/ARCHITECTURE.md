@@ -50,7 +50,7 @@ src/
     hardware/detect.ts    os + getGPUInfo probing, degrades to unknown
   preload/                main.ts · overlay.ts · recorder.ts
   renderer/
-    styles/               main.css · theme.css (Velden Linen Forest tokens)
+    styles/               main.css · theme.css (Evergreen and Ember tokens)
     main/                 index.html · main.tsx · App.tsx
       components/ui/      the shared visual layer, built on the tokens
       onboarding/         first-run takeover, one file per step

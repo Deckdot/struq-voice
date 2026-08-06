@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { TranscriptRecord } from "../../../../shared/ipc";
@@ -31,7 +32,7 @@ export interface TranscriptRowProps {
   readonly onCancelArmedDelete: () => void;
 }
 
-export function TranscriptRow({
+export const TranscriptRow = memo(function TranscriptRow({
   record,
   focused,
   expanded,
@@ -128,4 +129,4 @@ export function TranscriptRow({
       </div>
     </article>
   );
-}
+});

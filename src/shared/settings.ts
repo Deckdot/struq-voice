@@ -44,8 +44,8 @@ export const settingsSchema = z.object({
   theme: z.enum(["system", "light", "dark"]).default("system"),
   /** Captures shorter than this (ms) are discarded silently. */
   minCaptureMs: z.number().int().min(100).max(5000).default(350),
-  /** Force-stop a capture that ran this long (ms). */
-  maxCaptureMs: z.number().int().min(5000).max(600000).default(120000),
+  /** Force-stop a capture that ran this long (ms). Defaults to 5 minutes (300,000 ms). */
+  maxCaptureMs: z.number().int().min(5000).max(600000).default(300000),
   /** Pre-roll: audio kept from before the key was pressed (ms). */
   prerollMs: z.number().int().min(0).max(1000).default(250),
   /** Restore the clipboard after a synthesized paste. */

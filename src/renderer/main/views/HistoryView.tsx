@@ -163,12 +163,10 @@ export function HistoryView(): JSX.Element {
   const rowVirtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => scrollRef.current,
+    getItemKey: (index) => entries[index]?.id ?? index,
     estimateSize: (index) => (entries[index]?.kind === "header" ? HEADER_HEIGHT : ROW_HEIGHT),
-    // Expanded rows have no knowable height, so every row reports its real
-    // one after layout. Without this an expanded transcript overlaps the row
-    // beneath it, because positions are absolute.
-    measureElement: (element) => element.getBoundingClientRect().height,
-    overscan: 6
+    measureElement: (element) => (element as HTMLElement).offsetHeight,
+    overscan: 12
   });
 
   // Find the first row index so key navigation lands on a row, not a header.
@@ -276,7 +274,8 @@ export function HistoryView(): JSX.Element {
                       left: "0",
                       width: "100%",
                       height: `${String(virtualRow.size)}px`,
-                      transform: `translateY(${String(virtualRow.start)}px)`
+                      transform: `translateY(${String(virtualRow.start)}px)`,
+                      willChange: "transform"
                     }}
                     className="flex items-center px-1"
                   >
@@ -298,7 +297,8 @@ export function HistoryView(): JSX.Element {
                     left: "0",
                     width: "100%",
                     transform: `translateY(${String(virtualRow.start)}px)`,
-                    paddingBottom: "8px"
+                    paddingBottom: "8px",
+                    willChange: "transform"
                   }}
                 >
                   <TranscriptRow

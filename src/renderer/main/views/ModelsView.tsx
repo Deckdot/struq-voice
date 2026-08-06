@@ -145,16 +145,14 @@ function RecommendationCard({
 
   return (
     <Card
-      className={`flex min-h-[180px] flex-col gap-4 ${active ? "border-accent" : "border-border"}`}
+      className="flex min-h-[180px] flex-col gap-4 border-border hover:border-border-strong"
     >
       <div className="flex items-start justify-between gap-3">
         <ProviderMark engine={status.model.engine} className="h-7 w-7" />
-        <Badge tone={active ? "accent" : "neutral"} {...(active ? { icon: "ph:check" } : {})}>
-          {active ? "Selected" : label}
-        </Badge>
+        <Badge tone="neutral">{label}</Badge>
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="text-base font-medium leading-snug text-text">
+        <h3 className="text-base font-normal leading-snug text-text">
           {humanModelName(status)}
         </h3>
         <p className="mt-2 text-xs text-text-muted" data-numeric>
@@ -164,10 +162,7 @@ function RecommendationCard({
       {downloading && progress !== null && (
         <ProgressBar value={progress} tone="accent" label="Downloading model" />
       )}
-      <div className="flex min-h-8 items-center justify-between gap-2">
-        <span className="text-xs text-text-muted">
-          {status.installed ? "On this PC" : "Download required"}
-        </span>
+      <div className="flex min-h-8 items-center justify-end gap-2">
         {downloading || verifying ? (
           <Button variant="secondary" size="sm" onClick={onCancel} disabled={verifying}>
             {verifying ? "Verifying" : "Cancel"}
@@ -176,7 +171,7 @@ function RecommendationCard({
           <Button variant="primary" size="sm" onClick={onRetry}>Retry</Button>
         ) : status.installed ? (
           active ? (
-            <Icon icon="ph:check-circle" className="h-5 w-5 text-accent" aria-hidden="true" />
+            <Button variant="ghost" size="sm" disabled>Active</Button>
           ) : (
             <Button variant="primary" size="sm" onClick={onSelect}>Use model</Button>
           )
@@ -350,7 +345,7 @@ export function ModelsView(): JSX.Element {
       <div className="mx-auto flex w-full max-w-[960px] flex-col gap-7 px-6 py-5">
         <div className="flex items-end justify-between gap-5">
           <div>
-            <h1 className="font-display text-2xl font-medium tracking-tight text-text">Models</h1>
+            <h1 className="font-display text-2xl font-normal tracking-tight text-text">Models</h1>
           </div>
           <Button variant="secondary" size="md" onClick={() => { setSpecsOpen(true); }}>
             <Icon icon="ph:desktop-tower" className="h-4 w-4" aria-hidden="true" />
@@ -364,7 +359,7 @@ export function ModelsView(): JSX.Element {
             <div className="flex items-start gap-3">
               <Icon icon="ph:warning-circle" className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
               <div>
-                <p className="text-sm font-medium text-text">Local transcription may feel slow on this PC</p>
+                <p className="text-sm font-normal text-text">Local transcription may feel slow on this PC</p>
                 <p className="mt-1 text-xs text-text-muted">
                   This machine is best suited for the Tiny or Base models. For faster results without a long wait, OpenRouter (cloud) processes audio on a server and returns a transcript quickly.
                 </p>
@@ -375,14 +370,14 @@ export function ModelsView(): JSX.Element {
 
         <section>
           <div className="mb-2 flex items-center justify-between gap-4">
-            <h2 className="font-display text-lg font-medium text-text">Active model</h2>
+            <h2 className="font-display text-lg font-normal text-text">Active model</h2>
           </div>
-          <Card className={currentStatus === undefined ? "" : "border-accent"}>
+          <Card>
             {currentStatus === undefined ? (
               <div className="flex items-center gap-3">
                 <Icon icon="ph:cloud" className="h-6 w-6 text-text-muted" aria-hidden="true" />
                 <div>
-                  <p className="text-sm font-medium text-text">No local model selected</p>
+                  <p className="text-sm font-normal text-text">No local model selected</p>
                   <p className="mt-0.5 text-xs text-text-muted">
                     Choose an installed model below to run transcription on this computer.
                   </p>
@@ -393,17 +388,14 @@ export function ModelsView(): JSX.Element {
                 <ProviderMark engine={currentStatus.model.engine} className="h-8 w-8" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate text-base font-medium text-text">
+                    <p className="truncate text-base font-normal text-text">
                       {humanModelName(currentStatus)}
                     </p>
-                    <Badge tone="accent" icon="ph:check">Active</Badge>
+                    <Badge tone="accent">Active</Badge>
                   </div>
                   <p className="mt-1 truncate text-xs text-text-muted" data-numeric>
                     {currentStatus.model.languages} · {formatBytes(currentStatus.model.bytes)}
                   </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-medium text-success">Ready</p>
                 </div>
               </div>
             )}
@@ -413,7 +405,7 @@ export function ModelsView(): JSX.Element {
         <section>
           <div className="mb-3">
             <div className="flex items-center gap-2">
-              <h2 className="font-display text-lg font-medium text-text">Recommended for this PC</h2>
+              <h2 className="font-display text-lg font-normal text-text">Recommended for this PC</h2>
               <Badge tone="neutral">{TIER_NAME[machineTier]}</Badge>
             </div>
             <p className="mt-1 text-xs text-text-muted">
@@ -447,7 +439,7 @@ export function ModelsView(): JSX.Element {
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="font-display text-lg font-medium text-text">Whisper models</h2>
+              <h2 className="font-display text-lg font-normal text-text">Whisper models</h2>
               <p className="mt-0.5 text-xs text-text-muted">{TIER_GUIDANCE[tier]}</p>
             </div>
             <SegmentedControl<WhisperTier>
@@ -464,14 +456,14 @@ export function ModelsView(): JSX.Element {
           {/* Top 3 lightest in the selected size */}
           {lightestTierModels.length > 0 && (
             <div className="mb-4">
-              <p className="mb-2 text-xs font-medium text-text-muted">Lightest downloads</p>
+              <p className="mb-2 text-xs font-normal text-text-muted">Lightest downloads</p>
               <div className="flex flex-col gap-2">
                 {lightestTierModels.map(row)}
               </div>
             </div>
           )}
 
-          <p className="mb-2 text-xs font-medium text-text-muted">All {TIER_LABEL[tier].toLowerCase()} variants</p>
+          <p className="mb-2 text-xs font-normal text-text-muted">All {TIER_LABEL[tier].toLowerCase()} variants</p>
           <div className="flex flex-col gap-2">
             {featuredTierModels.map(row)}
             {showAllTier && otherTierModels.map(row)}
@@ -500,7 +492,7 @@ export function ModelsView(): JSX.Element {
           <div className="mb-3 flex items-center gap-2">
             <ProviderMark engine="parakeet" className="h-5 w-5" />
             <div>
-              <h2 className="font-display text-lg font-medium text-text">Parakeet by NVIDIA</h2>
+              <h2 className="font-display text-lg font-normal text-text">Parakeet by NVIDIA</h2>
               <p className="mt-0.5 text-xs text-text-muted">Fast multilingual models tuned for local dictation.</p>
             </div>
           </div>
@@ -510,14 +502,14 @@ export function ModelsView(): JSX.Element {
         <section>
           <div className="mb-2 flex items-center justify-between gap-4">
             <div>
-              <h2 className="font-display text-lg font-medium text-text">Whisper helper</h2>
+              <h2 className="font-display text-lg font-normal text-text">Whisper helper</h2>
               <p className="mt-0.5 text-xs text-text-muted">Required once for every Whisper model.</p>
             </div>
           </div>
           <Card>
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-text">
+                <p className="text-sm font-normal text-text">
                   {runtimeDone
                     ? "Installed and ready"
                     : runtimeDownloading
@@ -531,7 +523,7 @@ export function ModelsView(): JSX.Element {
                 )}
               </div>
               {runtimeDone ? (
-                <Badge tone="neutral" icon="ph:check-circle">On this PC</Badge>
+                <Badge tone="neutral">Installed</Badge>
               ) : (
                 <Button
                   variant="secondary"

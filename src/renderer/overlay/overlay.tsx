@@ -8,6 +8,7 @@ import { INITIAL_CAPTURE_STATE } from "../../shared/capture";
 import { Waveform } from "./Waveform";
 import { useDragPanel } from "./useDragPanel";
 import { RecordingBall } from "../shared/RecordingBall";
+import { BlocksWave } from "../shared/BlocksWave";
 
 const BAR_COUNT = 32;
 const SILENT_BANDS: readonly number[] = Array.from({ length: BAR_COUNT }, () => 0);
@@ -21,12 +22,10 @@ const formatElapsed = (ms: number): string => {
 };
 
 function StateDot({ state }: { readonly state: "arming" | "listening" | "transcribing" | "error" }): JSX.Element {
-  if (state === "listening") {
-    return <RecordingBall className="h-4 w-4" />;
-  }
-
   const color =
-    state === "transcribing"
+    state === "listening"
+      ? "var(--sv-success)"
+      : state === "transcribing"
         ? "var(--sv-info)"
         : state === "error"
           ? "var(--sv-danger)"
@@ -38,9 +37,7 @@ function StateDot({ state }: { readonly state: "arming" | "listening" | "transcr
 
 /**
  * The capture panel. Plain words, no jargon. The pill morphs between
- * five states: arming, listening, transcribing, delivering, error. The
- * waveform decays into a thin processing line during transcribing, so
- * the user sees the audio being worked on without a generic spinner.
+ * five states: arming, listening, transcribing, delivering, error.
  */
 export function Overlay(): JSX.Element | null {
   const api = window.struqVoice as OverlayWindowApi;
@@ -48,23 +45,12 @@ export function Overlay(): JSX.Element | null {
   const [bands, setBands] = useState<readonly number[] | null>(null);
   const [partial, setPartial] = useState("");
   const [liveEnabled, setLiveEnabled] = useState(false);
-  const [decayMs, setDecayMs] = useState<number | null>(null);
   const sequenceRef = useRef(0);
-  const previousPhase = useRef<string>("idle");
 
   const drag = useDragPanel(api.move);
 
   useEffect(() => {
     const unsubscribeState = api.onCaptureStateChanged((next, live) => {
-      const nextPhase = next.phase;
-      const prevPhase = previousPhase.current;
-      if (nextPhase === "transcribing" && prevPhase !== "transcribing") {
-        // Start the bar decay. When transcribing is done, decayMs goes back to null.
-        setDecayMs(280);
-      } else if (nextPhase !== "transcribing") {
-        setDecayMs(null);
-      }
-      previousPhase.current = nextPhase;
       setState(next);
       setLiveEnabled(live);
     });
@@ -134,8 +120,6 @@ export function Overlay(): JSX.Element | null {
             key="transcribing"
             partial={partial}
             liveEnabled={liveEnabled}
-            bands={bands}
-            decayMs={decayMs}
           />
         )}
 
@@ -175,7 +159,7 @@ function ListeningView({
   return (
     <>
       <div className="flex min-h-0 flex-1 items-center gap-2.5">
-        <StateDot state="listening" />
+        <RecordingBall className="h-4 w-4 shrink-0 text-success" />
         <div className="h-5 min-w-0 flex-1">
           <Waveform bands={bands ?? SILENT_BANDS} idle={!live} />
         </div>
@@ -198,31 +182,15 @@ function ListeningView({
 
 function TranscribingView({
   partial,
-  liveEnabled,
-  bands,
-  decayMs
+  liveEnabled
 }: {
   readonly partial: string;
   readonly liveEnabled: boolean;
-  readonly bands: readonly number[] | null;
-  readonly decayMs: number | null;
 }): JSX.Element {
   return (
     <>
-      <div className="flex min-h-0 flex-1 items-center gap-2.5">
-        <StateDot state="transcribing" />
-        <div className="min-w-0 flex-1">
-          {/* The bars are the same canvas; they decay in place via the Waveform's
-              decayMs prop, then the shimmer line is laid on top with CSS. */}
-          <div className="relative h-5">
-            <Waveform bands={bands ?? SILENT_BANDS} idle decayMs={decayMs} />
-            <div className="shimmer-line absolute inset-0" aria-hidden="true" />
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <span className="sv-spinner" aria-hidden="true" />
-          <span className="text-2xs text-text-muted">Transcribing</span>
-        </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-2.5 px-0.5">
+        <BlocksWave className="h-5 w-5 shrink-0 text-info" />
       </div>
       {liveEnabled && (
         <div className="transcript-scroll min-h-0 flex-1 overflow-y-auto rounded-sm bg-bg-sunken px-2.5 py-1.5">

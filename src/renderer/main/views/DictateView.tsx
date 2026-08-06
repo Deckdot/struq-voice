@@ -4,7 +4,8 @@ import { Icon } from "@iconify/react";
 import { useMainStore } from "../store/use-main-store";
 import { PageBody } from "../components/PageHeader";
 import { MicrophoneMeter } from "../components/MicrophoneMeter";
-import { Button, IconButton, Kbd, SettingsGroup, StatTile, Sparkline } from "../components/ui";
+import { Button, IconButton, Kbd, SettingsGroup, StatTile } from "../components/ui";
+import { HistoryChart } from "../components/HistoryChart";
 import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
@@ -157,7 +158,7 @@ export function DictateView(): JSX.Element {
     <div className="flex h-full flex-col bg-bg">
       <PageBody>
         <div>
-          <h1 className="font-display text-2xl font-medium tracking-tight text-text">Dictate</h1>
+          <h1 className="font-display text-2xl font-normal tracking-tight text-text">Dictate</h1>
           <p className="mt-1 text-sm text-text-muted">Your voice workspace is ready wherever you type.</p>
         </div>
         {blocker !== null && (
@@ -198,15 +199,14 @@ export function DictateView(): JSX.Element {
         </div>
 
         {stats.totalTranscripts > 0 && (
-          <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3">
-            <Sparkline days={stats.daily} />
-            <div className="flex items-center justify-between text-2xs text-text-muted">
-              <span>Last 14 days</span>
-              <span data-numeric>
-                {stats.totalWords.toLocaleString()} words all time, over{" "}
-                {formatDuration(stats.totalDurationMs)}
+          <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-normal text-text-muted">Dictation Activity</span>
+              <span className="text-2xs font-normal text-text-muted" data-numeric>
+                {stats.totalWords.toLocaleString()} words all time · {formatDuration(stats.totalDurationMs)}
               </span>
             </div>
+            <HistoryChart days={stats.daily} />
           </div>
         )}
 

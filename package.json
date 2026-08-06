@@ -53,6 +53,7 @@
     "motion": "^12.43.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "recharts": "^3.10.1",
     "sherpa-onnx-node": "^1.13.4",
     "sherpa-onnx-win-x64": "^1.13.4",
     "tailwind-merge": "^3.6.0",

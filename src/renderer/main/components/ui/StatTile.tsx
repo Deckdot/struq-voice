@@ -21,21 +21,21 @@ export function StatTile({ icon, label, value, hint, className }: StatTileProps)
   return (
     <div
       className={cn(
-        "flex flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-3",
+        "flex flex-col items-center justify-center gap-1 rounded-lg border border-border bg-surface px-4 py-3 text-center",
         className
       )}
     >
-      <div className="flex items-center gap-1.5 text-text-muted">
+      <div className="flex items-center justify-center gap-1.5 text-text-muted">
         <Icon icon={icon} className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span className="text-2xs font-semibold uppercase tracking-wide">{label}</span>
+        <span className="text-2xs font-normal uppercase tracking-wide">{label}</span>
       </div>
       <span
-        className="font-display text-2xl font-semibold leading-tight tracking-tight text-text"
+        className="font-display text-2xl font-normal leading-tight tracking-tight text-text"
         data-numeric
       >
         {value}
       </span>
-      {hint !== undefined && <span className="text-2xs text-text-muted">{hint}</span>}
+      {hint !== undefined && <span className="text-2xs font-normal text-text-muted">{hint}</span>}
     </div>
   );
 }

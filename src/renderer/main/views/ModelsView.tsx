@@ -213,11 +213,11 @@ export function ModelsView(): JSX.Element {
                     </p>
                   </div>
                   {recommendedStatus?.installed === true ? (
-                    <Badge tone="success" icon="check-circle">
+                    <Badge tone="success" icon="ph:check-circle">
                       Ready to use
                     </Badge>
                   ) : recommendedDownloading && recommendedProgress !== null ? (
-                    <Badge tone="ember" icon="download-simple">
+                    <Badge tone="ember" icon="ph:download-simple">
                       {Math.round(recommendedProgress * 100)}%
                     </Badge>
                   ) : (
@@ -333,7 +333,7 @@ export function ModelsView(): JSX.Element {
                   )}
                 </div>
                 {runtimeDone ? (
-                  <Badge tone="success" icon="check-circle">
+                  <Badge tone="success" icon="ph:check-circle">
                     Ready
                   </Badge>
                 ) : (

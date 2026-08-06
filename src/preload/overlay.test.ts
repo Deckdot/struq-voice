@@ -24,9 +24,6 @@ vi.mock("electron", () => ({
       ipcListeners.get(channel)?.delete(listener);
     },
     send: vi.fn()
-  },
-  nativeTheme: {
-    shouldUseDarkColors: false
   }
 }));
 
@@ -42,13 +39,15 @@ const readExposedApi = (): OverlayWindowApi => {
   return api;
 };
 
-const loadPreload = async (): Promise<OverlayWindowApi> => {
+const loadPreload = async (
+  themeArg = "--struq-theme=light"
+): Promise<OverlayWindowApi> => {
   vi.resetModules();
   ipcListeners.clear();
   delete exposed.api;
-  process.argv.push(`--struq-channels=${JSON.stringify(PRELOAD_CHANNELS)}`);
+  process.argv.push(`--struq-channels=${JSON.stringify(PRELOAD_CHANNELS)}`, themeArg);
   await import("./overlay");
-  process.argv.pop();
+  process.argv.length -= 2;
   return readExposedApi();
 };
 
@@ -111,5 +110,20 @@ describe("overlay preload capture state", () => {
     emitState({ state: { phase: "idle" }, liveTranscription: false });
 
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("overlay preload initial theme", () => {
+  // nativeTheme does not exist in a sandboxed preload, so the theme has to
+  // arrive through argv. Reading it from the electron module instead left the
+  // overlay permanently light and threw outright in the main preload.
+  it("reads dark from argv", async () => {
+    const api = await loadPreload("--struq-theme=dark");
+    expect(api.initialTheme).toBe("dark");
+  });
+
+  it("reads light from argv", async () => {
+    const api = await loadPreload("--struq-theme=light");
+    expect(api.initialTheme).toBe("light");
   });
 });

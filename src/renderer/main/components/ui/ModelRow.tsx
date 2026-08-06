@@ -102,13 +102,13 @@ export function ModelRow({
             </span>
           </div>
         ) : verifying ? (
-          <Badge tone="info" icon="circle-notch">
+          <Badge tone="info" icon="ph:circle-notch">
             Verifying
           </Badge>
         ) : downloadError !== null ? (
           <Badge tone="danger">{downloadError}</Badge>
         ) : installed ? (
-          <Badge tone="success" icon="check-circle">
+          <Badge tone="success" icon="ph:check-circle">
             Installed
           </Badge>
         ) : (

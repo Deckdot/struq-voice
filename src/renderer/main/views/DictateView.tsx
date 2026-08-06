@@ -227,7 +227,7 @@ export function DictateView(): JSX.Element {
               hint={row.value}
               control={
                 row.ready ? (
-                  <Badge tone="success" icon="check-circle">
+                  <Badge tone="success" icon="ph:check-circle">
                     Ready
                   </Badge>
                 ) : row.fix !== undefined ? (
@@ -249,7 +249,7 @@ export function DictateView(): JSX.Element {
                     {row.fix.label}
                   </Button>
                 ) : (
-                  <Badge tone="warning" icon="warning-circle">
+                  <Badge tone="warning" icon="ph:warning-circle">
                     Not ready
                   </Badge>
                 )

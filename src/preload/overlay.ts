@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, nativeTheme } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 import type { IpcRendererEvent } from "electron";
 import type { OverlayWindowApi } from "../shared/api";
 import type { CaptureState } from "../shared/capture";
@@ -17,15 +17,18 @@ const readChannels = (argv: readonly string[]): PreloadChannels => {
   return JSON.parse(arg.slice("--struq-channels=".length)) as PreloadChannels;
 };
 
+/**
+ * A sandboxed preload gets only contextBridge, ipcRenderer, webFrame and
+ * nativeImage from the electron module, so nativeTheme cannot be read here.
+ * Main resolves the theme and serialises it into argv alongside the channels.
+ * Falling back to light keeps a missing argument cosmetic rather than fatal.
+ */
+const readTheme = (argv: readonly string[]): "light" | "dark" =>
+  argv.includes("--struq-theme=dark") ? "dark" : "light";
+
 const channels = readChannels(process.argv);
 
-// nativeTheme is present in a real renderer, but test harnesses stub the
-// electron module and may omit it; treat it as optional.
-const initialTheme: "light" | "dark" =
-  (nativeTheme as { readonly shouldUseDarkColors: boolean } | undefined)
-    ?.shouldUseDarkColors === true
-    ? "dark"
-    : "light";
+const initialTheme = readTheme(process.argv);
 
 type CaptureStateListener = (
   state: CaptureState,

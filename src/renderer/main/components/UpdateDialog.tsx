@@ -47,7 +47,7 @@ export function UpdateDialog({ api }: UpdateDialogProps): JSX.Element | null {
       title={`Version ${version} is ready to install`}
       description="Struq Voice will install in the background and reopen itself. Your settings and history stay the same."
     >
-      <Badge tone="success" icon="check-circle">
+      <Badge tone="success" icon="ph:check-circle">
         Verified against the release signature.
       </Badge>
       <div className="mt-5 flex justify-end gap-2">

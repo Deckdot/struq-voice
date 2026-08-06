@@ -51,13 +51,13 @@ export function EngineStep({
           <Badge tone="neutral">{model?.languages ?? ""}</Badge>
           <Badge tone="neutral">{formatBytes(totalBytes)}</Badge>
           {installed ? (
-            <Badge tone="success" icon="check-circle">
+            <Badge tone="success" icon="ph:check-circle">
               Ready to use
             </Badge>
           ) : failure !== null ? (
             <Badge tone="danger">{failure}</Badge>
           ) : (
-            <Badge tone="ember" icon="download-simple">
+            <Badge tone="ember" icon="ph:download-simple">
               Downloading
             </Badge>
           )}

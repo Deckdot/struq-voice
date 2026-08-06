@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, nativeTheme } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 import type { MainWindowApi } from "../shared/api";
 import type {
   AppReadiness,
@@ -38,11 +38,20 @@ const readChannels = (argv: readonly string[]): PreloadChannels => {
   return JSON.parse(arg.slice("--struq-channels=".length)) as PreloadChannels;
 };
 
+/**
+ * A sandboxed preload gets only contextBridge, ipcRenderer, webFrame and
+ * nativeImage from the electron module, so nativeTheme cannot be read here.
+ * Main resolves the theme and serialises it into argv alongside the channels.
+ * Falling back to light keeps a missing argument cosmetic rather than fatal.
+ */
+const readTheme = (argv: readonly string[]): "light" | "dark" =>
+  argv.includes("--struq-theme=dark") ? "dark" : "light";
+
 const channels = readChannels(process.argv);
 
 const api: MainWindowApi = {
   windowKind: "main",
-  initialTheme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
+  initialTheme: readTheme(process.argv),
   getAppVersion: () => ipcRenderer.invoke(channels.appGetVersion),
   getReadiness: () =>
     ipcRenderer.invoke(channels.appReadiness.get) as Promise<AppReadiness>,

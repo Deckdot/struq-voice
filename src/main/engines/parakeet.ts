@@ -8,7 +8,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { findModel } from "../../shared/models";
+import { findModel, PARAKEET_DEFAULT_MODEL_ID } from "../../shared/models";
 import type { Result, VoiceError, VoiceErrorCode } from "../../shared/result";
 import { fail, ok } from "../../shared/result";
 import type {
@@ -19,11 +19,18 @@ import type {
 } from "./types";
 
 export const PARAKEET_ENGINE_ID = "parakeet" as const;
-export const PARAKEET_DEFAULT_MODEL_ID = "parakeet-tdt-0.6b-v3-int8";
+export { PARAKEET_DEFAULT_MODEL_ID };
 
 const DEFAULT_NUM_THREADS = 8;
 const SAMPLE_RATE = 16_000;
 const FEATURE_DIM = 80;
+/**
+ * How long a failed native load or recognizer construction stays latched.
+ * Transient corporate failures (AV scanning a DLL, blocked DLL load) must
+ * not kill Parakeet until restart; after this window the next capture tries
+ * again and the engine heals itself.
+ */
+const LOAD_RETRY_MS = 60_000;
 
 const NOT_INSTALLED_MESSAGE =
   "Parakeet runtime is not installed. Install it in Settings > Models.";
@@ -78,9 +85,16 @@ export interface ParakeetEngineOptions {
   readonly modelsRoot: string;
   /** Catalog id; defaults to PARAKEET_DEFAULT_MODEL_ID. */
   readonly modelId?: string;
+  /**
+   * Resolves the catalog id at call time, so a settings change takes effect
+   * without recreating the engine. Takes precedence over `modelId`.
+   */
+  readonly getModelId?: () => string;
   /** Defaults to 8. */
   readonly numThreads?: number;
   readonly onWarmup?: (state: "cold" | "warming" | "warm" | "failed") => void;
+  /** Tuning knob for tests; production runs on LOAD_RETRY_MS. */
+  readonly loadRetryMs?: number;
   /** Test seam for the native module; production uses the lazy require. */
   readonly deps?: {
     readonly loadModule?: () => SherpaOnnxModule;
@@ -133,38 +147,48 @@ const buildRecognizerConfig = (
 export const createParakeetEngine = (
   options: ParakeetEngineOptions
 ): TranscriptionEngine => {
+  const loadRetryMs = options.loadRetryMs ?? LOAD_RETRY_MS;
+  const resolveModelId = (): string =>
+    options.getModelId?.() ?? options.modelId ?? PARAKEET_DEFAULT_MODEL_ID;
   let recognizer: SherpaOfflineRecognizer | null = null;
+  let recognizerModelId: string | null = null;
   let sherpaCache: SherpaOnnxModule | null = null;
-  let sherpaLoadFailed = false;
+  let sherpaLoadFailedAt = 0;
+  let recognizerFailedAt = 0;
 
   const loadSherpa = (): SherpaOnnxModule => {
     if (sherpaCache !== null) {
       return sherpaCache;
     }
-    if (sherpaLoadFailed) {
+    if (sherpaLoadFailedAt !== 0 && Date.now() - sherpaLoadFailedAt < loadRetryMs) {
       throw new ParakeetError(NOT_INSTALLED_MESSAGE);
     }
     try {
       const loader = options.deps?.loadModule ?? defaultLoadModule;
       sherpaCache = loader();
+      sherpaLoadFailedAt = 0;
       return sherpaCache;
     } catch {
-      sherpaLoadFailed = true;
+      sherpaLoadFailedAt = Date.now();
       throw new ParakeetError(NOT_INSTALLED_MESSAGE);
     }
   };
 
   const ensureRecognizer = (): SherpaOfflineRecognizer => {
-    if (recognizer !== null) {
+    const modelId = resolveModelId();
+    // The recognizer is bound to one model's files; switching the selected
+    // model swaps it rather than transcribing with the stale weights.
+    if (recognizer !== null && recognizerModelId === modelId) {
       return recognizer;
     }
+    if (recognizer !== null) {
+      recognizer.destroy?.();
+      recognizer = null;
+    }
     const sherpa = loadSherpa();
-    const modelId = options.modelId ?? PARAKEET_DEFAULT_MODEL_ID;
     const model = findModel(modelId);
     if (model === null) {
-      throw new ParakeetError(
-        `Parakeet model "${modelId}" is not in the catalog.`
-      );
+      throw new ParakeetError(`Parakeet model "${modelId}" is not in the catalog.`);
     }
     const modelDir = join(options.modelsRoot, modelId);
     const missing = model.files.some(
@@ -173,9 +197,18 @@ export const createParakeetEngine = (
     if (missing) {
       throw new ParakeetError(NOT_DOWNLOADED_MESSAGE);
     }
-    recognizer = new sherpa.OfflineRecognizer(
-      buildRecognizerConfig(modelDir, options.numThreads ?? DEFAULT_NUM_THREADS)
-    );
+    try {
+      recognizer = new sherpa.OfflineRecognizer(
+        buildRecognizerConfig(modelDir, options.numThreads ?? DEFAULT_NUM_THREADS)
+      );
+      recognizerFailedAt = 0;
+      recognizerModelId = modelId;
+    } catch {
+      recognizerFailedAt = Date.now();
+      throw new ParakeetError(
+        `Parakeet could not load the model files (${modelId}). They may be locked by another program or the native runtime may be blocked.`
+      );
+    }
     return recognizer;
   };
 
@@ -189,7 +222,7 @@ export const createParakeetEngine = (
         action: "install-runtime"
       };
     }
-    const modelId = options.modelId ?? PARAKEET_DEFAULT_MODEL_ID;
+    const modelId = resolveModelId();
     const model = findModel(modelId);
     if (model === null) {
       return {
@@ -206,6 +239,16 @@ export const createParakeetEngine = (
         ready: false,
         reason: NOT_DOWNLOADED_MESSAGE,
         action: "download-model"
+      };
+    }
+    // File existence is not enough: a recognizer that failed to construct
+    // (ONNX init failure, blocked DLL) is not ready either. After the retry
+    // window it stops claiming failure and the next capture tries again.
+    if (recognizer === null && recognizerFailedAt !== 0 && Date.now() - recognizerFailedAt < loadRetryMs) {
+      return {
+        ready: false,
+        reason:
+          "Parakeet could not load its model files. They may be locked by another program; try again in a minute."
       };
     }
     return { ready: true };
@@ -251,7 +294,7 @@ export const createParakeetEngine = (
             text: (result.text ?? "").trim(),
             language: null,
             engineId: PARAKEET_ENGINE_ID,
-            modelId: options.modelId ?? PARAKEET_DEFAULT_MODEL_ID,
+            modelId: resolveModelId(),
             inferenceMs,
             realtimeFactor: inferenceMs / Math.max(request.durationMs, 1),
             costUsd: null
@@ -267,6 +310,7 @@ export const createParakeetEngine = (
         recognizer.destroy?.();
         recognizer = null;
       }
+      recognizerModelId = null;
       return Promise.resolve();
     }
   };

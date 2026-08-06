@@ -4,8 +4,9 @@ import { Button } from "./Button";
 import { Badge } from "./Badge";
 import { ProgressBar } from "./ProgressBar";
 import { formatBytes } from "./ProgressBar";
-import type { ModelStatus } from "../../../../shared/models";
+import type { ModelDownloadErrorCode, ModelStatus } from "../../../../shared/models";
 import { cn } from "../../lib/cn";
+import { useTranslation } from "../../lib/useTranslation";
 import { ProviderMark } from "../ProviderMark";
 
 /**
@@ -41,6 +42,20 @@ const downloadProgress = (status: ModelStatus): number | null => {
   return Math.min(1, Math.max(0, receivedBytes / totalBytes));
 };
 
+/**
+ * Each failure class gets its own actionable copy; the raw detail string from
+ * main rides along as the badge tooltip.
+ */
+const ERROR_KEYS = {
+  http: "models.error.http",
+  network: "models.error.network",
+  timeout: "models.error.timeout",
+  disk: "models.error.disk",
+  permission: "models.error.permission",
+  checksum: "models.error.checksum",
+  unknown: "models.error.unknown"
+} as const satisfies Record<ModelDownloadErrorCode, string>;
+
 export function ModelRow({
   status,
   active,
@@ -53,12 +68,14 @@ export function ModelRow({
   onSelect,
   onImport
 }: ModelRowProps): JSX.Element {
+  const { t } = useTranslation();
   const downloading = isDownloading(status);
   const verifying = isVerifying(status);
   const errored = isError(status);
   const installed = status.installed;
   const progress = downloadProgress(status);
-  const downloadError = errored && status.download.state === "error" ? status.download.message : null;
+  const downloadError =
+    errored && status.download.state === "error" ? status.download : null;
 
   return (
     <article
@@ -100,7 +117,9 @@ export function ModelRow({
             Verifying
           </Badge>
         ) : downloadError !== null ? (
-          <Badge tone="danger">{downloadError}</Badge>
+          <Badge tone="danger" title={downloadError.message}>
+            {t(ERROR_KEYS[downloadError.code])}
+          </Badge>
         ) : installed ? (
           <Badge tone="neutral">Ready</Badge>
         ) : (

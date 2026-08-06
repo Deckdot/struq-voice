@@ -73,7 +73,26 @@ export const createModelInstaller = (modelsRoot: string): ModelInstaller => {
   };
 
   const deleteModel = async (model: ModelInfo): Promise<void> => {
-    await rm(modelDir(model), { recursive: true, force: true });
+    // rm can hit EPERM/EBUSY when a scanner or an aborted download stream
+    // still holds a file open. Retry briefly; a delete that visibly fails is
+    // worse than one that takes half a second.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await rm(modelDir(model), { recursive: true, force: true });
+        return;
+      } catch (error) {
+        const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+        if (
+          (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY") ||
+          attempt >= 5
+        ) {
+          throw error;
+        }
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 200 * attempt);
+        });
+      }
+    }
   };
 
   const totalDiskUsed = (): number => {

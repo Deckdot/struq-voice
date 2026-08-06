@@ -14,6 +14,8 @@ export interface BadgeProps {
   readonly icon?: string | IconifyIcon;
   readonly children: ReactNode;
   readonly className?: string;
+  /** Hover tooltip; used to surface the raw failure detail on error badges. */
+  readonly title?: string;
 }
 
 const TONE_CLASS: Record<BadgeTone, string> = {
@@ -26,7 +28,13 @@ const TONE_CLASS: Record<BadgeTone, string> = {
   info: "border border-border bg-surface text-info"
 };
 
-export function Badge({ tone = "neutral", icon, children, className }: BadgeProps): JSX.Element {
+export function Badge({
+  tone = "neutral",
+  icon,
+  children,
+  className,
+  title
+}: BadgeProps): JSX.Element {
   return (
     <span
       className={cn(
@@ -35,6 +43,7 @@ export function Badge({ tone = "neutral", icon, children, className }: BadgeProp
         TONE_CLASS[tone],
         className
       )}
+      title={title}
     >
       {icon !== undefined && (
         <Icon icon={icon} className="h-3 w-3 shrink-0" aria-hidden="true" />

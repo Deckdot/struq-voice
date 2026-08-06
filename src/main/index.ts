@@ -5,13 +5,12 @@
  */
 
 import { join } from "node:path";
-import { app, BrowserWindow, clipboard, Menu, nativeTheme, Notification } from "electron";
+import { app, BrowserWindow, clipboard, Menu, nativeTheme, net, Notification } from "electron";
 import { openDatabase } from "./db/client";
 import { createEngineRouter } from "./engines/router";
 import { createMockEngine } from "./engines/mock";
 import {
   createParakeetEngine,
-  PARAKEET_DEFAULT_MODEL_ID,
   PARAKEET_ENGINE_ID
 } from "./engines/parakeet";
 import { createOpenRouterEngine, OPENROUTER_ENGINE_ID } from "./engines/openrouter";
@@ -33,6 +32,19 @@ import { fail } from "../shared/result";
 
 // electron-updater ships CommonJS, so the named exports hang off the default.
 const { autoUpdater } = electronUpdater as unknown as { autoUpdater: AutoUpdaterLike };
+
+/**
+ * Downloads through Chromium's network stack instead of Node's. undici
+ * (globalThis.fetch) ignores the Windows system proxy and validates TLS
+ * against Node's bundled Mozilla roots; corporate laptops sit behind an
+ * egress proxy whose root CA the OS store trusts and Node does not. That is
+ * why model downloads died on managed machines while the updater, which
+ * drives Electron's net internally, worked. All model, runtime and manifest
+ * fetches go through here so every path honors the system proxy and the OS
+ * certificate store.
+ */
+const netFetch: typeof fetch = (input, init) =>
+  net.fetch(input as string | Request, init);
 import { cleanupTranscript } from "./post/text-cleanup";
 import { insertTextIntoActiveApp } from "./platform/win32/paste";
 import { createRecorderBridge } from "./audio/recorder-bridge";
@@ -177,7 +189,8 @@ if (!gotLock) {
     const runtimeRoot = join(app.getPath("userData"), "runtimes");
     const models = createModelsService(
       join(app.getPath("userData"), "models"),
-      runtimeRoot
+      runtimeRoot,
+      { fetch: netFetch }
     );
     const autostart = createAutostart();
 
@@ -242,6 +255,7 @@ if (!gotLock) {
           autoUpdater,
           isPackaged: app.isPackaged,
           isBusy: () => captureBusy(),
+          deps: { fetch: netFetch },
           onReady: (version) => {
             notifyUpdateReady(version);
           }
@@ -295,7 +309,7 @@ if (!gotLock) {
     const modelsRoot = join(app.getPath("userData"), "models");
     const parakeetEngine = createParakeetEngine({
       modelsRoot,
-      modelId: PARAKEET_DEFAULT_MODEL_ID
+      getModelId: () => settingsStore.get().parakeetModelId
     });
     const openrouterEngine = createOpenRouterEngine({
       getApiKey: () => secrets.readOpenRouterKey()

@@ -63,7 +63,6 @@ export const createModelsService = (
   });
   const listeners = new Set<(listed: ModelList) => void>();
   let runtimeState: RuntimeState = { state: "idle" };
-  let installingRuntime = false;
 
   const list = (): ModelList => ({
     items: MODEL_CATALOG.map((model) => ({
@@ -89,7 +88,7 @@ export const createModelsService = (
   };
 
   const downloader: Downloader = createDownloader(modelsRoot, {
-    fetch: globalThis.fetch,
+    fetch: deps?.fetch ?? globalThis.fetch,
     emitProgress: internalEmitter
   });
 
@@ -127,19 +126,22 @@ export const createModelsService = (
     if (state.state === "downloading" || state.state === "verifying") {
       downloader.cancel(modelId);
     }
-    await installer.delete(model);
+    try {
+      // The installer retries EPERM/EBUSY, so an aborted stream still holding
+      // its .part open settles before the rm gives up.
+      await installer.delete(model);
+    } catch {
+      // A delete that fails on a locked file must not reject the IPC invoke;
+      // the caller refreshes and the row still shows the model.
+      return false;
+    }
     notifyListeners();
     return true;
   };
 
-  const installWhisperRuntime = async (): Promise<void> => {
-    if (installingRuntime) return;
-    if (runtimeDownloader.isInstalled()) {
-      runtimeState = { state: "done" };
-      notifyListeners();
-      return;
-    }
-    installingRuntime = true;
+  let runtimeInstallInFlight: Promise<void> | null = null;
+
+  const runRuntimeInstall = async (): Promise<void> => {
     runtimeState = { state: "downloading", receivedBytes: 0, totalBytes: runtimeDownloader.bytesTotal() };
     notifyListeners();
     const unsubscribe = runtimeDownloader.onProgress((received, total) => {
@@ -156,9 +158,26 @@ export const createModelsService = (
       };
     } finally {
       unsubscribe();
-      installingRuntime = false;
       notifyListeners();
     }
+  };
+
+  const installWhisperRuntime = async (): Promise<void> => {
+    if (runtimeInstallInFlight !== null) {
+      // A second click during an install joins the one in flight instead of
+      // reporting success for a run that has not happened yet.
+      await runtimeInstallInFlight;
+      return;
+    }
+    if (runtimeDownloader.isInstalled()) {
+      runtimeState = { state: "done" };
+      notifyListeners();
+      return;
+    }
+    runtimeInstallInFlight = runRuntimeInstall().finally(() => {
+      runtimeInstallInFlight = null;
+    });
+    await runtimeInstallInFlight;
   };
 
   /**

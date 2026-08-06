@@ -157,7 +157,7 @@ export const registerIpcHandlers = (
         engine: { ...settings.engine, primary: recommendation.engineId },
         ...(recommendation.engineId === "whisper-cpp"
           ? { whisperModelId: recommendation.modelId }
-          : {})
+          : { parakeetModelId: recommendation.modelId })
       });
 
       const listed = models.list();
@@ -478,11 +478,27 @@ export const registerIpcHandlers = (
       );
       if (window === undefined) return;
       for (const status of listed.items) {
+        // Progress events stream at the downloader's throttle; the terminal
+        // states are pushed exactly once each so the renderer leaves the last
+        // progress tick instead of freezing on it.
         if (status.download.state === "downloading") {
           window.webContents.send(modelsDownloadProgressChannel, {
+            state: "downloading",
             modelId: status.model.id,
             receivedBytes: status.download.receivedBytes,
             totalBytes: status.download.totalBytes,
+          });
+        } else if (status.download.state === "done") {
+          window.webContents.send(modelsDownloadProgressChannel, {
+            state: "done",
+            modelId: status.model.id,
+          });
+        } else if (status.download.state === "error") {
+          window.webContents.send(modelsDownloadProgressChannel, {
+            state: "error",
+            modelId: status.model.id,
+            code: status.download.code,
+            message: status.download.message,
           });
         }
       }

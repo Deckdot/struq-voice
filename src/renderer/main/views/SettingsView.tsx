@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
-import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
 import type { UpdateState } from "../../../shared/updates";
 import { INITIAL_UPDATE_STATE } from "../../../shared/updates";
 import type { RecorderDevice } from "../../../shared/ipc";
-import { PageHeader } from "../components/PageHeader";
+import { Tabs } from "../components/ui";
 import { GeneralTab } from "./settings/GeneralTab";
 import { CaptureTab } from "./settings/CaptureTab";
 import { TranscriptionTab } from "./settings/TranscriptionTab";
@@ -95,39 +94,23 @@ export function SettingsView(): JSX.Element {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <PageHeader icon="ph:gear" title="Settings" />
+    <div className="h-full overflow-y-auto bg-bg" data-selectable>
+      <div className="mx-auto w-full max-w-[920px] px-6 py-5">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">Settings</h1>
+          <p className="mt-1 text-sm text-text-muted">Tune how Struq listens, writes, and stays out of your way.</p>
+        </div>
 
-      <div className="flex min-h-0 flex-1">
-        <nav
-          aria-label="Settings categories"
-          className="flex w-[176px] shrink-0 flex-col gap-0.5 border-r border-border bg-bg-sunken p-2"
-        >
-          {CATEGORIES.map((entry) => {
-            const active = entry.id === category;
-            return (
-              <button
-                key={entry.id}
-                type="button"
-                aria-current={active ? "page" : undefined}
-                onClick={() => {
-                  setCategory(entry.id);
-                }}
-                className={`flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-left text-sm transition-colors duration-hover ${
-                  active
-                    ? "bg-surface font-medium text-text"
-                    : "text-text-secondary hover:bg-surface-hover hover:text-text"
-                }`}
-              >
-                <Icon icon={entry.icon} className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-                <span className="min-w-0 truncate">{entry.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+        <Tabs
+          items={CATEGORIES}
+          active={category}
+          onSelect={(next) => {
+            if (isCategory(next)) setCategory(next);
+          }}
+          className="mt-5 border-b border-border"
+        />
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5" data-selectable>
-          <div className="mx-auto w-full max-w-[760px]">
+        <div className="mx-auto mt-5 w-full max-w-[800px]" role="tabpanel">
             {category === "general" && (
               <GeneralTab
                 api={api}
@@ -152,7 +135,6 @@ export function SettingsView(): JSX.Element {
             {category === "delivery" && <DeliveryTab settings={settings} update={update} />}
             {category === "text" && <TextTab api={api} settings={settings} update={update} />}
             {category === "appearance" && <AppearanceTab api={api} settings={settings} update={update} />}
-          </div>
         </div>
       </div>
     </div>

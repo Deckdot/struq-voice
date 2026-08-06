@@ -71,6 +71,36 @@ describe("capture session", () => {
     expect(session.state.phase).toBe("idle");
   });
 
+  it("fires listening-end feedback before transcription starts", () => {
+    const phases: string[] = [];
+    const session = createCaptureSession({
+      ...OPTIONS,
+      onListeningEnd: () => {
+        phases.push(session.state.phase);
+      },
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(500);
+    session.stop();
+
+    expect(phases).toEqual(["listening"]);
+    expect(session.state.phase).toBe("transcribing");
+  });
+
+  it("does not fire listening-end feedback for a discarded tap", () => {
+    const onListeningEnd = vi.fn();
+    const session = createCaptureSession({ ...OPTIONS, onListeningEnd });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(100);
+    session.stop();
+
+    expect(onListeningEnd).not.toHaveBeenCalled();
+  });
+
   it("silently discards captures below minCaptureMs", () => {
     const session = createCaptureSession(OPTIONS);
     const history: CaptureState[] = [];

@@ -18,10 +18,10 @@ the whole product:
 - **Evergreen (pine green)** is the accent. It marks primary actions,
   active navigation, focus rings, selected controls, and ready states.
   It says "this is where you are, and it is safe to act here."
-- **Ember (terracotta)** is reserved for one thing: live capture. The
-  recording dot, the listening waveform, the arming pulse. The brand
-  symbol's dot in the corner of the four bars literally means "voice is
-  live." Every other color in the palette exists to support those two.
+- **Ember (terracotta)** belongs to the brand mark and restrained warm
+  details. Live capture uses evergreen so recording reads as active, safe,
+  and unmistakable. Every other color in the palette exists to support
+  those two.
 
 Surfaces are neutral and slightly temperature-shifted: warm porcelain in
 light mode, deep green-undertoned charcoal in dark mode. Elevation is
@@ -70,15 +70,15 @@ not twitch the layout.
   focus rings, selected controls. Light: `oklch(0.45 0.085 160)`.
   Dark: `oklch(0.55 0.095 160)`. Hover and active states shift the
   lightness only, never the hue.
-- **ember**: the live-capture color. Listening dot, recording waveform,
-  the in-flight download tone. Light: `oklch(0.56 0.115 42)`. Dark:
+- **ember**: the warm brand color. The logo dot and restrained secondary
+  details use it. Light: `oklch(0.56 0.115 42)`. Dark:
   `oklch(0.65 0.12 45)`.
 - **semantics**: success, warning, danger, info. All four exist in both
   themes, each with a `-soft` background variant for chips and banners.
   Body text on a semantic surface clears 4.5:1 in both themes.
 
 State is never communicated by color alone. Every state pairs a color
-with either a word, a glyph, or both. The listening dot is the ember
+with either a word, a glyph, or both. The listening dot is evergreen
 color plus the word "Listening" in the same row. The error dot is the
 danger color plus a checkmark, an X, or a warning glyph.
 
@@ -329,11 +329,10 @@ The persistent frame every view renders into:
   minimise, maximise, and close controls on the right. The close
   control uses the danger surface on hover, matching the Windows
   convention. Double-click on the drag region toggles maximise.
-- Left navigation rail (200px). Four items: Dictate, History, Models,
-  Settings. The active item carries a 3px accent edge that glides
-  between rows. The status cluster lives at the bottom of the rail
-  with three rows: Microphone, Hotkey, Voice service. Each row is a
-  button that opens the relevant Settings tab.
+- Left navigation rail (200px). Dictate, History, and Models sit at the top.
+  Settings is pinned to the bottom. The active item carries a 3px accent edge
+  that glides between rows. A fault status appears just above Settings only
+  when the user needs to act.
 - A flexible content region on the right. Pages transition in and
   out with the page transition spec.
 - The status cluster, the command palette, the splash, and the update
@@ -352,12 +351,12 @@ highest craft.
   clamps to a live display and remembers the position across restarts.
 - Five states with object continuity on the same canvas: arming,
   listening, transcribing, delivering, error.
-  - Arming: ember dot pulse, idle baseline.
-  - Listening: ember dot solid, live waveform, elapsed time.
+  - Arming: accent dot, idle baseline.
+  - Listening: green dot with a soft pulse, green live waveform, elapsed time.
   - Transcribing: bars decay into a thin processing line with one
     controlled shimmer sweep, engine label on the right. No spinner.
-  - Delivering: check draws itself, success colour, transcript
-    preview, one line.
+  - Delivering: check draws itself in the success colour. No text competes
+    with the final confirmation.
   - Error: danger dot, cause, "Copied. Press Ctrl + V." when the
     text survived.
 - The cold-start replay path in main is preserved: the broadcast

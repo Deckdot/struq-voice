@@ -89,9 +89,9 @@ as `pnpm test:e2e`).
   Skipped entirely under `STRUQ_VOICE_E2E=1`.
 
 ### Interface
-- Application shell: custom title bar, left navigation rail (Dictate,
-  History, Models, Settings), persistent status cluster at the bottom
-  of the rail, flexible content region. Ctrl+1..4 jumps between
+- Application shell: branded custom title bar, left navigation rail with
+  Dictate, History, and Models at the top, Settings pinned at the bottom,
+  and a flexible content region. Ctrl+1..4 jumps between
   pages, Ctrl+K opens the command palette, Esc closes any overlay.
 - Shared component layer in `src/renderer/main/components/ui/`: the
   full component inventory (Button, IconButton, Badge, Kbd, Field,
@@ -108,10 +108,13 @@ as `pnpm test:e2e`).
 - History is a virtualized list grouped by day (Today, Yesterday, then
   weekday + date), with a search field, copy and a two-step delete per
   row. Roving tabindex, Enter to copy, Delete to remove.
-- Models leads with a "Best for this computer" panel named with the
-  hardware that chose it, then the full catalog as aligned rows with
-  size, languages, speed, state and actions in fixed columns.
-- Settings is six categories: General, Capture, Transcription,
+- Models leads with the current selection and three recommendations based
+  on detected hardware. Tiny, Base, Small, Medium, and Large each show the
+  three strongest variants first, with every remaining variant available
+  on demand. NVIDIA and OpenAI marks identify the model provider. A PC specs
+  dialog shows the detected CPU, memory, graphics, CUDA state, and workload
+  profile.
+- Settings is six horizontal tabs: General, Capture, Transcription,
   Delivery, Text, Appearance. Each is a SettingsGroup of related
   rows. Advanced values (min/max capture, pre-roll, restore delay,
   live transcript interval) live behind a Disclosure in their
@@ -123,7 +126,8 @@ as `pnpm test:e2e`).
   with object continuity on the same canvas: arming, listening,
   transcribing, delivering, error. The waveform decays into a thin
   processing line during transcribing, so the user sees the audio
-  being worked on without a generic spinner.
+  being worked on without a generic spinner. Listening uses a green
+  animated dot and waveform. Delivery resolves to a drawn check only.
 - Theme is System, Light, or Dark. System follows the Windows setting
   live. Both themes are designed: dark is not an inversion of light.
 - Views built against Evergreen and Ember

@@ -75,7 +75,7 @@ export function Tabs({
   }
 
   return (
-    <div role="tablist" className={cn("relative flex items-center gap-1", className)}>
+    <div role="tablist" className={cn("relative flex items-center gap-1 overflow-x-auto", className)}>
       {items.map((item) => {
         const isActive = item.id === active;
         return (
@@ -88,7 +88,7 @@ export function Tabs({
               onSelect(item.id);
             }}
             className={cn(
-              "relative inline-flex h-8 cursor-pointer items-center gap-2 rounded-t-sm px-3 text-sm",
+              "relative inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-t-sm px-3.5 text-sm",
               "transition-colors duration-hover",
               isActive ? "text-text" : "text-text-secondary hover:text-text"
             )}

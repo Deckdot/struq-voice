@@ -4,7 +4,6 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { MainWindowApi } from "../../../shared/api";
 import type { TranscriptRecord } from "../../../shared/ipc";
 import { EmptyState, SearchInput, TranscriptRow } from "../components/ui";
-import { PageHeader } from "../components/PageHeader";
 
 const SEARCH_INPUT_ID = "history-search";
 
@@ -213,10 +212,12 @@ export function HistoryView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <PageHeader
-        icon="ph:clock-counter-clockwise"
-        title="History"
-        actions={
+      <div className="flex shrink-0 items-end justify-between gap-5 px-6 pb-4 pt-5">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">History</h1>
+          <p className="mt-1 text-sm text-text-muted">Find, copy, and review every transcript.</p>
+        </div>
+        <div className="pb-0.5">
           <SearchInput
             id={SEARCH_INPUT_ID}
             value={query}
@@ -227,8 +228,8 @@ export function HistoryView(): JSX.Element {
             placeholder="Search transcripts"
             className="w-[280px]"
           />
-        }
-      />
+        </div>
+      </div>
 
       <div
         ref={scrollRef}

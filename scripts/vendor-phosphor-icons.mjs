@@ -25,6 +25,14 @@ const outputPath = resolve(
   repoRoot,
   "src/renderer/assets/icons/ph.json"
 );
+const providerSourcePath = resolve(
+  repoRoot,
+  "node_modules/@iconify/json/json/simple-icons.json"
+);
+const providerOutputPath = resolve(
+  repoRoot,
+  "src/renderer/assets/icons/simple-icons.json"
+);
 
 /**
  * The exact icons used across the renderer. Keep this list in lockstep with
@@ -93,7 +101,11 @@ const WHITELIST = [
   "desktop-tower",
   "power",
   "arrows-clockwise",
-  "flask"
+  "flask",
+  "cpu",
+  "memory",
+  "graphics-card",
+  "gauge"
 ];
 
 const source = JSON.parse(readFileSync(sourcePath, "utf8"));
@@ -140,6 +152,28 @@ const output = {
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, JSON.stringify(output));
 
+const providerWhitelist = ["nvidia", "openai"];
+const providerSource = JSON.parse(readFileSync(providerSourcePath, "utf8"));
+const providerIcons = {};
+for (const name of providerWhitelist) {
+  const icon = providerSource.icons[name];
+  if (icon === undefined) {
+    throw new Error(`Provider icon ${name} is missing from @iconify/json`);
+  }
+  providerIcons[name] = icon;
+}
+
+const providerOutput = {
+  prefix: "simple-icons",
+  lastModified: providerSource.lastModified,
+  width: providerSource.width,
+  height: providerSource.height,
+  icons: providerIcons
+};
+
+mkdirSync(dirname(providerOutputPath), { recursive: true });
+writeFileSync(providerOutputPath, JSON.stringify(providerOutput));
+
 console.log(
-  `Vendored ${WHITELIST.length} Phosphor icons to ${outputPath}`
+  `Vendored ${WHITELIST.length} Phosphor icons and ${providerWhitelist.length} provider icons`
 );

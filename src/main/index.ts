@@ -323,11 +323,22 @@ if (!gotLock) {
     });
     const primaryEngineId = envEngineOverride ?? settings.engine.primary;
 
+    const sounds = createCaptureSoundPlayer({
+      isEnabled: () => settingsStore.get().captureSounds,
+      getVolume: () => settingsStore.get().captureSoundVolume
+    });
+    if (!e2e) {
+      void sounds.warmup();
+    }
+
     const session = createCaptureSession({
       ...DEFAULT_CAPTURE_OPTIONS,
       source,
       onAudio: (audio) => {
         lastCaptureAudio = audio;
+      },
+      onListeningEnd: () => {
+        sounds.play("close");
       },
       transcribingEngineId: primaryEngineId,
       transcribe: async (audio) => {
@@ -456,22 +467,12 @@ if (!gotLock) {
      * on every route out: a normal stop, Escape, or a failure. A capture that
      * opened with a sound and ended in silence reads as one still running.
      */
-    const sounds = createCaptureSoundPlayer({
-      isEnabled: () => settingsStore.get().captureSounds,
-      getVolume: () => settingsStore.get().captureSoundVolume
-    });
-    if (!e2e) {
-      void sounds.warmup();
-    }
-
     let wasListening = false;
 
     session.subscribe((state) => {
       const listening = state.phase === "listening";
       if (listening && !wasListening) {
         sounds.play("open");
-      } else if (!listening && wasListening) {
-        sounds.play("close");
       }
       wasListening = listening;
 

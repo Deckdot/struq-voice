@@ -19,14 +19,22 @@ const formatElapsed = (ms: number): string => {
   return `${String(minutes)}:${String(seconds).padStart(2, "0")}`;
 };
 
-function StateDot({ state }: { readonly state: "ready" | "busy" | "error" }): JSX.Element {
-  const color = state === "ready" ? "var(--sv-success)" : state === "error" ? "var(--sv-danger)" : "var(--sv-ember)";
+function StateDot({ state }: { readonly state: "arming" | "listening" | "transcribing" | "error" }): JSX.Element {
+  const color =
+    state === "listening"
+      ? "var(--sv-success)"
+      : state === "transcribing"
+        ? "var(--sv-info)"
+        : state === "error"
+          ? "var(--sv-danger)"
+          : "var(--sv-accent)";
   return (
-    <span
-      className="h-2 w-2 shrink-0 rounded-pill"
-      style={{ backgroundColor: color }}
-      aria-hidden="true"
-    />
+    <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+      {state === "listening" && (
+        <span className="absolute inset-0 rounded-pill bg-success opacity-40 motion-safe:animate-ping" />
+      )}
+      <span className="relative h-full w-full rounded-pill" style={{ backgroundColor: color }} />
+    </span>
   );
 }
 
@@ -105,7 +113,7 @@ export function Overlay(): JSX.Element | null {
             transition={{ duration: 0.18 }}
             className="flex min-h-0 flex-1 items-center gap-2.5"
           >
-            <StateDot state="busy" />
+            <StateDot state="arming" />
             <div className="h-5 min-w-0 flex-1">
               <Waveform bands={SILENT_BANDS} idle />
             </div>
@@ -134,7 +142,7 @@ export function Overlay(): JSX.Element | null {
           />
         )}
 
-        {state.phase === "delivering" && <DeliveringView key="delivering" text={state.text} />}
+        {state.phase === "delivering" && <DeliveringView key="delivering" />}
 
         {state.phase === "error" && <ErrorView key="error" state={state} />}
       </AnimatePresence>
@@ -170,7 +178,7 @@ function ListeningView({
   return (
     <>
       <div className="flex min-h-0 flex-1 items-center gap-2.5">
-        <StateDot state="busy" />
+        <StateDot state="listening" />
         <div className="h-5 min-w-0 flex-1">
           <Waveform bands={bands ?? SILENT_BANDS} idle={!live} />
         </div>
@@ -207,7 +215,7 @@ function TranscribingView({
   return (
     <>
       <div className="flex min-h-0 flex-1 items-center gap-2.5">
-        <StateDot state="busy" />
+        <StateDot state="transcribing" />
         <div className="min-w-0 flex-1">
           {/* The bars are the same canvas; they decay in place via the Waveform's
               decayMs prop, then the shimmer line is laid on top with CSS. */}
@@ -233,13 +241,13 @@ function TranscribingView({
   );
 }
 
-function DeliveringView({ text }: { readonly text: string }): JSX.Element {
+function DeliveringView(): JSX.Element {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-      className="flex min-h-0 flex-1 items-center gap-2.5"
+      className="flex min-h-0 flex-1 items-center justify-center"
     >
       <svg
         viewBox="0 0 24 24"
@@ -256,7 +264,6 @@ function DeliveringView({ text }: { readonly text: string }): JSX.Element {
           className="checkmark-draw"
         />
       </svg>
-      <p className="min-w-0 flex-1 truncate text-xs text-text-secondary">{text}</p>
     </motion.div>
   );
 }

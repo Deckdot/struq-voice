@@ -16,7 +16,7 @@ const engineToOption = (option: EngineOption): RadioOption<string> => ({
   label: option.displayName,
   description: option.hint,
   badge: option.kind === "cloud" ? "Cloud" : option.kind === "test" ? "Practice" : "Local",
-  tone: option.kind === "cloud" ? "warning" : option.kind === "test" ? "neutral" : "accent",
+  tone: option.kind === "cloud" ? "warning" : "neutral",
   icon: option.kind === "cloud" ? "ph:cloud" : option.kind === "test" ? "ph:flask" : "ph:desktop-tower"
 });
 
@@ -98,7 +98,7 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
       </SettingsGroup>
 
       {isCloud && (
-        <Card className="border-warning bg-warning-soft">
+        <Card className="border-border bg-surface">
           <div className="flex items-center gap-3">
             <Icon icon="ph:warning-circle" className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
             <div>

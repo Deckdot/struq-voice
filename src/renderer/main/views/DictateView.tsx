@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import { useMainStore } from "../store/use-main-store";
-import { PageBody, PageHeader } from "../components/PageHeader";
+import { PageBody } from "../components/PageHeader";
 import { Button, IconButton, Kbd, SettingsGroup, StatTile, Sparkline } from "../components/ui";
 import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
@@ -156,8 +156,11 @@ export function DictateView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col bg-bg">
-      <PageHeader icon="ph:microphone" title="Dictate" />
       <PageBody>
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">Dictate</h1>
+          <p className="mt-1 text-sm text-text-muted">Your voice workspace is ready wherever you type.</p>
+        </div>
         {blocker !== null && (
           <div className="flex items-center gap-3 rounded-lg border border-warning bg-warning-soft px-4 py-3">
             <Icon icon="ph:warning" className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
@@ -216,7 +219,11 @@ export function DictateView(): JSX.Element {
                 className={
                   phaseLabel === undefined
                     ? "h-4 w-4 shrink-0 text-text-muted"
-                    : "h-4 w-4 shrink-0 text-ember"
+                    : capture.phase === "listening"
+                      ? "h-4 w-4 shrink-0 text-success"
+                      : capture.phase === "transcribing"
+                        ? "h-4 w-4 shrink-0 text-info"
+                        : "h-4 w-4 shrink-0 text-accent"
                 }
                 aria-hidden="true"
               />

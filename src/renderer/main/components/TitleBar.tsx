@@ -1,6 +1,7 @@
 import type { CSSProperties, JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
+import { BrandLockup } from "./Brand";
 
 /**
  * The custom title bar of the frameless main window. Draggable via the
@@ -26,12 +27,10 @@ export function TitleBar(): JSX.Element {
 
   return (
     <header
-      className="relative flex h-9 shrink-0 items-center justify-end border-b border-border bg-bg"
+      className="relative flex h-9 shrink-0 items-center justify-between border-b border-border bg-bg"
       style={{ WebkitAppRegion: "drag" } as CSSProperties}
     >
-      <span className="pointer-events-none absolute inset-x-0 text-center text-xs font-medium tracking-wide text-text-secondary">
-        Struq
-      </span>
+      <BrandLockup size={22} className="pointer-events-none ml-3" />
       <div
         className="relative flex items-center"
         style={{ WebkitAppRegion: "no-drag" } as CSSProperties}

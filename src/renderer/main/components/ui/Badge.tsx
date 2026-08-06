@@ -19,19 +19,19 @@ export interface BadgeProps {
 const TONE_CLASS: Record<BadgeTone, string> = {
   neutral: "bg-bg-sunken text-text-secondary border border-border",
   accent: "bg-accent-soft text-accent-text",
-  success: "bg-success-soft text-success",
-  warning: "bg-warning-soft text-warning",
-  danger: "bg-danger-soft text-danger",
+  success: "border border-border bg-surface text-success",
+  warning: "border border-border bg-surface text-warning",
+  danger: "border border-border bg-surface text-danger",
   ember: "bg-ember-soft text-ember",
-  info: "bg-info-soft text-info"
+  info: "border border-border bg-surface text-info"
 };
 
 export function Badge({ tone = "neutral", icon, children, className }: BadgeProps): JSX.Element {
   return (
     <span
       className={cn(
-        "inline-flex h-5 items-center gap-1 rounded-sm px-1.5",
-        "text-2xs font-semibold uppercase tracking-wide",
+        "inline-flex h-6 items-center gap-1.5 rounded-md px-2",
+        "text-xs font-medium",
         TONE_CLASS[tone],
         className
       )}

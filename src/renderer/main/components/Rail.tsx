@@ -28,7 +28,7 @@ export function Rail(): JSX.Element {
       aria-label="Struq Voice"
     >
       <div className="flex flex-col gap-0.5 p-2">
-        {ROUTE_ORDER.map((item) => {
+        {ROUTE_ORDER.filter((item) => item !== "settings").map((item) => {
           const active = item === route;
           return (
             <button
@@ -55,8 +55,30 @@ export function Rail(): JSX.Element {
           );
         })}
       </div>
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col">
         <StatusCluster />
+        <div className="border-t border-border p-2">
+          <button
+            type="button"
+            onClick={() => {
+              setRoute("settings");
+            }}
+            aria-current={route === "settings" ? "page" : undefined}
+            className={cn(
+              "relative flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-left text-sm text-text-secondary transition-colors duration-hover hover:bg-surface-hover hover:text-text",
+              route === "settings" && "bg-surface font-medium text-text"
+            )}
+          >
+            {route === "settings" && (
+              <motion.span
+                layoutId="nav-rail-indicator"
+                className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-pill bg-accent"
+              />
+            )}
+            <Icon icon={ROUTE_ICONS.settings} className="h-[18px] w-[18px]" aria-hidden="true" />
+            {ROUTE_LABELS.settings}
+          </button>
+        </div>
       </div>
     </nav>
   );

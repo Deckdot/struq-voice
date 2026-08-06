@@ -16,12 +16,13 @@ export interface DialogProps {
   readonly description?: string;
   readonly children?: ReactNode;
   readonly footer?: ReactNode;
-  readonly size?: "sm" | "md";
+  readonly size?: "sm" | "md" | "lg";
 }
 
-const SIZES: Record<"sm" | "md", string> = {
+const SIZES: Record<"sm" | "md" | "lg", string> = {
   sm: "w-[24rem] max-w-[calc(100vw-4rem)]",
-  md: "w-[30rem] max-w-[calc(100vw-4rem)]"
+  md: "w-[30rem] max-w-[calc(100vw-4rem)]",
+  lg: "w-[42rem] max-w-[calc(100vw-4rem)]"
 };
 
 export function Dialog({

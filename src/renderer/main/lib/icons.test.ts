@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import collection from "../../assets/icons/ph.json";
+import providers from "../../assets/icons/simple-icons.json";
 
 /**
  * The renderer runs under a CSP that blocks Iconify's HTTP API, so an icon
@@ -56,5 +57,18 @@ describe("vendored phosphor icons", () => {
       .map(([name, files]) => `ph:${name} (${[...new Set(files)].join(", ")})`);
 
     expect(missing).toEqual([]);
+  });
+
+  it("contains every provider icon referenced in the renderer", () => {
+    const available = new Set(Object.keys(providers.icons));
+    const referenced = new Set<string>();
+    for (const file of sourceFiles(RENDERER_ROOT)) {
+      const source = readFileSync(file, "utf8");
+      for (const match of source.matchAll(/["'`]simple-icons:([a-z0-9-]+)["'`]/g)) {
+        const name = match[1];
+        if (name !== undefined) referenced.add(name);
+      }
+    }
+    expect([...referenced].filter((name) => !available.has(name))).toEqual([]);
   });
 });

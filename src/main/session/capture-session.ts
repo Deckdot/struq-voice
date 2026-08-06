@@ -56,6 +56,8 @@ export interface CaptureSessionOptions {
   readonly transcribingEngineId?: string;
   /** Called once the transcript exists, before delivering. */
   readonly onTranscript?: (text: string, meta: TranscriptMeta) => void;
+  /** Called synchronously when a real listening capture ends. */
+  readonly onListeningEnd?: () => void;
   /** Deliver the transcript into the focused window. Omitted in tests. */
   readonly deliver?: (text: string) => Promise<PasteOutcome>;
 }
@@ -147,6 +149,7 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       toIdle();
       return;
     }
+    options.onListeningEnd?.();
     void finishCapture(startedAt);
   };
 
@@ -233,11 +236,13 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
 
   const cancel = (): void => {
     if (state.phase !== "listening" && state.phase !== "arming") return;
+    if (state.phase === "listening") options.onListeningEnd?.();
     toIdle();
   };
 
   const fail = (message: string, text: string | null = null): void => {
     if (state.phase === "idle" || state.phase === "delivering") return;
+    if (state.phase === "listening") options.onListeningEnd?.();
     startedAt = null;
     clearTimers();
     setState({ phase: "error", message, text });

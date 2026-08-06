@@ -55,7 +55,7 @@
   --color-danger-soft: var(--sv-danger-soft);
   --color-info: var(--sv-info);
   --color-info-soft: var(--sv-info-soft);
-  --color-state-listening: var(--sv-ember);
+  --color-state-listening: var(--sv-success);
   --color-state-transcribing: var(--sv-info);
   --color-state-delivered: var(--sv-success);
   --color-state-error: var(--sv-danger);

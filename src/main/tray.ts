@@ -16,6 +16,7 @@ import { Menu, Notification, Tray, nativeImage } from "electron";
 import { join } from "node:path";
 import type { CaptureState } from "../shared/capture";
 import { MOCK_ENGINE } from "../shared/engines";
+import { t, type MessageKey } from "../shared/i18n";
 
 export interface TrayInput {
   readonly onToggleCapture: () => void;
@@ -28,6 +29,7 @@ export interface TrayInput {
 
 export interface TrayController {
   setState: (state: CaptureState) => void;
+  setLocale: (locale: string) => void;
   setRecentTranscripts: (items: readonly { id: number; text: string }[]) => void;
   getMenuItemIds: () => readonly string[];
   getTooltip: () => string | null;
@@ -35,13 +37,13 @@ export interface TrayController {
   notifyFirstHide: () => void;
 }
 
-const PHASE_LABEL: Record<CaptureState["phase"], string> = {
-  idle: "idle",
-  arming: "arming",
-  listening: "recording",
-  transcribing: "transcribing",
-  delivering: "delivering",
-  error: "error"
+const PHASE_KEY: Record<CaptureState["phase"], MessageKey> = {
+  idle: "tray.phase.idle",
+  arming: "tray.phase.arming",
+  listening: "tray.phase.listening",
+  transcribing: "tray.phase.transcribing",
+  delivering: "tray.phase.delivering",
+  error: "tray.phase.error"
 };
 
 const iconForState = (state: CaptureState): string => {
@@ -61,6 +63,7 @@ export const createTray = (input: TrayInput): TrayController => {
   const iconPath = (name: string): string =>
     join(__dirname, "../../resources/tray", name);
 
+  let currentLocale = "en";
   let state: CaptureState = { phase: "idle" };
   let tray: Tray | null = null;
   let contextMenu: Menu | null = null;
@@ -103,7 +106,7 @@ export const createTray = (input: TrayInput): TrayController => {
 
   const recentSubmenu = (): Electron.MenuItemConstructorOptions[] => {
     if (recentTranscripts.length === 0) {
-      return [{ id: "recentEmpty", label: "No transcripts yet", enabled: false }];
+      return [{ id: "recentEmpty", label: t(currentLocale, "tray.noTranscripts"), enabled: false }];
     }
     return recentTranscripts.map((item) => ({
       id: `recent-${String(item.id)}`,
@@ -116,16 +119,16 @@ export const createTray = (input: TrayInput): TrayController => {
   const buildMenu = (): Menu => {
     const captureLabel =
       state.phase === "listening" || state.phase === "arming"
-        ? "Stop Capture"
-        : "Start Capture";
+        ? t(currentLocale, "tray.stopCapture")
+        : t(currentLocale, "tray.startCapture");
     const template: Electron.MenuItemConstructorOptions[] = [
       { id: "startStop", label: captureLabel, click: () => { input.onToggleCapture(); } },
       { type: "separator" },
-      { id: "recent", label: "Recent transcripts", submenu: recentSubmenu() },
+      { id: "recent", label: t(currentLocale, "tray.recentTranscripts"), submenu: recentSubmenu() },
       { type: "separator" },
       {
         id: "engine",
-        label: "Engine",
+        label: t(currentLocale, "tray.engine"),
         submenu: [
           {
             id: "engineMock",
@@ -136,11 +139,11 @@ export const createTray = (input: TrayInput): TrayController => {
         ]
       },
       { type: "separator" },
-      { id: "open", label: "Open Struq Voice", click: () => { input.onOpenMainWindow(); } },
-      { id: "settings", label: "Settings", click: () => { input.onOpenMainWindow(); } },
+      { id: "open", label: t(currentLocale, "tray.openApp"), click: () => { input.onOpenMainWindow(); } },
+      { id: "settings", label: t(currentLocale, "tray.settings"), click: () => { input.onOpenMainWindow(); } },
       {
         id: "pauseHotkeys",
-        label: "Pause hotkeys",
+        label: t(currentLocale, "tray.pauseHotkeys"),
         type: "checkbox",
         checked: hotkeysPaused,
         click: (item) => {
@@ -149,7 +152,7 @@ export const createTray = (input: TrayInput): TrayController => {
         }
       },
       { type: "separator" },
-      { id: "quit", label: "Quit", click: () => { input.onQuit(); } }
+      { id: "quit", label: t(currentLocale, "tray.quit"), click: () => { input.onQuit(); } }
     ];
     return Menu.buildFromTemplate(template);
   };
@@ -174,9 +177,20 @@ export const createTray = (input: TrayInput): TrayController => {
       }
     }
 
-    tooltip = `Struq Voice: ${PHASE_LABEL[state.phase]} (${input.engineDisplayName()})`;
+    const stateStr = t(currentLocale, PHASE_KEY[state.phase]);
+    tooltip = t(currentLocale, "tray.tooltip", { state: stateStr, engine: input.engineDisplayName() });
     tray.setToolTip(tooltip);
     refreshMenu();
+  };
+
+  const setLocale = (locale: string): void => {
+    currentLocale = locale;
+    const stateStr = t(currentLocale, PHASE_KEY[state.phase]);
+    tooltip = t(currentLocale, "tray.tooltip", { state: stateStr, engine: input.engineDisplayName() });
+    if (tray !== null) {
+      tray.setToolTip(tooltip);
+      refreshMenu();
+    }
   };
 
   try {
@@ -199,6 +213,7 @@ export const createTray = (input: TrayInput): TrayController => {
 
   return {
     setState,
+    setLocale,
     setRecentTranscripts: (items: readonly { id: number; text: string }[]) => {
       recentTranscripts = items;
       refreshMenu();

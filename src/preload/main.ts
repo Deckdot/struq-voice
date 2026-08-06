@@ -50,11 +50,23 @@ const readChannels = (argv: readonly string[]): PreloadChannels => {
 const readTheme = (argv: readonly string[]): "light" | "dark" =>
   argv.includes("--struq-theme=dark") ? "dark" : "light";
 
+const readLocale = (argv: readonly string[]): string => {
+  const arg = argv.find((entry) => entry.startsWith("--struq-locale="));
+  return arg !== undefined ? arg.slice("--struq-locale=".length) : "en";
+};
+
+const readDir = (argv: readonly string[]): "ltr" | "rtl" => {
+  const arg = argv.find((entry) => entry.startsWith("--struq-dir="));
+  return arg === "--struq-dir=rtl" ? "rtl" : "ltr";
+};
+
 const channels = readChannels(process.argv);
 
 const api: MainWindowApi = {
   windowKind: "main",
   initialTheme: readTheme(process.argv),
+  initialLocale: readLocale(process.argv),
+  initialDir: readDir(process.argv),
   getAppVersion: () => ipcRenderer.invoke(channels.appGetVersion),
   getReadiness: () =>
     ipcRenderer.invoke(channels.appReadiness.get) as Promise<AppReadiness>,

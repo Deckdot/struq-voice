@@ -14,6 +14,8 @@ import type { UpdateState } from "./updates";
 export interface MainWindowApi {
   readonly windowKind: "main";
   readonly initialTheme: "light" | "dark";
+  readonly initialLocale: string;
+  readonly initialDir: "ltr" | "rtl";
   readonly getAppVersion: () => Promise<string>;
   readonly getReadiness: () => Promise<AppReadiness>;
   readonly onReadinessChanged: (listener: (state: AppReadiness) => void) => () => void;
@@ -98,6 +100,8 @@ export interface MainWindowApi {
 export interface OverlayWindowApi {
   readonly windowKind: "overlay";
   readonly initialTheme: "light" | "dark";
+  readonly initialLocale: string;
+  readonly initialDir: "ltr" | "rtl";
   readonly onCaptureStateChanged: (
     listener: (state: CaptureState, liveTranscription: boolean) => void
   ) => () => void;

@@ -61,8 +61,8 @@
   --color-state-delivered: var(--sv-success);
   --color-state-error: var(--sv-danger);
   --color-state-idle: var(--sv-text-muted);
-  --font-display: "Urbanist", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Urbanist", "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", "Yu Gothic UI", "Malgun Gothic", "Nirmala UI", "Leelawadee UI", system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", "Yu Gothic UI", "Malgun Gothic", "Nirmala UI", "Leelawadee UI", system-ui, sans-serif;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 9px;

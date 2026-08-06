@@ -30,7 +30,10 @@ export interface TranscriptionTabProps {
   readonly update: (patch: Partial<Settings>) => void;
 }
 
+import { useTranslation } from "../../lib/useTranslation";
+
 export function TranscriptionTab({ api, settings, update }: TranscriptionTabProps): JSX.Element {
+  const { t } = useTranslation();
   const [keyConfigured, setKeyConfigured] = useState(false);
   const [keyStored, setKeyStored] = useState(false);
   const [keyInput, setKeyInput] = useState("");
@@ -251,6 +254,48 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
         {keyMessage !== null && (
           <p className="px-4 pb-3 text-sm text-text-muted">{keyMessage}</p>
         )}
+      </SettingsGroup>
+
+      <SettingsGroup
+        title={t("settings.transcription.speechLanguage.title")}
+        description="Select the target language for speech decoding. Separate from the interface language."
+      >
+        <SettingsRow
+          label={t("settings.transcription.speechLanguage.label")}
+          hint="Forcing the language improves accuracy and speed."
+          control={
+            <div className="w-56">
+              <Select
+                value={settings.speechLanguage}
+                onChange={(event) => {
+                  update({ speechLanguage: event.target.value });
+                }}
+              >
+                <option value="auto">{t("settings.transcription.speechLanguage.auto")}</option>
+                <option value="en">English</option>
+                <option value="de">German (Deutsch)</option>
+                <option value="fr">French (Français)</option>
+                <option value="es">Spanish (Español)</option>
+                <option value="it">Italian (Italiano)</option>
+                <option value="nl">Dutch (Nederlands)</option>
+                <option value="pt">Portuguese (Português)</option>
+                <option value="pl">Polish (Polski)</option>
+                <option value="ru">Russian (Русский)</option>
+                <option value="zh">Chinese (中文)</option>
+                <option value="ja">Japanese (日本語)</option>
+                <option value="ko">Korean (한국어)</option>
+                <option value="ar">Arabic (العربية)</option>
+                <option value="hi">Hindi (हिन्दी)</option>
+                <option value="tr">Turkish (Türkçe)</option>
+                <option value="sv">Swedish (Svenska)</option>
+                <option value="da">Danish (Dansk)</option>
+                <option value="nb">Norwegian (Norsk)</option>
+                <option value="fi">Finnish (Suomi)</option>
+                <option value="uk">Ukrainian (Українська)</option>
+              </Select>
+            </div>
+          }
+        />
       </SettingsGroup>
     </div>
   );

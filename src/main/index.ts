@@ -88,17 +88,36 @@ let overlay: ReturnType<typeof createOverlayWindowController> | null = null;
 let hotkeys: ReturnType<typeof createHotkeys> | null = null;
 let isQuitting = false;
 
-// The most recent capture, kept for verification until Phase 3 persists
-// history. Never written to disk in the hot path.
-let lastCaptureAudio: CaptureAudio | null = null;
-
 app.on("before-quit", () => {
   isQuitting = true;
 });
 
-const showMainWindow = (): void => {
+// The most recent capture, kept for verification until Phase 3 persists
+// history. Never written to disk in the hot path.
+let lastCaptureAudio: CaptureAudio | null = null;
+
+import { isRtl, resolveLocale, type SupportedLocale } from "../shared/i18n";
+
+const getResolvedLocale = (settings: { locale: string }): SupportedLocale => {
+  const envLocale = process.env["STRUQ_VOICE_LOCALE"];
+  if (envLocale !== undefined && envLocale.length > 0) {
+    return envLocale as SupportedLocale;
+  }
+  if (settings.locale !== "system" && settings.locale.length > 0) {
+    return settings.locale as SupportedLocale;
+  }
+  return resolveLocale(app.getPreferredSystemLanguages());
+};
+
+const getLocaleOptions = (settings: { locale: string }): { locale: string; dir: "ltr" | "rtl" } => {
+  const loc = getResolvedLocale(settings);
+  return { locale: loc, dir: isRtl(loc) ? "rtl" : "ltr" };
+};
+
+const showMainWindow = (currentSettings?: { locale: string }): void => {
   if (mainWindow === null || mainWindow.isDestroyed()) {
-    mainWindow = createMainWindow();
+    const options = currentSettings !== undefined ? getLocaleOptions(currentSettings) : undefined;
+    mainWindow = createMainWindow(options);
   }
   if (mainWindow.isMinimized()) {
     mainWindow.restore();
@@ -377,6 +396,7 @@ if (!gotLock) {
           dictionary: current.post.dictionary,
           removeFillers: current.post.removeFillers,
           addTrailingPunctuation: current.post.addTrailingPunctuation,
+          speechLanguage: result.language ?? current.speechLanguage
         });
         return { text, meta };
       },
@@ -408,13 +428,17 @@ if (!gotLock) {
       },
     });
 
+    const currentLocOpt = getLocaleOptions(settingsStore.get());
+
     overlay = createOverlayWindowController({
       e2e,
       initialPosition: settingsStore.get().overlayPosition,
       onPositionChange: (position) => {
         settingsStore.update({ overlayPosition: position });
       },
-      isLiveTranscriptionEnabled: () => settingsStore.get().liveTranscription
+      isLiveTranscriptionEnabled: () => settingsStore.get().liveTranscription,
+      locale: currentLocOpt.locale,
+      dir: currentLocOpt.dir
     });
 
     /**
@@ -500,7 +524,7 @@ if (!gotLock) {
 
     const tray = createTray({
       onToggleCapture: toggleCapture,
-      onOpenMainWindow: showMainWindow,
+      onOpenMainWindow: () => { showMainWindow(settingsStore.get()); },
       onSetHotkeysPaused: (paused) => hotkeys?.setPaused(paused),
       onQuit: () => {
         app.quit();
@@ -509,6 +533,12 @@ if (!gotLock) {
         clipboard.writeText(text);
       },
       engineDisplayName: () => engines.get(primaryEngineId)?.displayName ?? MOCK_ENGINE.displayName,
+    });
+    tray.setLocale(currentLocOpt.locale);
+
+    settingsStore.subscribe((latest) => {
+      const locOpt = getLocaleOptions(latest);
+      tray.setLocale(locOpt.locale);
     });
 
     const refreshRecentTranscripts = (): void => {
@@ -606,12 +636,14 @@ if (!gotLock) {
     if (startedAtLogin) {
       mainWindow = null;
     } else {
-      mainWindow = createMainWindow();
+      mainWindow = createMainWindow(getLocaleOptions(settingsStore.get()));
       mainWindow.on("close", (event) => {
         if (!isQuitting) {
           // Close hides, it does not quit. Quit from the tray or Ctrl+Q.
           event.preventDefault();
-          mainWindow?.hide();
+          if (mainWindow !== null) {
+            mainWindow.hide();
+          }
           tray.notifyFirstHide();
         }
       });

@@ -19,18 +19,38 @@ export interface CleanupOptions {
   readonly dictionary: readonly DictionaryEntry[];
   readonly removeFillers: boolean;
   readonly addTrailingPunctuation: boolean;
+  readonly speechLanguage?: string;
 }
 
-const FILLERS = new Set(["um", "uh", "erm", "er", "hmm"]);
+const FILLER_TABLE: Record<string, readonly string[]> = {
+  en: ["um", "uh", "erm", "er", "hmm"],
+  nl: ["eh", "ehm", "uhm", "uh"],
+  de: ["äh", "ähm", "hm"],
+  fr: ["euh", "ben", "hein", "bah"],
+  es: ["eh", "este"],
+  it: ["ehm"],
+  pt: ["hum"],
+  pl: ["yyy", "eee"],
+  sv: ["öh", "ehm"],
+  ru: ["э"],
+  tr: ["ııı", "şey"],
+  ja: ["えーと", "あの", "まあ"],
+  zh: ["那个", "就是", "嗯"]
+};
 
-const removeFillers = (text: string): string =>
-  text
+const removeFillers = (text: string, language = "en"): string => {
+  const normalizedLocale = language.split("-")[0]?.toLowerCase() ?? "en";
+  const fillersList = FILLER_TABLE[normalizedLocale] ?? FILLER_TABLE["en"] ?? [];
+  const fillers = new Set(fillersList);
+  return text
+    .normalize("NFC")
     .split(/\s+/)
     .filter((word) => {
-      const clean = word.replace(/[.,!?;:]+$/, "").toLowerCase();
-      return !FILLERS.has(clean);
+      const clean = word.replace(/[.,!?;:]+$/, "").toLocaleLowerCase(normalizedLocale);
+      return !fillers.has(clean);
     })
     .join(" ");
+};
 
 const addTrailingPunctuation = (text: string): string => {
   const trimmed = text.trim();
@@ -47,7 +67,7 @@ export const cleanupTranscript = (text: string, options: CleanupOptions): string
     output = applyDictionary(output, options.dictionary);
   }
   if (options.removeFillers) {
-    output = removeFillers(output);
+    output = removeFillers(output, options.speechLanguage ?? "en");
   }
   if (options.addTrailingPunctuation) {
     output = addTrailingPunctuation(output);

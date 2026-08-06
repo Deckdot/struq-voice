@@ -223,3 +223,13 @@ skills for this repo:
 - `capture-session` - the state machine, hotkeys and audio pipeline.
 
 Invoke the relevant skill when a task matches its description.
+
+## 15. Internationalization
+
+- Hand-rolled typed catalog in `src/shared/i18n/`. No external i18n framework.
+- Two independent axes: UI language (`settings.locale`) and Speech language (`settings.speechLanguage`). Never derive one from the other.
+- **Resolution algorithm**: Main resolves at boot via `app.getPreferredSystemLanguages()`, normalizes to BCP47 canonical casing, applies the alias table (`zh-CN`/`zh-SG` -> `zh-Hans`, `zh-TW`/`zh-HK` -> `zh-Hant`, `pt-BR` -> `pt-BR`, `pt-PT` -> `pt-PT`, `no`/`nn`/`nb` -> `nb`, `sr-Latn` -> `sr-Latn`, `en-*` -> `en`, `he`/`iw` -> `he`, `id`/`in` -> `id`, `fil`/`tl` -> `fil`), checks supported list, and falls back to `en`.
+- **Handoff**: Main passes `--struq-locale=<tag>` and `--struq-dir=<ltr|rtl>` in window `additionalArguments` so preloads and React initialize without an English flash.
+- **IPC Rule**: Main process NEVER sends translated strings to the renderer for display. Main sends machine-readable error/state codes with typed parameters; renderer translates using `t()`. Main translates only native OS chrome (tray menu, OS notifications, native dialog titles).
+- **RTL and Layout**: Directional Tailwind utilities use logical properties (`ps-`, `pe-`, `ms-`, `me-`, `text-start`). CSS font stacks in `theme.css` include Windows script fallback chains for CJK, Indic, and Thai.
+

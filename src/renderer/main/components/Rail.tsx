@@ -2,9 +2,11 @@ import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import { motion } from "motion/react";
 import type { Route } from "../store/use-main-store";
-import { ROUTE_LABELS, ROUTE_ORDER, useMainStore } from "../store/use-main-store";
+import { ROUTE_ORDER, useMainStore } from "../store/use-main-store";
 import { StatusCluster } from "./StatusCluster";
 import { cn } from "../lib/cn";
+import { useTranslation } from "../lib/useTranslation";
+import type { MessageKey } from "../../../shared/i18n";
 
 const ROUTE_ICONS: Record<Route, string> = {
   dictate: "ph:microphone",
@@ -12,6 +14,14 @@ const ROUTE_ICONS: Record<Route, string> = {
   dictionary: "ph:book-open-text",
   models: "ph:cube",
   settings: "ph:gear"
+};
+
+const ROUTE_KEYS: Record<Route, MessageKey> = {
+  dictate: "nav.dictate",
+  history: "nav.history",
+  dictionary: "nav.dictionary",
+  models: "nav.models",
+  settings: "nav.settings"
 };
 
 /**
@@ -22,11 +32,12 @@ const ROUTE_ICONS: Record<Route, string> = {
 export function Rail(): JSX.Element {
   const route = useMainStore((state) => state.route);
   const setRoute = useMainStore((state) => state.setRoute);
+  const { t } = useTranslation();
 
   return (
     <nav
       className="flex w-[184px] shrink-0 flex-col border-r border-border bg-bg-sunken"
-      aria-label="Struq Voice"
+      aria-label={t("app.name")}
     >
       <div className="flex flex-col gap-0.5 p-2">
         {ROUTE_ORDER.filter((item) => item !== "settings").map((item) => {
@@ -40,7 +51,7 @@ export function Rail(): JSX.Element {
               }}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-left text-sm transition-colors duration-hover",
+                "relative flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-start text-sm transition-colors duration-hover",
                 active
                   ? "font-medium text-text"
                   : "text-text-secondary hover:bg-surface-hover/60 hover:text-text"
@@ -61,7 +72,7 @@ export function Rail(): JSX.Element {
                 )}
                 aria-hidden="true"
               />
-              <span className="relative z-10">{ROUTE_LABELS[item]}</span>
+              <span className="relative z-10">{t(ROUTE_KEYS[item])}</span>
             </button>
           );
         })}
@@ -76,7 +87,7 @@ export function Rail(): JSX.Element {
             }}
             aria-current={route === "settings" ? "page" : undefined}
             className={cn(
-              "relative flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-left text-sm transition-colors duration-hover",
+              "relative flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-start text-sm transition-colors duration-hover",
               route === "settings"
                 ? "font-medium text-text"
                 : "text-text-secondary hover:bg-surface-hover/60 hover:text-text"
@@ -97,7 +108,7 @@ export function Rail(): JSX.Element {
               )}
               aria-hidden="true"
             />
-            <span className="relative z-10">{ROUTE_LABELS.settings}</span>
+            <span className="relative z-10">{t("nav.settings")}</span>
           </button>
         </div>
       </div>

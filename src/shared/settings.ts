@@ -50,6 +50,10 @@ export const settingsSchema = z.object({
   version: z.literal(1).default(1),
   /** The appearance of every window: follow the OS, or force one mode. */
   theme: z.enum(["system", "light", "dark"]).default("system"),
+  /** "system" follows the Windows language list; anything else forces a locale. */
+  locale: z.string().default("system"),
+  /** "auto" lets the engine detect; otherwise a BCP47 tag forced on the decoder. */
+  speechLanguage: z.string().default("auto"),
   /** Captures shorter than this (ms) are discarded silently. */
   minCaptureMs: z.number().int().min(100).max(5000).default(350),
   /** Force-stop a capture that ran this long (ms). Defaults to 5 minutes (300,000 ms). */

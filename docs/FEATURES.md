@@ -143,6 +143,16 @@ as `pnpm test:e2e`).
 - Views built against Evergreen and Ember
   (`docs/DESIGN_SYSTEM.md`).
 
+### Internationalization
+- Hand-rolled typed catalog in `src/shared/i18n/` with zero side effects and zero Electron imports.
+- Dual-axis model: independent UI language (`settings.locale`) and speech language (`settings.speechLanguage`).
+- Boot-time Windows preferred system language resolution (`app.getPreferredSystemLanguages()`) with canonical BCP47 tag normalization and alias mapping.
+- Handoff via window `additionalArguments` (`--struq-locale` and `--struq-dir`) to prevent flash of English.
+- Strict IPC discipline: main process translates native OS chrome (tray, notifications, dialogs) while sending machine-readable codes to renderer for client-side translation via `t()`.
+- RTL layout support with Tailwind v4 logical properties (`ps-`, `pe-`, `ms-`, `me-`, `text-start`) and per-script font fallback stacks in `theme.css`.
+- Cached `Intl.DateTimeFormat` and `Intl.NumberFormat` factories to maintain virtualized list performance.
+- Speech Language axis with per-speech-language filler word removal in text cleanup (NFC normalized, Unicode case-folded).
+
 ### Platform
 - NSIS one-click per-user installer, app icon, tray icons.
 - Autostart with Windows, hidden to tray; close hides rather than quits.

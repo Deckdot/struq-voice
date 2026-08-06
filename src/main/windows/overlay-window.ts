@@ -202,14 +202,25 @@ const ensureOverlayWindow = (height: number): BrowserWindow | null => {
   }
 };
 
+let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
 const setOverlayVisible = (window: BrowserWindow | null, visible: boolean): void => {
   if (window === null) return;
   if (visible) {
+    if (hideTimer !== null) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
     if (!window.isVisible()) {
       window.showInactive();
     }
-  } else if (window.isVisible()) {
-    window.hide();
+  } else if (window.isVisible() && hideTimer === null) {
+    hideTimer = setTimeout(() => {
+      hideTimer = null;
+      if (!window.isDestroyed()) {
+        window.hide();
+      }
+    }, 220);
   }
 };
 

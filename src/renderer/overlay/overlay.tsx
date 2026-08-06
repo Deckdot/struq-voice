@@ -80,54 +80,62 @@ export function Overlay(): JSX.Element | null {
     }
   }, [state.phase]);
 
-  if (state.phase === "idle") return null;
-
   return (
-    <div
-      onPointerDown={drag.onPointerDown}
-      className="panel-enter flex h-full w-full cursor-grab flex-col gap-2 overflow-hidden rounded-lg border border-border bg-surface px-3 py-2 shadow-float active:cursor-grabbing"
-    >
-      <AnimatePresence mode="wait" initial={false}>
-        {state.phase === "arming" && (
-          <motion.div
-            key="arming"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="flex min-h-0 flex-1 items-center gap-2.5"
-          >
-            <StateDot state="arming" />
-            <div className="h-5 min-w-0 flex-1">
-              <Waveform bands={SILENT_BANDS} idle />
-            </div>
-            <span className="shrink-0 text-2xs text-text-muted">Starting...</span>
-          </motion.div>
-        )}
+    <AnimatePresence>
+      {state.phase !== "idle" && (
+        <motion.div
+          key="overlay-panel"
+          initial={{ opacity: 0, scaleX: 0.18, scaleY: 0.88 }}
+          animate={{ opacity: 1, scaleX: 1, scaleY: 1 }}
+          exit={{ opacity: 0, scaleX: 0.18, scaleY: 0.88 }}
+          style={{ transformOrigin: "center center" }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          onPointerDown={drag.onPointerDown}
+          className="flex h-full w-full cursor-grab flex-col gap-2 overflow-hidden rounded-lg border border-border bg-surface px-3 py-2 shadow-float active:cursor-grabbing"
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {state.phase === "arming" && (
+              <motion.div
+                key="arming"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="flex min-h-0 flex-1 items-center gap-2.5"
+              >
+                <StateDot state="arming" />
+                <div className="h-5 min-w-0 flex-1">
+                  <Waveform bands={SILENT_BANDS} idle />
+                </div>
+                <span className="shrink-0 text-2xs text-text-muted">Starting...</span>
+              </motion.div>
+            )}
 
-        {state.phase === "listening" && (
-          <ListeningView
-            key="listening"
-            state={state}
-            bands={bands}
-            partial={partial}
-            liveEnabled={liveEnabled}
-          />
-        )}
+            {state.phase === "listening" && (
+              <ListeningView
+                key="listening"
+                state={state}
+                bands={bands}
+                partial={partial}
+                liveEnabled={liveEnabled}
+              />
+            )}
 
-        {state.phase === "transcribing" && (
-          <TranscribingView
-            key="transcribing"
-            partial={partial}
-            liveEnabled={liveEnabled}
-          />
-        )}
+            {state.phase === "transcribing" && (
+              <TranscribingView
+                key="transcribing"
+                partial={partial}
+                liveEnabled={liveEnabled}
+              />
+            )}
 
-        {state.phase === "delivering" && <DeliveringView key="delivering" />}
+            {state.phase === "delivering" && <DeliveringView key="delivering" />}
 
-        {state.phase === "error" && <ErrorView key="error" state={state} />}
-      </AnimatePresence>
-    </div>
+            {state.phase === "error" && <ErrorView key="error" state={state} />}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

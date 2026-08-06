@@ -1,22 +1,12 @@
 /**
  * Generates the tray icons: resources/tray/{idle,recording,transcribing}.png
- * plus @2x variants.
- *
- * These are the brand mark, not generic geometry. An earlier version drew a
- * ring, a disc and five plain bars, which meant the idle tray icon (the state
- * the app is in almost all the time) was a hollow circle with no relationship
- * to the product. The mark is the identity; the state is carried by colour and
- * by the accent dot, not by inventing a different shape per state.
+ * plus @2x variants and animated recording frame sequences from blocks-wave.svg.
  *
  * - idle:         the mark in forest ink, accent dot in terracotta.
- * - recording:    the whole mark in terracotta.
+ * - recording:    animated block wave sequence in terracotta accent (#A65332).
  * - transcribing: the mark in deep forest, accent dot muted.
  *
- * Rendered through Chromium from the same SVG master as every other brand
- * asset, so the tray can never drift from the logo again.
- *
- * Run: node scripts/generate-tray-icons.mjs (or pnpm brand:generate, which
- * calls this after the brand assets).
+ * Run: node scripts/generate-tray-icons.mjs (or pnpm brand:generate).
  */
 
 import { chromium } from "playwright";
@@ -27,6 +17,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "resources", "tray");
 const symbolSvg = join(root, "resources", "brand", "struq-symbol.svg");
+const blocksWaveSvg = join(root, "blocks-wave.svg");
 
 /** oklch to sRGB hex, matching the token values in theme.css. */
 const oklchToHex = (L, C, H) => {
@@ -51,40 +42,22 @@ const oklchToHex = (L, C, H) => {
   return `#${lin.map(channel).join("")}`;
 };
 
-// The same token values theme.css uses.
+// Token values
 const FOREST = oklchToHex(0.3, 0.025, 150);
-const ACCENT = oklchToHex(0.535, 0.12, 45);
+const ACCENT = oklchToHex(0.535, 0.12, 45); // Terracotta accent #A65332
 const DEEP_FOREST = oklchToHex(0.27, 0.03, 152);
 const MUTED = oklchToHex(0.52, 0.018, 150);
 
-/** The mark's true bounding box inside the 512 master viewBox. */
 const MARK_BOX = { x: 60, y: 112, w: 336, h: 304 };
 
-/**
- * The tray icon is the app tile, not the bare mark.
- *
- * A transparent forest-ink mark disappears into a dark taskbar, which is the
- * default on Windows 11. Carrying the linen field with it means the icon has
- * its own background and therefore guaranteed contrast on any theme, light or
- * dark, rather than depending on what the user's taskbar happens to be.
- *
- * That is also why the tile stays linen in every state: the state is carried
- * by the mark's colour on top of it, never by the field.
- */
 const TILE = "#F6F4EB";
-// --color-border-strong, the same hairline the interface uses on linen.
 const EDGE = oklchToHex(0.795, 0.014, 140);
 
 const variantSvg = (source, markColor, dotColor) => {
-  // The master paints the bars via a <g fill> and the accent dot separately,
-  // so recolouring is a matter of substituting those two values.
   const recoloured = source
     .replace('<g fill="#294638">', `<g fill="${markColor}">`)
     .replace('fill="#A65332"', `fill="${dotColor}"`);
 
-  // Fit the mark into a square tile with a margin, centred on the art's own
-  // bounding box: the mark is not centred inside its 512 viewBox, so centring
-  // the viewBox would sit it high and to the left.
   const size = 512;
   const target = 0.66;
   const scale = (size * target) / Math.max(MARK_BOX.w, MARK_BOX.h);
@@ -96,12 +69,28 @@ const variantSvg = (source, markColor, dotColor) => {
     .replace(/<\/svg>\s*$/, "")
     .replace(/<title[\s\S]*?<\/title>/, "");
 
-  // rx is 20% of the tile, matching struq-app-icon.svg's 104/512.
-  //
-  // The hairline edge is what gives the tile a silhouette on a light taskbar,
-  // where linen on near-white would otherwise dissolve into the background.
-  // Inset by half the stroke so it is not clipped by the viewBox.
   const stroke = size * 0.028;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">
+  <rect x="${stroke / 2}" y="${stroke / 2}" width="${size - stroke}" height="${size - stroke}" rx="${size * 0.203}" fill="${TILE}" stroke="${EDGE}" stroke-width="${stroke}" />
+  <g transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(4)})">${inner}</g>
+</svg>`;
+};
+
+const variantBlocksWaveSvg = (blocksWaveSource, color) => {
+  const recoloured = blocksWaveSource.replace(/fill="[^"]+"/, `fill="${color}"`);
+
+  const size = 512;
+  const target = 0.58;
+  const box = { w: 24, h: 24 };
+  const scale = (size * target) / Math.max(box.w, box.h);
+  const tx = (size - box.w * scale) / 2;
+  const ty = (size - box.h * scale) / 2;
+
+  const stroke = size * 0.028;
+  const inner = recoloured
+    .replace(/^[\s\S]*?<svg[^>]*>/, "")
+    .replace(/<\/svg>\s*$/, "");
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">
   <rect x="${stroke / 2}" y="${stroke / 2}" width="${size - stroke}" height="${size - stroke}" rx="${size * 0.203}" fill="${TILE}" stroke="${EDGE}" stroke-width="${stroke}" />
   <g transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(4)})">${inner}</g>
@@ -121,27 +110,55 @@ const renderSvg = async (svg, output, width, height) => {
 
 await mkdir(outDir, { recursive: true });
 const source = await readFile(symbolSvg, "utf8");
+const blocksSource = await readFile(blocksWaveSvg, "utf8");
 
-const VARIANTS = [
-  // Idle is the product's resting face: the mark exactly as the brand draws it.
+// Generate standard static variants: idle and transcribing
+const STATIC_VARIANTS = [
   ["idle", FOREST, ACCENT],
-  // Recording reads at a glance from the corner of the eye, so the whole mark
-  // takes the accent rather than only the dot.
-  ["recording", ACCENT, ACCENT],
-  // Transcribing is working-but-not-listening: darker, dot stood down.
   ["transcribing", DEEP_FOREST, MUTED]
 ];
 
 console.log(`Generating tray icons into ${outDir}`);
-for (const [name, markColor, dotColor] of VARIANTS) {
+for (const [name, markColor, dotColor] of STATIC_VARIANTS) {
   const svg = variantSvg(source, markColor, dotColor);
-  // Square, because the tile is square. Windows scales the tray icon into a
-  // square slot, and a non-square source would be letterboxed.
   for (const [suffix, size] of [["", 16], ["@2x", 32]]) {
     await renderSvg(svg, join(outDir, `${name}${suffix}.png`), size, size);
   }
   console.log(`  wrote ${name}.png and ${name}@2x.png (${markColor})`);
 }
+
+// Generate static recording fallback
+const staticRecordingSvg = variantSvg(source, ACCENT, ACCENT);
+for (const [suffix, size] of [["", 16], ["@2x", 32]]) {
+  await renderSvg(staticRecordingSvg, join(outDir, `recording${suffix}.png`), size, size);
+}
+
+// Generate animated recording frame sequence from blocks-wave.svg with terracotta ACCENT
+const FRAME_COUNT = 10;
+const DURATION_SEC = 0.9;
+const animatedRecordingSvg = variantBlocksWaveSvg(blocksSource, ACCENT);
+
+console.log(`Generating ${FRAME_COUNT} animated recording frame icons (terracotta ${ACCENT})...`);
+for (const [suffix, size] of [["", 16], ["@2x", 32]]) {
+  await page.setViewportSize({ width: size, height: size });
+  await page.setContent(
+    `<style>html,body{margin:0;width:100%;height:100%;background:transparent}svg{display:block;width:100%;height:100%}</style>${animatedRecordingSvg}`
+  );
+  for (let f = 0; f < FRAME_COUNT; f++) {
+    const timeSec = (f / FRAME_COUNT) * DURATION_SEC;
+    await page.evaluate((t) => {
+      const doc = globalThis.document;
+      if (!doc) return;
+      const svgEl = doc.querySelector("svg");
+      if (svgEl && typeof svgEl.setCurrentTime === "function") {
+        svgEl.setCurrentTime(t);
+      }
+    }, timeSec);
+    const framePath = join(outDir, `recording-frame-${f}${suffix}.png`);
+    await page.screenshot({ path: framePath, omitBackground: true });
+  }
+}
+console.log(`  wrote recording-frame-0..${FRAME_COUNT - 1} (.png and @2x.png)`);
 
 await browser.close();
 console.log("Done.");

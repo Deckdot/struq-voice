@@ -69,6 +69,38 @@ export const createTray = (input: TrayInput): TrayController => {
   let hotkeysPaused = false;
   let recentTranscripts: readonly { id: number; text: string }[] = [];
 
+  const FRAME_COUNT = 10;
+  const recordingFrames: Electron.NativeImage[] = [];
+  for (let f = 0; f < FRAME_COUNT; f++) {
+    const img = nativeImage.createFromPath(iconPath(`recording-frame-${String(f)}.png`));
+    if (!img.isEmpty()) {
+      recordingFrames.push(img);
+    }
+  }
+
+  let animTimer: ReturnType<typeof setInterval> | null = null;
+
+  const stopAnimation = (): void => {
+    if (animTimer !== null) {
+      clearInterval(animTimer);
+      animTimer = null;
+    }
+  };
+
+  const startAnimation = (): void => {
+    if (animTimer !== null || recordingFrames.length === 0) return;
+    let frameIdx = 0;
+    animTimer = setInterval(() => {
+      if (tray !== null && recordingFrames.length > 0) {
+        const frame = recordingFrames[frameIdx % recordingFrames.length];
+        if (frame !== undefined) {
+          tray.setImage(frame);
+        }
+        frameIdx++;
+      }
+    }, 90);
+  };
+
   const recentSubmenu = (): Electron.MenuItemConstructorOptions[] => {
     if (recentTranscripts.length === 0) {
       return [{ id: "recentEmpty", label: "No transcripts yet", enabled: false }];
@@ -131,10 +163,17 @@ export const createTray = (input: TrayInput): TrayController => {
   const setState = (next: CaptureState): void => {
     state = next;
     if (tray === null) return;
-    const icon = nativeImage.createFromPath(iconPath(iconForState(state)));
-    if (!icon.isEmpty()) {
-      tray.setImage(icon);
+
+    if (state.phase === "listening" || state.phase === "arming") {
+      startAnimation();
+    } else {
+      stopAnimation();
+      const icon = nativeImage.createFromPath(iconPath(iconForState(state)));
+      if (!icon.isEmpty()) {
+        tray.setImage(icon);
+      }
     }
+
     tooltip = `Struq Voice: ${PHASE_LABEL[state.phase]} (${input.engineDisplayName()})`;
     tray.setToolTip(tooltip);
     refreshMenu();

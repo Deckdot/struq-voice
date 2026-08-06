@@ -68,7 +68,7 @@ export function TryItStep({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-            className="rounded-lg border border-accent bg-accent-soft p-4"
+            className="rounded-lg border border-accent bg-surface p-4"
           >
             <div className="flex items-center gap-2">
               <Icon icon="ph:check-circle" className="h-4 w-4 text-accent-text" aria-hidden="true" />

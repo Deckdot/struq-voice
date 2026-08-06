@@ -71,7 +71,7 @@ export function HotkeyRecorder({
             onChange(next);
           }}
           className={cn(
-            "inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-dashed border-accent bg-accent-soft px-3 text-sm text-accent-text"
+            "inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-dashed border-accent bg-surface px-3 text-sm text-accent-text"
           )}
         >
           <Icon icon="ph:keyboard" className="h-4 w-4" aria-hidden="true" />

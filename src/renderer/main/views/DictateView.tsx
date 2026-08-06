@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import { useMainStore } from "../store/use-main-store";
 import { PageBody } from "../components/PageHeader";
+import { MicrophoneMeter } from "../components/MicrophoneMeter";
 import { Button, IconButton, Kbd, SettingsGroup, StatTile, Sparkline } from "../components/ui";
 import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
@@ -152,8 +153,6 @@ export function DictateView(): JSX.Element {
         : null;
 
   const phaseLabel = PHASE_LABEL[capture.phase];
-  const meterWidth = Math.min(100, Math.round(level * 100));
-
   return (
     <div className="flex h-full flex-col bg-bg">
       <PageBody>
@@ -237,19 +236,7 @@ export function DictateView(): JSX.Element {
               <Kbd accelerator={settings.toggleAccelerator} size="md" />
             </div>
           </div>
-          <div
-            className="h-1 w-full overflow-hidden rounded-pill bg-bg-sunken"
-            role="meter"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={meterWidth}
-            aria-label="Microphone level"
-          >
-            <div
-              className="h-full rounded-pill bg-accent transition-[width] duration-75"
-              style={{ width: `${String(meterWidth)}%` }}
-            />
-          </div>
+          <MicrophoneMeter level={level} />
         </div>
 
         <SettingsGroup

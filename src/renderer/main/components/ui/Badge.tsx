@@ -18,11 +18,11 @@ export interface BadgeProps {
 
 const TONE_CLASS: Record<BadgeTone, string> = {
   neutral: "bg-bg-sunken text-text-secondary border border-border",
-  accent: "bg-accent-soft text-accent-text",
+  accent: "border border-accent bg-surface text-accent-text",
   success: "border border-border bg-surface text-success",
   warning: "border border-border bg-surface text-warning",
   danger: "border border-border bg-surface text-danger",
-  ember: "bg-ember-soft text-ember",
+  ember: "border border-ember bg-surface text-ember",
   info: "border border-border bg-surface text-info"
 };
 

@@ -7,6 +7,7 @@ import type { CaptureState } from "../../shared/capture";
 import { INITIAL_CAPTURE_STATE } from "../../shared/capture";
 import { Waveform } from "./Waveform";
 import { useDragPanel } from "./useDragPanel";
+import { RecordingBall } from "../shared/RecordingBall";
 
 const BAR_COUNT = 32;
 const SILENT_BANDS: readonly number[] = Array.from({ length: BAR_COUNT }, () => 0);
@@ -20,21 +21,18 @@ const formatElapsed = (ms: number): string => {
 };
 
 function StateDot({ state }: { readonly state: "arming" | "listening" | "transcribing" | "error" }): JSX.Element {
+  if (state === "listening") {
+    return <RecordingBall className="h-4 w-4" />;
+  }
+
   const color =
-    state === "listening"
-      ? "var(--sv-success)"
-      : state === "transcribing"
+    state === "transcribing"
         ? "var(--sv-info)"
         : state === "error"
           ? "var(--sv-danger)"
           : "var(--sv-accent)";
   return (
-    <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-      {state === "listening" && (
-        <span className="absolute inset-0 rounded-pill bg-success opacity-40 motion-safe:animate-ping" />
-      )}
-      <span className="relative h-full w-full rounded-pill" style={{ backgroundColor: color }} />
-    </span>
+    <span className="h-2 w-2 shrink-0 rounded-pill" style={{ backgroundColor: color }} aria-hidden="true" />
   );
 }
 

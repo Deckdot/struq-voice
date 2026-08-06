@@ -11,7 +11,7 @@ import { PRELOAD_CHANNELS } from "../../shared/ipc";
 const channelsArg = `--struq-channels=${JSON.stringify(PRELOAD_CHANNELS)}`;
 
 const windowBackgroundColor = (): string =>
-  nativeTheme.shouldUseDarkColors ? "#161a17" : "#f4f3ee";
+  nativeTheme.shouldUseDarkColors ? "#101214" : "#f4f3ee";
 
 const themeArg = (): string =>
   nativeTheme.shouldUseDarkColors ? "--struq-theme=dark" : "--struq-theme=light";

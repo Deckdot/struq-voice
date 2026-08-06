@@ -15,16 +15,15 @@ opens forty times a day to put words on the screen.
 The visual system is named after the two colors that carry the meaning of
 the whole product:
 
-- **Evergreen (pine green)** is the accent. It marks primary actions,
-  active navigation, focus rings, selected controls, and ready states.
-  It says "this is where you are, and it is safe to act here."
-- **Ember (terracotta)** belongs to the brand mark and restrained warm
-  details. Live capture uses evergreen so recording reads as active, safe,
-  and unmistakable. Every other color in the palette exists to support
-  those two.
+- **Evergreen (pine green)** is the light-theme accent. It marks primary
+  actions, active navigation, focus rings, and selected controls.
+- **Ember (terracotta)** is the dark-theme accent and the warm brand colour.
+  It carries the same interaction roles without tinting the whole window
+  green. Live capture uses a distinct verdigris semantic green, so recording
+  remains unmistakable without competing with primary actions.
 
 Surfaces are neutral and slightly temperature-shifted: warm porcelain in
-light mode, deep green-undertoned charcoal in dark mode. Elevation is
+light mode, cool graphite gray in dark mode. Elevation is
 tonal, not shadow-based. Only two shadows exist in the whole product, and
 both are reserved for surfaces that genuinely float above the OS
 desktop: the capture pill, and the command palette.
@@ -38,15 +37,15 @@ three nested surfaces to read.
 
 | Token            | Light                       | Dark                        |
 | ---------------- | --------------------------- | --------------------------- |
-| `bg`             | `oklch(0.97 0.005 110)`      | `oklch(0.19 0.012 160)`      |
-| `bg-sunken`      | `oklch(0.945 0.007 110)`     | `oklch(0.165 0.012 160)`     |
-| `surface`        | `oklch(0.988 0.004 110)`     | `oklch(0.23 0.013 160)`     |
-| `surface-hover`  | `oklch(0.962 0.006 110)`     | `oklch(0.26 0.013 160)`     |
-| `surface-active` | `oklch(0.94 0.008 110)`      | `oklch(0.29 0.014 160)`     |
+| `bg`             | `oklch(0.97 0.005 110)`      | `oklch(0.18 0.005 250)`      |
+| `bg-sunken`      | `oklch(0.945 0.007 110)`     | `oklch(0.15 0.006 250)`     |
+| `surface`        | `oklch(0.988 0.004 110)`     | `oklch(0.22 0.006 250)`     |
+| `surface-hover`  | `oklch(0.962 0.006 110)`     | `oklch(0.255 0.007 250)`     |
+| `surface-active` | `oklch(0.94 0.008 110)`      | `oklch(0.285 0.008 250)`     |
 
 Window background anchors for the main process:
 - Light: `#f4f3ee`
-- Dark:  `#161a17`
+- Dark:  `#101214`
 
 These match the bg tokens within tolerance and exist so the OS window
 does not flash white before the renderer paints.
@@ -66,20 +65,21 @@ not twitch the layout.
 
 ## 4. Accent, ember, and semantics
 
-- **accent** (evergreen): the UI accent. Indicators, primary actions,
-  focus rings, selected controls. Light: `oklch(0.45 0.085 160)`.
-  Dark: `oklch(0.55 0.095 160)`. Hover and active states shift the
-  lightness only, never the hue.
+- **accent**: evergreen in light mode and terracotta in dark mode. It marks
+  primary actions, focus rings, and selected controls. Light:
+  `oklch(0.45 0.085 160)`. Dark: `oklch(0.7 0.13 43)`. Hover and active
+  states shift lightness only, never hue.
 - **ember**: the warm brand color. The logo dot and restrained secondary
   details use it. Light: `oklch(0.56 0.115 42)`. Dark:
   `oklch(0.65 0.12 45)`.
 - **semantics**: success, warning, danger, info. All four exist in both
-  themes, each with a `-soft` background variant for chips and banners.
-  Body text on a semantic surface clears 4.5:1 in both themes.
+  themes. Dark-theme `-soft` tokens resolve to opaque neutral surfaces,
+  never transparent colour washes. Success uses verdigris rather than the
+  common saturated green.
 
 State is never communicated by color alone. Every state pairs a color
-with either a word, a glyph, or both. The listening dot is evergreen
-color plus the word "Listening" in the same row. The error dot is the
+with either a word, a glyph, or both. The listening mark is an animated
+verdigris bouncing ball plus the live waveform. The error dot is the
 danger color plus a checkmark, an X, or a warning glyph.
 
 ## 5. Typography
@@ -352,7 +352,7 @@ highest craft.
 - Five states with object continuity on the same canvas: arming,
   listening, transcribing, delivering, error.
   - Arming: accent dot, idle baseline.
-  - Listening: green dot with a soft pulse, green live waveform, elapsed time.
+  - Listening: verdigris bouncing ball, matching live waveform, elapsed time.
   - Transcribing: bars decay into a thin processing line with one
     controlled shimmer sweep, engine label on the right. No spinner.
   - Delivering: check draws itself in the success colour. No text competes

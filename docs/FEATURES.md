@@ -121,15 +121,19 @@ as `pnpm test:e2e`).
   category. The OpenRouter key field, the model picker, and the
   words-to-fix editor all live in their category. The voice service
   picker, the backup service picker, and the theme picker all
-  apply immediately.
+  apply immediately. Capture includes a live level meter under the selected
+  microphone so input can be tested without starting a transcription.
 - The capture pill is the floating overlay window. Five states
   with object continuity on the same canvas: arming, listening,
   transcribing, delivering, error. The waveform decays into a thin
   processing line during transcribing, so the user sees the audio
   being worked on without a generic spinner. Listening uses a green
-  animated dot and waveform. Delivery resolves to a drawn check only.
+  animated bouncing-ball mark and waveform. Delivery resolves to a drawn
+  check only.
 - Theme is System, Light, or Dark. System follows the Windows setting
-  live. Both themes are designed: dark is not an inversion of light.
+  live. Both themes are designed: light uses warm porcelain and evergreen,
+  while dark uses opaque graphite surfaces and terracotta emphasis. Verdigris
+  is reserved for recording and genuine success states.
 - Views built against Evergreen and Ember
   (`docs/DESIGN_SYSTEM.md`).
 

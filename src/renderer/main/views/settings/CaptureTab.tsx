@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
+import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../../shared/api";
 import type { RecorderDevice } from "../../../../shared/ipc";
 import type { Settings } from "../../../../shared/settings";
@@ -12,6 +14,7 @@ import {
   Slider,
   Switch
 } from "../../components/ui";
+import { MicrophoneMeter } from "../../components/MicrophoneMeter";
 
 /**
  * The Capture settings tab: the keys, the microphone, the sounds Struq
@@ -33,6 +36,17 @@ export function CaptureTab({
   devices,
   currentDeviceId
 }: CaptureTabProps): JSX.Element {
+  const [level, setLevel] = useState(0);
+
+  useEffect(() => {
+    return api.onCaptureLevelsChanged(({ level: next }) => {
+      setLevel((current) => Math.max(current * 0.6, next * 0.4));
+    });
+  }, [api]);
+
+  const meterValue = Math.min(100, Math.max(0, Math.round(level * 100)));
+  const signalDetected = meterValue >= 3;
+
   return (
     <div className="flex flex-col gap-6">
       <SettingsGroup
@@ -94,6 +108,24 @@ export function CaptureTab({
             </div>
           }
         />
+        <div className="px-4 py-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Icon
+                icon="ph:waveform"
+                className={signalDetected ? "h-4 w-4 shrink-0 text-accent" : "h-4 w-4 shrink-0 text-text-muted"}
+                aria-hidden="true"
+              />
+              <span className="text-xs font-medium text-text">
+                {signalDetected ? "Signal detected" : "Speak to test your microphone"}
+              </span>
+            </div>
+            <span className="shrink-0 text-2xs text-text-muted tabular-nums" data-numeric>
+              {String(meterValue)}%
+            </span>
+          </div>
+          <MicrophoneMeter level={level} label="Microphone test level" />
+        </div>
       </SettingsGroup>
 
       <SettingsGroup

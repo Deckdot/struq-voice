@@ -363,7 +363,7 @@ export function ModelsView(): JSX.Element {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-medium text-accent-text">Ready for dictation</p>
+                  <p className="text-xs font-medium text-success">Ready for dictation</p>
                   <p className="mt-0.5 text-2xs text-text-muted">Nothing leaves this PC</p>
                 </div>
               </div>

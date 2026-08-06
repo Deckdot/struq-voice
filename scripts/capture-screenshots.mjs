@@ -265,6 +265,10 @@ try {
   await sleep(400);
   await shoot("settings");
 
+  await main.getByRole("tab", { name: "Capture", exact: true }).click();
+  await sleep(700);
+  await shoot("settings-capture");
+
   await main.getByRole("tab", { name: "Transcription", exact: true }).click();
   await sleep(500);
   await shoot("settings-transcription");
@@ -286,6 +290,9 @@ try {
   await main.bringToFront();
   await sleep(1000);
   await shoot("settings-dark");
+  await main.getByRole("tab", { name: "Capture", exact: true }).click();
+  await sleep(700);
+  await shoot("settings-capture-dark");
   await goTo(main, "Models");
   await shoot("models-dark");
 

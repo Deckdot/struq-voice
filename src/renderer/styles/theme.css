@@ -7,12 +7,13 @@
    regenerating any CSS.
 
    The semantic set (bg, surface, text, border, accent, state-*) is stable
-   across both palettes. Hue and chroma hold, lightness moves.
+   across both palettes. The role holds even where dark mode deliberately
+   moves the interaction accent from evergreen to terracotta.
 
    Every *-soft token is opaque, never an alpha of its base colour. A
    translucent fill composites with whatever sits behind it, so the same
    badge reads differently on bg, on surface, and on the transparent overlay
-   window. Each tint is authored per theme instead.
+   window. Dark soft states resolve to the same opaque neutral surface.
 
    DENSITY CONTRACT. This is a desktop chrome, not a document. Use Tailwind's
    native 4px scale and pick from these sizes only:
@@ -137,33 +138,33 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --sv-bg: oklch(0.19 0.012 160);
-  --sv-bg-sunken: oklch(0.165 0.012 160);
-  --sv-surface: oklch(0.23 0.013 160);
-  --sv-surface-hover: oklch(0.26 0.013 160);
-  --sv-surface-active: oklch(0.29 0.014 160);
-  --sv-text: oklch(0.93 0.008 120);
-  --sv-text-secondary: oklch(0.8 0.01 130);
-  --sv-text-muted: oklch(0.66 0.012 140);
-  --sv-text-inverse: oklch(0.16 0.012 160);
-  --sv-border: oklch(0.3 0.014 160);
-  --sv-border-strong: oklch(0.38 0.015 160);
-  --sv-accent: oklch(0.62 0.1 160);
-  --sv-accent-solid: oklch(0.55 0.095 160);
-  --sv-accent-solid-hover: oklch(0.59 0.095 160);
-  --sv-accent-solid-active: oklch(0.63 0.095 160);
-  --sv-accent-text: oklch(0.72 0.09 160);
-  --sv-accent-soft: oklch(0.28 0.035 160);
-  --sv-ember: oklch(0.65 0.12 45);
-  --sv-ember-soft: oklch(0.3 0.04 45);
-  --sv-success: oklch(0.68 0.1 155);
-  --sv-success-soft: oklch(0.28 0.035 155);
-  --sv-warning: oklch(0.68 0.1 80);
-  --sv-warning-soft: oklch(0.29 0.04 80);
-  --sv-danger: oklch(0.62 0.13 25);
-  --sv-danger-soft: oklch(0.28 0.045 25);
-  --sv-info: oklch(0.66 0.07 230);
-  --sv-info-soft: oklch(0.28 0.03 230);
+  --sv-bg: oklch(0.18 0.005 250);
+  --sv-bg-sunken: oklch(0.15 0.006 250);
+  --sv-surface: oklch(0.22 0.006 250);
+  --sv-surface-hover: oklch(0.255 0.007 250);
+  --sv-surface-active: oklch(0.285 0.008 250);
+  --sv-text: oklch(0.96 0.008 95);
+  --sv-text-secondary: oklch(0.8 0.008 95);
+  --sv-text-muted: oklch(0.65 0.008 250);
+  --sv-text-inverse: oklch(0.18 0.005 250);
+  --sv-border: oklch(0.31 0.008 250);
+  --sv-border-strong: oklch(0.4 0.01 250);
+  --sv-accent: oklch(0.7 0.13 43);
+  --sv-accent-solid: oklch(0.63 0.14 43);
+  --sv-accent-solid-hover: oklch(0.68 0.14 43);
+  --sv-accent-solid-active: oklch(0.58 0.14 43);
+  --sv-accent-text: oklch(0.76 0.11 43);
+  --sv-accent-soft: var(--sv-surface-active);
+  --sv-ember: oklch(0.7 0.13 43);
+  --sv-ember-soft: var(--sv-surface-active);
+  --sv-success: oklch(0.72 0.105 175);
+  --sv-success-soft: var(--sv-surface-active);
+  --sv-warning: oklch(0.76 0.12 80);
+  --sv-warning-soft: var(--sv-surface-active);
+  --sv-danger: oklch(0.68 0.16 28);
+  --sv-danger-soft: var(--sv-surface-active);
+  --sv-info: oklch(0.7 0.1 260);
+  --sv-info-soft: var(--sv-surface-active);
 }
 
 /* ---------------------------------------------------------------------------

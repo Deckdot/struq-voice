@@ -17,5 +17,5 @@ export const windowBackground = (
   mode: ThemeMode
 ): string => {
   const dark = mode === "dark" || (mode === "system" && nativeTheme.shouldUseDarkColors);
-  return dark ? "#161a17" : "#f4f3ee";
+  return dark ? "#101214" : "#f4f3ee";
 };

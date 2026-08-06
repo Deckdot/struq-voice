@@ -1,14 +1,13 @@
 import type { JSX } from "react";
 import { cn } from "../../lib/cn";
+import { RecordingBall } from "../../../shared/RecordingBall";
 
 /**
  * A small filled dot. Colour alone names the state of whatever it sits next
  * to: red for an error, green for ready and live capture.
  *
- * It does not pulse. An indicator that breathes forever draws the eye to a
- * thing that is not changing, and it is the loudest generic-web-app tell in
- * a desktop chrome. Live capture already has the overlay waveform, which
- * moves because the audio is actually moving.
+ * Static states do not pulse. Listening replaces the dot with the supplied
+ * bouncing-ball mark because that motion represents a capture in progress.
  */
 export type StatusState =
   | "idle"
@@ -40,13 +39,19 @@ const STATE_COLOR: Record<StatusState, string> = {
 };
 
 export function StatusDot({ state, size = "md", className }: StatusDotProps): JSX.Element {
+  if (state === "listening") {
+    return (
+      <RecordingBall
+        className={cn(size === "sm" ? "h-3 w-3" : "h-4 w-4", className)}
+      />
+    );
+  }
+
   const sizeClass = size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2";
   return (
-    <span className={cn("relative inline-flex shrink-0", sizeClass, className)} aria-hidden="true">
-      {state === "listening" && (
-        <span className="absolute inset-0 rounded-pill bg-success opacity-40 motion-safe:animate-ping" />
-      )}
-      <span className={cn("relative h-full w-full rounded-pill", STATE_COLOR[state])} />
-    </span>
+    <span
+      className={cn("inline-flex shrink-0 rounded-pill", sizeClass, STATE_COLOR[state], className)}
+      aria-hidden="true"
+    />
   );
 }

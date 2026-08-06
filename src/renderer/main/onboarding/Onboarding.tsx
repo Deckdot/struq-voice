@@ -149,7 +149,7 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
           transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
           className="flex w-full max-w-md flex-col items-center gap-4 text-center"
         >
-          <span className="flex h-12 w-12 items-center justify-center rounded-pill bg-success-soft text-success">
+          <span className="flex h-12 w-12 items-center justify-center rounded-pill border border-success bg-surface text-success">
             <Icon icon="ph:check" className="h-6 w-6" aria-hidden="true" />
           </span>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-text">

@@ -45,7 +45,7 @@ export function IconButton({
     variant === "secondary" && "bg-surface text-text-secondary border border-border hover:bg-surface-hover hover:text-text active:bg-surface-active",
     variant === "ghost" && "text-text-secondary hover:bg-surface-hover hover:text-text active:bg-surface-active",
     variant === "danger" && "text-danger hover:bg-danger-soft",
-    active && "text-accent bg-accent-soft",
+    active && "border border-accent bg-surface-active text-accent",
     className
   );
 

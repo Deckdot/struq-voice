@@ -43,6 +43,7 @@ const WHITELIST = [
   "microphone",
   "microphone-slash",
   "wave-sine",
+  "waveform",
   "gear",
   "clock-counter-clockwise",
   "cube",

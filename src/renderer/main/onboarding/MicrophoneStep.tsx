@@ -2,15 +2,13 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { RecorderDevice } from "../../../shared/ipc";
-import { Button } from "../components/ui";
+import { Button, Select } from "../components/ui";
 import { ReadyRow } from "./StepShell";
 
 /**
- * Step one, which arrives already satisfied: the recorder picked the default
- * device at boot, so this confirms rather than asks. The live meter is the
- * evidence, because a device name alone does not prove the permission took.
- *
- * The only case that blocks is no device at all, and it names the fix.
+ * Step one. The microphone is already picked, so this confirms rather than
+ * asks. The live meter is the proof: a device name alone does not show
+ * the permission took.
  */
 export interface MicrophoneStepProps {
   readonly onReady: (ready: boolean) => void;
@@ -21,8 +19,8 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
   const [devices, setDevices] = useState<readonly RecorderDevice[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
-  const [choosing, setChoosing] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [choosing, setChoosing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,8 +37,6 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
   }, [api, onReady]);
 
   useEffect(() => {
-    // Smooth the 60Hz stream and let it decay between events, so silence
-    // reads as silence rather than as a frozen bar.
     return api.onCaptureLevelsChanged(({ level: next }) => {
       setLevel((current) => Math.max(current * 0.6, next * 0.4));
     });
@@ -48,6 +44,7 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
 
   const current = devices.find((device) => device.deviceId === currentId) ?? devices[0];
   const hasDevice = devices.length > 0;
+  const meterWidth = Math.min(100, Math.round(level * 100));
 
   if (loaded && !hasDevice) {
     return (
@@ -67,7 +64,7 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
       action={
         devices.length > 1 ? (
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             onClick={() => {
               setChoosing((open) => !open);
@@ -78,42 +75,40 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
         ) : undefined
       }
     >
-      <div className="flex flex-col gap-3">
-        <div>
-          <span
-            className="flex h-1.5 w-full overflow-hidden rounded-full bg-bg-sunken"
-            role="meter"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(level * 100)}
-            aria-label="Microphone level"
-          >
-            <span
-              className="h-full rounded-full bg-accent transition-[width] duration-75"
-              style={{ width: `${String(Math.round(level * 100))}%` }}
-            />
-          </span>
-          <p className="mt-1.5 text-xs text-text-muted">
-            Say something. The bar moves when the app can hear you.
-          </p>
+      <div className="flex flex-col gap-2">
+        <div
+          className="h-1 w-full overflow-hidden rounded-pill bg-bg-sunken"
+          role="meter"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={meterWidth}
+          aria-label="Microphone level"
+        >
+          <div
+            className="h-full rounded-pill bg-accent transition-[width] duration-75"
+            style={{ width: `${String(meterWidth)}%` }}
+          />
         </div>
+        <p className="text-2xs text-text-muted">Say something. The bar moves when Struq Voice can hear you.</p>
 
         {choosing && (
-          <select
-            aria-label="Microphone device"
-            value={currentId ?? ""}
-            onChange={(event) => {
-              setCurrentId(event.target.value);
-              api.devices.setDevice(event.target.value);
-            }}
-            className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text"
-          >
-            {devices.map((device) => (
-              <option key={device.deviceId} value={device.deviceId}>
-                {device.label}
-              </option>
-            ))}
-          </select>
+          <div className="mt-2">
+            <Select
+              value={currentId ?? ""}
+              onChange={(event) => {
+                const deviceId = event.target.value;
+                setCurrentId(deviceId);
+                api.devices.setDevice(deviceId);
+              }}
+              aria-label="Choose a microphone"
+            >
+              {devices.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label}
+                </option>
+              ))}
+            </Select>
+          </div>
         )}
       </div>
     </ReadyRow>

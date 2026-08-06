@@ -1,17 +1,25 @@
 import type { JSX } from "react";
-import { Check } from "lucide-react";
+import { Icon } from "@iconify/react";
+import { motion, AnimatePresence } from "motion/react";
 import type { CaptureState } from "../../../shared/capture";
 import type { Settings } from "../../../shared/settings";
-import { Card, Kbd, StatusDot } from "../components/ui";
+import { Kbd, StatusDot } from "../components/ui";
 
 /**
- * Step four: the user does the thing rather than watching a demonstration.
- * The transcript that appears here is their own sentence, which is both the
- * proof the setup worked and the moment the product explains itself.
- *
- * If the model has not finished downloading this says so plainly instead of
- * inviting a capture that would fail.
+ * Step four. The user holds the key and says something. This is the
+ * emotional peak of setup: a real capture, with the same states the
+ * floating pill shows, plus a transcript result that proves it worked.
  */
+
+const PHASE_LABEL: Record<string, string> = {
+  idle: "Press your key when you are ready.",
+  arming: "Reopening the microphone.",
+  listening: "Listening. Speak when you are ready.",
+  transcribing: "Turning your words into text.",
+  delivering: "Done. That just landed in the app you were using.",
+  error: "Something went wrong. Try again."
+};
+
 export interface TryItStepProps {
   readonly settings: Settings;
   readonly capture: CaptureState;
@@ -19,77 +27,59 @@ export interface TryItStepProps {
   readonly modelReady: boolean;
 }
 
-const PHASE_LABEL: Record<CaptureState["phase"], string> = {
-  idle: "Waiting for the key",
-  arming: "Warming up the microphone",
-  listening: "Listening",
-  transcribing: "Transcribing",
-  delivering: "Delivered",
-  error: "Did not work"
-};
-
 export function TryItStep({
   settings,
   capture,
   transcript,
   modelReady
 }: TryItStepProps): JSX.Element {
+  const phase = capture.phase;
+  const state = ((): "idle" | "listening" | "transcribing" | "delivering" | "error" => {
+    if (phase === "listening" || phase === "arming") return "listening";
+    if (phase === "transcribing") return "transcribing";
+    if (phase === "delivering") return "delivering";
+    if (phase === "error") return "error";
+    return "idle";
+  })();
+  const label = PHASE_LABEL[phase] ?? PHASE_LABEL["idle"] ?? "Press your key when you are ready.";
+
   return (
-    <>
-      <Card>
+    <div className="flex flex-col gap-3">
+      <div className="rounded-lg border border-border bg-surface p-4">
         <div className="flex items-center justify-between gap-4">
           <p className="flex items-center gap-2 text-sm text-text">
-            <StatusDot
-              state={
-                capture.phase === "listening" || capture.phase === "arming"
-                  ? "listening"
-                  : capture.phase === "transcribing"
-                    ? "transcribing"
-                    : capture.phase === "delivering"
-                      ? "delivering"
-                      : capture.phase === "error"
-                        ? "error"
-                        : "idle"
-              }
-            />
-            {PHASE_LABEL[capture.phase]}
+            <StatusDot state={state} />
+            {label}
           </p>
           <Kbd accelerator={settings.pttAccelerator} size="md" />
         </div>
-
         {!modelReady && (
           <p className="mt-3 text-sm text-text-muted">
-            The model is still downloading. Finish setup and try this once it lands: the
-            key works everywhere in Windows, so there is nothing else to come back to.
+            The model is still downloading. You can come back to this step once it lands. The key
+            works everywhere in Windows, so there is nothing else to come back to.
           </p>
         )}
+      </div>
 
-        {modelReady && transcript === null && (
-          <p className="mt-3 text-sm text-text-muted">
-            Hold the key, say a sentence, then release. What you said appears below.
-          </p>
-        )}
-
-        {transcript !== null && (
-          <div className="mt-3">
-            <p className="flex items-center gap-1.5 text-xs text-success">
-              <Check className="h-3.5 w-3.5" aria-hidden="true" /> That is your setup working
-            </p>
-            <p className="mt-2 max-w-prose font-serif text-lg leading-prose text-text">
+      <AnimatePresence>
+        {transcript !== null && transcript.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+            className="rounded-lg border border-accent bg-accent-soft p-4"
+          >
+            <div className="flex items-center gap-2">
+              <Icon icon="ph:check-circle" className="h-4 w-4 text-accent-text" aria-hidden="true" />
+              <p className="text-sm font-medium text-accent-text">That is what Struq Voice heard:</p>
+            </div>
+            <p className="mt-2 font-display text-lg leading-prose text-text" data-selectable>
               {transcript}
             </p>
-          </div>
+          </motion.div>
         )}
-
-        {capture.phase === "error" && (
-          <p className="mt-3 text-sm text-danger">{capture.message}</p>
-        )}
-      </Card>
-
-      <p className="text-sm text-text-muted">
-        From here on the app lives in the tray. The key works in any application:
-        the browser, an editor, a chat window.
-      </p>
-    </>
+      </AnimatePresence>
+    </div>
   );
 }

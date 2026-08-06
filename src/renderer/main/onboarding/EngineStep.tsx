@@ -1,21 +1,17 @@
 import type { JSX } from "react";
-import { Check } from "lucide-react";
 import type { OnboardingProfileResult } from "../../../shared/ipc";
 import { findModel } from "../../../shared/models";
 import { Badge, Card, ProgressBar, formatBytes } from "../components/ui";
+import { ReadyRow } from "./StepShell";
 
 /**
- * Step three. The download started when onboarding mounted, so by the time
- * anyone reads this it is already underway: nobody's first experience of the
- * app should be watching a progress bar from zero.
- *
- * The recommendation names the hardware it saw. A choice presented without
- * its reasoning reads as a guess, and the user has no way to judge it.
+ * Step three. The download started when onboarding mounted, so by the
+ * time anyone reads this it is already underway. The recommendation names
+ * the hardware it saw, so the user can decide whether to trust it.
  */
 export interface EngineStepProps {
   readonly profile: OnboardingProfileResult | null;
   readonly receivedBytes: number;
-  /** Reserved for the rewritten onboarding step that will show the live rate. */
   readonly bytesPerSecond: number | null;
   readonly installed: boolean;
   readonly failure: string | null;
@@ -24,13 +20,15 @@ export interface EngineStepProps {
 export function EngineStep({
   profile,
   receivedBytes,
+  bytesPerSecond,
   installed,
   failure
 }: EngineStepProps): JSX.Element {
+  void bytesPerSecond;
   if (profile === null) {
     return (
       <Card>
-        <p className="text-sm text-text-muted">Checking what this machine can run.</p>
+        <p className="text-sm text-text-muted">Looking at this computer to pick a model.</p>
       </Card>
     );
   }
@@ -38,46 +36,37 @@ export function EngineStep({
   const { recommendation } = profile;
   const model = findModel(recommendation.modelId);
   const totalBytes = model?.bytes ?? 0;
+  const engineLabel = recommendation.engineId === "parakeet" ? "Parakeet" : "Whisper";
+  const progress = totalBytes > 0 ? receivedBytes / totalBytes : 0;
+  const downloading = !installed && failure === null;
 
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-sm font-medium text-text">{model?.name ?? recommendation.modelId}</h2>
-          <p className="mt-0.5 text-sm leading-snug text-text-muted">{recommendation.reason}</p>
-        </div>
-        {installed ? (
-          <Badge tone="success">
-            <Check className="h-3 w-3" aria-hidden="true" /> Ready
-          </Badge>
-        ) : (
+    <ReadyRow
+      label={model?.name ?? recommendation.modelId}
+      value={`${engineLabel} on this computer. ${recommendation.reason}`}
+      ready={installed}
+    >
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="neutral">{model?.languages ?? ""}</Badge>
           <Badge tone="neutral">{formatBytes(totalBytes)}</Badge>
-        )}
-      </div>
-
-      <div className="mt-3">
-        {failure !== null ? (
-          <p className="text-sm text-danger">
-            {failure} You can retry from the Models view once setup is done.
-          </p>
-        ) : installed ? (
-          <p className="text-sm text-text-muted">
-            Runs entirely on this machine. Nothing you say leaves it.
-          </p>
-        ) : (
-          <ProgressBar
-            value={totalBytes > 0 ? receivedBytes / totalBytes : 0}
-            tone="ember"
-            label={`Downloading ${model?.name ?? "the model"}`}
-          />
-        )}
-      </div>
-
-      {!installed && failure === null && (
-        <p className="mt-2 text-xs text-text-muted">
-          Downloading in the background. Carry on with setup, this does not need watching.
+          {installed ? (
+            <Badge tone="success" icon="check-circle">
+              Ready to use
+            </Badge>
+          ) : failure !== null ? (
+            <Badge tone="danger">{failure}</Badge>
+          ) : (
+            <Badge tone="ember" icon="download-simple">
+              Downloading
+            </Badge>
+          )}
+        </div>
+        {downloading && <ProgressBar value={progress} tone="ember" label="Downloading model" />}
+        <p className="text-2xs text-text-muted">
+          Downloading in the background. Carry on with the next step.
         </p>
-      )}
-    </Card>
+      </div>
+    </ReadyRow>
   );
 }

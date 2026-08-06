@@ -5,8 +5,8 @@ import { ReadyRow } from "./StepShell";
 
 /**
  * Step two. Both chords are already registered and working, so this step
- * offers a change rather than demanding a choice: the user can read what the
- * keys are and move on in one click.
+ * offers a change rather than demanding a choice. The user can read what
+ * the keys are and move on in one click.
  */
 export interface HotkeyStepProps {
   readonly settings: Settings;
@@ -32,12 +32,12 @@ export function HotkeyStep({ settings, onChange }: HotkeyStepProps): JSX.Element
         }
       />
       <ReadyRow
-        label="Toggle recording"
-        value="Press once to start, once to stop. For dictation longer than a held key is comfortable."
+        label="Press to toggle"
+        value="Press once to start, once to stop. Useful for longer dictation."
         ready
         action={
           <HotkeyRecorder
-            label="toggle recording key"
+            label="press to toggle key"
             accelerator={settings.toggleAccelerator}
             onChange={(toggleAccelerator) => {
               onChange({ toggleAccelerator });

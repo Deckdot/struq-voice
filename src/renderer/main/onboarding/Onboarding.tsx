@@ -1,51 +1,61 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { CaptureState } from "../../../shared/capture";
 import type { OnboardingProfileResult } from "../../../shared/ipc";
 import type { Settings } from "../../../shared/settings";
 import { Button } from "../components/ui";
-import { EngineStep } from "./EngineStep";
-import { HotkeyStep } from "./HotkeyStep";
-import { MicrophoneStep } from "./MicrophoneStep";
 import { StepShell } from "./StepShell";
+import { MicrophoneStep } from "./MicrophoneStep";
+import { HotkeyStep } from "./HotkeyStep";
+import { EngineStep } from "./EngineStep";
 import { TryItStep } from "./TryItStep";
 
 /**
- * First run, once. Four steps, each shipping a working default already
- * applied, so continuing is always safe and skipping costs nothing.
+ * First-run setup. Five moments:
+ *   1. Microphone (arrives satisfied; live meter is the proof)
+ *   2. Shortcuts (both already registered)
+ *   3. Model (download starts on mount, not on arrival)
+ *   4. Try it (real capture; the proof the setup works)
+ *   5. Done (calm completion; "you are ready")
  *
- * The model download starts the moment this mounts rather than when the
- * engine step is reached. Setup effort demanded before the product has shown
- * what it does gets abandoned, so the wait is spent on the steps that need a
- * human rather than on a progress bar.
+ * Skipping is always available, defaults are already applied, and
+ * completion lands in settings.onboarding.completed.
  */
+
+const STEP_COUNT = 4;
+
+interface StepCopy {
+  readonly title: string;
+  readonly description: string;
+}
+
+const STEP_COPY: readonly StepCopy[] = [
+  {
+    title: "Your microphone",
+    description: "Already chosen. Say something to make sure the bar moves."
+  },
+  {
+    title: "Your keys",
+    description: "Already registered. Change them if they clash with something you use."
+  },
+  {
+    title: "Your model",
+    description: "Picked for this computer. It is downloading in the background while you read this."
+  },
+  {
+    title: "Try it",
+    description: "Hold your key, say a sentence, release. That is the whole product."
+  }
+];
+
 export interface OnboardingProps {
   readonly settings: Settings;
   readonly capture: CaptureState;
   readonly onFinished: () => void;
 }
-
-const STEP_COUNT = 4;
-
-const STEP_COPY: readonly { title: string; description: string }[] = [
-  {
-    title: "Your microphone",
-    description: "Already selected. Check the meter moves when you speak."
-  },
-  {
-    title: "Your key",
-    description: "Hold it anywhere in Windows, speak, and release. Change it if it clashes."
-  },
-  {
-    title: "Your model",
-    description: "Chosen for this machine and downloading now. Transcription stays on your PC."
-  },
-  {
-    title: "Try it",
-    description: "Hold the key and say something. This is the whole product."
-  }
-];
 
 export function Onboarding({ settings, capture, onFinished }: OnboardingProps): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
@@ -56,17 +66,14 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
   const [receivedBytes, setReceivedBytes] = useState(0);
   const [installed, setInstalled] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const [rate, setRate] = useState<number | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
-
+  const [showDone, setShowDone] = useState(false);
   const lastTick = useRef<{ atMs: number; bytes: number } | null>(null);
 
   useEffect(() => {
     setLocal(settings);
   }, [settings]);
 
-  // Detect, then start the download immediately. Both are safe to repeat:
-  // main only ever starts one download per model.
   useEffect(() => {
     let cancelled = false;
     void api.onboarding.profile().then((result) => {
@@ -77,7 +84,6 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
       void api.onboarding.startRecommended().then((started) => {
         if (cancelled) return;
         if (!started.started && started.message !== undefined) {
-          // "Already installed" is a success, not a failure.
           if (started.message.startsWith("Already")) setInstalled(true);
           else setFailure(started.message);
         }
@@ -97,7 +103,9 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
       const previous = lastTick.current;
       if (previous !== null && now > previous.atMs) {
         const perSecond = ((event.receivedBytes - previous.bytes) * 1000) / (now - previous.atMs);
-        if (perSecond > 0) setRate(perSecond);
+        if (perSecond > 0) {
+          void perSecond;
+        }
       }
       lastTick.current = { atMs: now, bytes: event.receivedBytes };
 
@@ -107,7 +115,6 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
     });
   }, [api, profile]);
 
-  // A delivered capture during the last step is the proof the setup works.
   useEffect(() => {
     if (capture.phase === "delivering" && capture.text.trim() !== "") {
       setTranscript(capture.text);
@@ -128,17 +135,37 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
     });
   }, [api, onFinished]);
 
-  const completed: readonly boolean[] = [
-    micReady,
-    // Both chords ship registered, so this step is satisfied on arrival and
-    // only the user changing their mind can alter it.
-    true,
-    installed,
-    transcript !== null
-  ];
+  const completed: readonly boolean[] = [micReady, true, installed, transcript !== null];
 
   const last = step === STEP_COUNT - 1;
-  const copy = STEP_COPY[step] ?? STEP_COPY[0];
+  const copy = STEP_COPY[step] ?? STEP_COPY[0] ?? { title: "", description: "" };
+
+  if (showDone) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center bg-bg px-8 py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+          className="flex w-full max-w-md flex-col items-center gap-4 text-center"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-pill bg-success-soft text-success">
+            <Icon icon="ph:check" className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">
+            You are ready.
+          </h1>
+          <p className="max-w-sm text-sm text-text-muted">
+            Struq Voice will sit in the tray, listen for your key, and put words where your cursor
+            is. You can change anything from Settings.
+          </p>
+          <Button variant="primary" size="lg" onClick={finish}>
+            Start using Struq Voice
+          </Button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 bg-bg text-text" data-selectable>
@@ -146,13 +173,21 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
         stepIndex={step}
         stepCount={STEP_COUNT}
         completed={completed}
-        title={copy?.title ?? ""}
-        description={copy?.description ?? ""}
+        title={copy.title}
+        description={copy.description}
         actions={
           <>
-            {/* Leaving is as cheap as continuing, and still leaves a working
-                app: every step's default is already applied. */}
-            <Button variant="ghost" size="md" onClick={finish}>
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => {
+                if (last && transcript !== null) {
+                  setShowDone(true);
+                } else {
+                  finish();
+                }
+              }}
+            >
               {last ? "Skip" : "Skip setup"}
             </Button>
             <div className="flex items-center gap-2">
@@ -171,35 +206,53 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
                 variant="primary"
                 size="lg"
                 onClick={() => {
-                  if (last) finish();
-                  else setStep((current) => current + 1);
+                  if (last) {
+                    if (transcript !== null) {
+                      setShowDone(true);
+                    } else {
+                      finish();
+                    }
+                    return;
+                  }
+                  setStep((current) => current + 1);
                 }}
               >
-                {last ? "Start using Struq Voice" : "Continue"}
+                {last ? "Finish" : "Continue"}
               </Button>
             </div>
           </>
         }
       >
-        {step === 0 && <MicrophoneStep onReady={setMicReady} />}
-        {step === 1 && <HotkeyStep settings={local} onChange={update} />}
-        {step === 2 && (
-          <EngineStep
-            profile={profile}
-            receivedBytes={receivedBytes}
-            bytesPerSecond={rate}
-            installed={installed}
-            failure={failure}
-          />
-        )}
-        {step === 3 && (
-          <TryItStep
-            settings={local}
-            capture={capture}
-            transcript={transcript}
-            modelReady={installed}
-          />
-        )}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col gap-3"
+          >
+            {step === 0 && <MicrophoneStep onReady={setMicReady} />}
+            {step === 1 && <HotkeyStep settings={local} onChange={update} />}
+            {step === 2 && (
+              <EngineStep
+                profile={profile}
+                receivedBytes={receivedBytes}
+                bytesPerSecond={null}
+                installed={installed}
+                failure={failure}
+              />
+            )}
+            {step === 3 && (
+              <TryItStep
+                settings={local}
+                capture={capture}
+                transcript={transcript}
+                modelReady={installed}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </StepShell>
     </div>
   );

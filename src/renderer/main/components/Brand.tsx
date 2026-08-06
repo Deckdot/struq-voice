@@ -75,9 +75,9 @@ export function BrandMarkAnimated({ size = 64, className }: BrandMarkProps): JSX
           rx={2}
           fill="currentColor"
           style={{ transformBox: "fill-box", transformOrigin: "center" }}
-          initial={{ scaleY: 0.2, opacity: 0 }}
+          initial={{ scaleY: 0, opacity: 0 }}
           animate={{ scaleY: 1, opacity: 1 }}
-          transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1], delay: index * 0.04 }}
+          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1], delay: index * 0.08 }}
         />
       ))}
       <motion.circle
@@ -88,7 +88,7 @@ export function BrandMarkAnimated({ size = 64, className }: BrandMarkProps): JSX
         style={{ transformBox: "fill-box", transformOrigin: "center" }}
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1], delay: 0.25 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
       />
     </svg>
   );

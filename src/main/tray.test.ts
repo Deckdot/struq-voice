@@ -30,8 +30,21 @@ vi.mock("electron", () => {
     }
   }
 
+  class FakeNotification {
+    static isSupported(): boolean {
+      return true;
+    }
+    show(): void {
+      /* no-op */
+    }
+    close(): void {
+      /* no-op */
+    }
+  }
+
   return {
     Tray: FakeTray,
+    Notification: FakeNotification,
     Menu: {
       buildFromTemplate: (template: unknown[]) => ({ items: template })
     },

@@ -21,7 +21,7 @@ export function Splash(): JSX.Element | null {
     sessionStorage.setItem("struq.splash.v1", "1");
     const timer = setTimeout(() => {
       setState("hidden");
-    }, reduced ? 620 : 800);
+    }, reduced ? 800 : 1300);
     return () => {
       clearTimeout(timer);
     };
@@ -34,14 +34,14 @@ export function Splash(): JSX.Element | null {
       {state === "shown" && (
         <motion.div
           className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg"
-          initial={{ opacity: 1 }}
-          animate={reduced ? { opacity: [0, 1, 1, 0] } : { opacity: 0 }}
+          initial={{ opacity: 1, scale: 1 }}
+          animate={reduced ? { opacity: [0, 1, 1, 0] } : { opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 1.03 }}
           transition={
             reduced
-              ? { duration: 0.6, times: [0, 0.42, 0.5, 1], ease: "easeInOut" }
-              : { delay: 0.6, duration: 0.18, ease: [0.7, 0, 0.84, 0] }
+              ? { duration: 0.8, times: [0, 0.42, 0.5, 1], ease: "easeInOut" }
+              : { duration: 0.45, ease: [0.16, 1, 0.3, 1] }
           }
-          exit={{ opacity: 0 }}
         >
           {reduced ? (
             <BrandMark size={64} className="text-accent" />

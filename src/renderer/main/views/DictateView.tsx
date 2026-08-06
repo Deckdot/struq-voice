@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import { useMainStore } from "../store/use-main-store";
 import { PageBody } from "../components/PageHeader";
 import { MicrophoneMeter } from "../components/MicrophoneMeter";
-import { Button, IconButton, Kbd, SettingsGroup, StatTile } from "../components/ui";
+import { Button, IconButton, Kbd, SettingsGroup, Skeleton, StatTile } from "../components/ui";
 import { HistoryChart } from "../components/HistoryChart";
 import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
@@ -64,6 +64,7 @@ export function DictateView(): JSX.Element {
   const [models, setModels] = useState<readonly ModelStatus[]>([]);
   const [recent, setRecent] = useState<readonly TranscriptRecord[]>([]);
   const [stats, setStats] = useState<HistoryStatsResult>(EMPTY_STATS);
+  const [statsLoaded, setStatsLoaded] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [level, setLevel] = useState(0);
   const [keyConfigured, setKeyConfigured] = useState(false);
@@ -90,7 +91,10 @@ export function DictateView(): JSX.Element {
     void api.history.list({ limit: 5 }).then(({ items }) => {
       setRecent(items);
     });
-    void api.history.stats().then(setStats);
+    void api.history.stats().then((result) => {
+      setStats(result);
+      setStatsLoaded(true);
+    });
   }, [api, capture.phase]);
 
   useEffect(() => {
@@ -198,16 +202,26 @@ export function DictateView(): JSX.Element {
           />
         </div>
 
-        {stats.totalTranscripts > 0 && (
-          <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3.5">
+        {!statsLoaded ? (
+          <div className="flex h-52 flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-normal text-text-muted">Dictation Activity</span>
-              <span className="text-2xs font-normal text-text-muted" data-numeric>
-                {stats.totalWords.toLocaleString()} words all time · {formatDuration(stats.totalDurationMs)}
-              </span>
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-36" />
             </div>
-            <HistoryChart days={stats.daily} />
+            <Skeleton className="h-36 w-full rounded-md" />
           </div>
+        ) : (
+          stats.totalTranscripts > 0 && (
+            <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-normal text-text-muted">Dictation Activity</span>
+                <span className="text-2xs font-normal text-text-muted" data-numeric>
+                  {stats.totalWords.toLocaleString()} words all time · {formatDuration(stats.totalDurationMs)}
+                </span>
+              </div>
+              <HistoryChart days={stats.daily} />
+            </div>
+          )
         )}
 
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-4">

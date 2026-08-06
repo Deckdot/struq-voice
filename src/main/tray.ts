@@ -12,7 +12,7 @@
  * - Close hides instead of quitting; quit from the tray (or Ctrl+Q).
  */
 
-import { Menu, Tray, nativeImage } from "electron";
+import { Menu, Notification, Tray, nativeImage } from "electron";
 import { join } from "node:path";
 import type { CaptureState } from "../shared/capture";
 import { MOCK_ENGINE } from "../shared/engines";
@@ -222,12 +222,31 @@ export const createTray = (input: TrayInput): TrayController => {
       if (balloonShown || tray === null) return;
       balloonShown = true;
       try {
-        tray.displayBalloon({
-          title: "Struq Voice",
-          content: "Struq Voice stays in the tray. Quit from the tray menu."
-        });
+        const appIconPath = join(__dirname, "../../resources/icon.png");
+        if (Notification.isSupported()) {
+          const notification = new Notification({
+            title: "Struq Voice",
+            body: "Struq Voice stays in the tray. Quit from the tray menu.",
+            icon: appIconPath,
+            silent: true
+          });
+          notification.show();
+          setTimeout(() => {
+            try {
+              notification.close();
+            } catch {
+              // Non-critical cleanup
+            }
+          }, 2000);
+        } else {
+          tray.displayBalloon({
+            title: "Struq Voice",
+            content: "Struq Voice stays in the tray. Quit from the tray menu.",
+            icon: appIconPath
+          });
+        }
       } catch {
-        // Balloons can fail on locked-down desktops. Non-critical.
+        // Non-critical notification fallback
       }
     }
   };

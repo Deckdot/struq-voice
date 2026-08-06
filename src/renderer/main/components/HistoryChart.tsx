@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { motion } from "motion/react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -90,7 +91,12 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
   });
 
   return (
-    <div className={`w-full h-44 ${className}`}>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+      className={`w-full h-44 ${className}`}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
           <defs>
@@ -140,6 +146,9 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             strokeWidth={2}
             fillOpacity={1}
             fill="url(#wordsGradient)"
+            isAnimationActive={true}
+            animationDuration={1300}
+            animationEasing="cubic-bezier(0.16, 1, 0.3, 1)"
           />
           <Area
             yAxisId="duration"
@@ -151,9 +160,13 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             strokeDasharray="4 4"
             fillOpacity={1}
             fill="url(#durationGradient)"
+            isAnimationActive={true}
+            animationDuration={1500}
+            animationBegin={150}
+            animationEasing="cubic-bezier(0.16, 1, 0.3, 1)"
           />
         </AreaChart>
       </ResponsiveContainer>
-    </div>
+    </motion.div>
   );
 }

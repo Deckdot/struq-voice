@@ -230,15 +230,15 @@ export function CaptureTab({
           label={t("settings.capture.maxDuration.label")}
           hint={t("settings.capture.maxDuration.hintText")}
           control={
-            <div className="w-32">
+            <div className="w-28">
               <NumberInput
-                value={settings.maxCaptureMs}
-                min={5000}
-                max={600000}
-                step={1000}
-                unit="ms"
+                value={Math.round(settings.maxCaptureMs / 1000)}
+                min={5}
+                max={600}
+                step={1}
+                unit="s"
                 onChange={(value) => {
-                  update({ maxCaptureMs: value });
+                  update({ maxCaptureMs: value * 1000 });
                 }}
               />
             </div>

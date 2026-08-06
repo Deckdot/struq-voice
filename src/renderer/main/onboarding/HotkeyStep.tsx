@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { Settings } from "../../../shared/settings";
-import { HotkeyCapture } from "../components/ui";
+import { HotkeyRecorder } from "../components/ui";
 import { ReadyRow } from "./StepShell";
 
 /**
@@ -21,7 +21,7 @@ export function HotkeyStep({ settings, onChange }: HotkeyStepProps): JSX.Element
         value="Hold anywhere in Windows, speak, release. The text lands in whatever field you were in."
         ready
         action={
-          <HotkeyCapture
+          <HotkeyRecorder
             label="hold to record key"
             accelerator={settings.pttAccelerator}
             size="md"
@@ -36,7 +36,7 @@ export function HotkeyStep({ settings, onChange }: HotkeyStepProps): JSX.Element
         value="Press once to start, once to stop. For dictation longer than a held key is comfortable."
         ready
         action={
-          <HotkeyCapture
+          <HotkeyRecorder
             label="toggle recording key"
             accelerator={settings.toggleAccelerator}
             onChange={(toggleAccelerator) => {

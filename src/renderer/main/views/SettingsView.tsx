@@ -8,7 +8,7 @@ import { MODEL_CATALOG } from "../../../shared/models";
 import { ENGINE_OPTIONS } from "../../../shared/engines";
 import type { UpdateState } from "../../../shared/updates";
 import { INITIAL_UPDATE_STATE, describeUpdateState } from "../../../shared/updates";
-import { Badge, Button, Card, Field, HotkeyCapture, Section, formatBytes } from "../components/ui";
+import { Badge, Button, Card, Field, HotkeyRecorder as HotkeyCapture, Section, formatBytes } from "../components/ui";
 import { cn } from "../lib/cn";
 
 /**

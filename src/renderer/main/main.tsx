@@ -11,19 +11,70 @@ import "@fontsource/plus-jakarta-sans/600.css";
 import "@fontsource/plus-jakarta-sans/700.css";
 import "../styles/main.css";
 import "./lib/icons";
-import { applyInitialTheme } from "./lib/theme";
+import { applyInitialTheme, applyTheme } from "./lib/theme";
 import { App } from "./App";
-import { useMainStore } from "./store/use-main-store";
+import { ROUTE_ORDER, useMainStore } from "./store/use-main-store";
 import type { CaptureState } from "../../shared/capture";
 import type { MainWindowApi } from "../../shared/api";
 
 function Bootstrap(): JSX.Element {
   useEffect(() => {
     const api = window.struqVoice as MainWindowApi;
-    return api.onCaptureStateChanged((state: CaptureState) => {
+    let themeCleanup: (() => void) | null = null;
+    const applyFromMode = (mode: "system" | "light" | "dark"): void => {
+      themeCleanup?.();
+      themeCleanup = applyTheme(mode, () => undefined);
+    };
+
+    const unsubscribeCapture = api.onCaptureStateChanged((state: CaptureState) => {
       useMainStore.getState().setCapture(state);
     });
+
+    let cancelled = false;
+    void api.getReadiness().then((readiness) => {
+      if (!cancelled) useMainStore.getState().setReadiness(readiness);
+    });
+    const unsubscribeReadiness = api.onReadinessChanged((readiness) => {
+      useMainStore.getState().setReadiness(readiness);
+    });
+
+    void api.settings.get().then(({ settings }) => {
+      if (cancelled) return;
+      useMainStore.getState().setThemeMode(settings.theme);
+      applyFromMode(settings.theme);
+    });
+    const unsubscribeSettings = api.settings.onChange((settings) => {
+      useMainStore.getState().setThemeMode(settings.theme);
+      applyFromMode(settings.theme);
+    });
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      const index = Number(event.key) - 1;
+      if (index < 0 || index >= ROUTE_ORDER.length) return;
+      event.preventDefault();
+      const next = ROUTE_ORDER[index];
+      if (next !== undefined) useMainStore.getState().setRoute(next);
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      cancelled = true;
+      unsubscribeCapture();
+      unsubscribeReadiness();
+      unsubscribeSettings();
+      window.removeEventListener("keydown", onKeyDown);
+      themeCleanup?.();
+    };
   }, []);
+
+  // The theme transition in theme.css is held off until the first shell paint
+  // so that a later theme switch cannot flash a stale background.
+  useEffect(() => {
+    document.documentElement.classList.add("theme-ready");
+    document.body.classList.add("theme-ready");
+  }, []);
+
   return <App />;
 }
 

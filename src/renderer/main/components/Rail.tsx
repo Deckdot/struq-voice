@@ -1,58 +1,63 @@
 import type { JSX } from "react";
-import { Mic, History, Boxes, Settings, type LucideIcon } from "lucide-react";
+import { Icon } from "@iconify/react";
+import { motion } from "motion/react";
 import type { Route } from "../store/use-main-store";
-import { ROUTE_LABELS } from "../store/use-main-store";
+import { ROUTE_LABELS, ROUTE_ORDER, useMainStore } from "../store/use-main-store";
+import { StatusCluster } from "./StatusCluster";
 import { cn } from "../lib/cn";
 
-const ROUTE_ICONS: Record<Route, LucideIcon> = {
-  dictate: Mic,
-  history: History,
-  models: Boxes,
-  settings: Settings
+const ROUTE_ICONS: Record<Route, string> = {
+  dictate: "ph:microphone",
+  history: "ph:clock-counter-clockwise",
+  models: "ph:cube",
+  settings: "ph:gear"
 };
 
-const ROUTE_ORDER: readonly Route[] = ["dictate", "history", "models", "settings"];
-
-export interface RailProps {
-  readonly route: Route;
-  readonly onSelect: (route: Route) => void;
-}
-
 /**
- * The slim left rail. Four routes, icon plus label, no more. The active
- * route is marked with a surface step and a 2px accent edge, the same way a
- * selected row is marked: the accent identifies the selection rather than
- * becoming it. Shadows belong to the overlay and the palette, not here.
+ * The left navigation rail. Four routes, icon plus label, the status cluster
+ * pinned to the bottom. The active row carries a 3px accent edge that glides
+ * between rows via a shared layoutId.
  */
-export function Rail({ route, onSelect }: RailProps): JSX.Element {
+export function Rail(): JSX.Element {
+  const route = useMainStore((state) => state.route);
+  const setRoute = useMainStore((state) => state.setRoute);
+
   return (
     <nav
-      className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-border bg-bg-sunken p-2 pt-3"
+      className="flex w-[200px] shrink-0 flex-col border-r border-border bg-bg-sunken"
       aria-label="Struq Voice"
     >
-      {ROUTE_ORDER.map((item) => {
-        const Icon = ROUTE_ICONS[item];
-        const active = item === route;
-        return (
-          <button
-            key={item}
-            type="button"
-            onClick={() => {
-              onSelect(item);
-            }}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-2.5 rounded-md border-l-2 px-2.5 py-1.5 text-left text-sm transition-colors duration-fast",
-              active
-                ? "border-accent bg-surface font-medium text-text"
-                : "border-transparent text-text-muted hover:bg-surface-hover hover:text-text"
-            )}
-          >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {ROUTE_LABELS[item]}
-          </button>
-        );
-      })}
+      <div className="flex flex-col gap-0.5 p-2">
+        {ROUTE_ORDER.map((item) => {
+          const active = item === route;
+          return (
+            <button
+              key={item}
+              type="button"
+              onClick={() => {
+                setRoute(item);
+              }}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "relative flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-text-secondary transition-colors duration-hover hover:bg-surface-hover hover:text-text",
+                active && "bg-surface font-medium text-text"
+              )}
+            >
+              {active && (
+                <motion.span
+                  layoutId="nav-rail-indicator"
+                  className="absolute left-0 top-1/2 h-3 w-[3px] -translate-y-1/2 rounded-r-pill bg-accent"
+                />
+              )}
+              <Icon icon={ROUTE_ICONS[item]} className="h-4 w-4" aria-hidden="true" />
+              {ROUTE_LABELS[item]}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-auto">
+        <StatusCluster />
+      </div>
     </nav>
   );
 }

@@ -15,6 +15,7 @@ import { Badge, Card, ProgressBar, formatBytes } from "../components/ui";
 export interface EngineStepProps {
   readonly profile: OnboardingProfileResult | null;
   readonly receivedBytes: number;
+  /** Reserved for the rewritten onboarding step that will show the live rate. */
   readonly bytesPerSecond: number | null;
   readonly installed: boolean;
   readonly failure: string | null;
@@ -23,7 +24,6 @@ export interface EngineStepProps {
 export function EngineStep({
   profile,
   receivedBytes,
-  bytesPerSecond,
   installed,
   failure
 }: EngineStepProps): JSX.Element {
@@ -66,9 +66,8 @@ export function EngineStep({
           </p>
         ) : (
           <ProgressBar
-            receivedBytes={receivedBytes}
-            totalBytes={totalBytes}
-            bytesPerSecond={bytesPerSecond}
+            value={totalBytes > 0 ? receivedBytes / totalBytes : 0}
+            tone="ember"
             label={`Downloading ${model?.name ?? "the model"}`}
           />
         )}

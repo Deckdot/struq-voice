@@ -3,12 +3,15 @@ import type { CaptureState } from "../../../shared/capture";
 import { INITIAL_CAPTURE_STATE } from "../../../shared/capture";
 
 /**
- * Main window state: the active route and the latest capture state pushed
- * from the main process. The route is a discriminated union, per the plan:
- * four routes do not need a router library.
+ * Main window state: the active route, the latest capture state pushed from
+ * the main process, the app readiness cluster and the theme mode. The route
+ * is a discriminated union, per the plan: four routes do not need a router
+ * library.
  */
 
 export type Route = "dictate" | "history" | "models" | "settings";
+
+export const ROUTE_ORDER: readonly Route[] = ["dictate", "history", "models", "settings"];
 
 export const ROUTE_LABELS: Record<Route, string> = {
   dictate: "Dictate",
@@ -17,20 +20,46 @@ export const ROUTE_LABELS: Record<Route, string> = {
   settings: "Settings"
 };
 
-interface MainWindowState {
-  route: Route;
-  capture: CaptureState;
-  setRoute: (route: Route) => void;
-  setCapture: (capture: CaptureState) => void;
+/** Whether the two things the product depends on are actually up. */
+export interface AppReadiness {
+  readonly microphone: { readonly live: boolean; readonly reason?: string };
+  readonly hotkeysActive: boolean;
 }
 
-export const useMainStore = create<MainWindowState>((set) => ({
+export interface MainWindowState {
+  route: Route;
+  /** The sign of the last navigation, for page transitions. */
+  routeDirection: 1 | -1;
+  capture: CaptureState;
+  readiness: AppReadiness;
+  themeMode: "system" | "light" | "dark";
+  setRoute: (next: Route) => void;
+  setCapture: (next: CaptureState) => void;
+  setReadiness: (next: AppReadiness) => void;
+  setThemeMode: (next: "system" | "light" | "dark") => void;
+  getRouteDirection: () => 1 | -1;
+}
+
+export const useMainStore = create<MainWindowState>((set, get) => ({
   route: "dictate",
+  routeDirection: 1,
   capture: INITIAL_CAPTURE_STATE,
-  setRoute: (route) => {
-    set({ route });
+  readiness: { microphone: { live: false }, hotkeysActive: false },
+  themeMode: "system",
+  setRoute: (next) => {
+    const prev = get().route;
+    const delta = ROUTE_ORDER.indexOf(next) - ROUTE_ORDER.indexOf(prev);
+    const direction: 1 | -1 = delta > 0 ? 1 : delta < 0 ? -1 : get().routeDirection;
+    set({ route: next, routeDirection: direction });
   },
   setCapture: (capture) => {
     set({ capture });
-  }
+  },
+  setReadiness: (readiness) => {
+    set({ readiness });
+  },
+  setThemeMode: (themeMode) => {
+    set({ themeMode });
+  },
+  getRouteDirection: () => get().routeDirection
 }));

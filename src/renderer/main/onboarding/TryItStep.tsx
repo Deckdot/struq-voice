@@ -39,7 +39,19 @@ export function TryItStep({
       <Card>
         <div className="flex items-center justify-between gap-4">
           <p className="flex items-center gap-2 text-sm text-text">
-            <StatusDot phase={capture.phase} />
+            <StatusDot
+              state={
+                capture.phase === "listening" || capture.phase === "arming"
+                  ? "listening"
+                  : capture.phase === "transcribing"
+                    ? "transcribing"
+                    : capture.phase === "delivering"
+                      ? "delivering"
+                      : capture.phase === "error"
+                        ? "error"
+                        : "idle"
+              }
+            />
             {PHASE_LABEL[capture.phase]}
           </p>
           <Kbd accelerator={settings.pttAccelerator} size="md" />

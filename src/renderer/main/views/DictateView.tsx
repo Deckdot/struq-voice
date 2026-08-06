@@ -120,7 +120,7 @@ export function DictateView(): JSX.Element {
         <header>
           <h1 className="font-serif text-2xl tracking-tight text-text">Dictate</h1>
           <p className="mt-1 flex items-center gap-2 text-sm text-text-muted">
-            <StatusDot phase={capture.phase} />
+            <StatusDot state={capture.phase === "error" ? "error" : capture.phase === "idle" ? "idle" : "listening"} />
             {hint.label}. {hint.detail}
           </p>
         </header>

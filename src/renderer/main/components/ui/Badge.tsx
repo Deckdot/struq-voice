@@ -1,36 +1,44 @@
 import type { JSX, ReactNode } from "react";
+import { Icon } from "@iconify/react";
+import type { IconifyIcon } from "@iconify/react";
 import { cn } from "../../lib/cn";
 
 /**
- * Small caps on a soft fill: engine names, install state, cloud and local
- * markers. Each tone pairs a soft background with its matching solid text,
- * so the badge reads as tinted rather than filled.
+ * A small uppercase label that pairs a tone with an optional glyph. Use
+ * `tone="ember"` only for live capture feedback; it carries meaning.
  */
-export type BadgeTone = "neutral" | "accent" | "success" | "warning" | "danger";
-
-const TONES: Record<BadgeTone, string> = {
-  neutral: "bg-bg-sunken text-text-secondary",
-  accent: "bg-accent-soft text-accent-text",
-  success: "bg-success-soft text-success",
-  warning: "bg-warning-soft text-warning",
-  danger: "bg-danger-soft text-danger"
-};
+export type BadgeTone = "neutral" | "accent" | "success" | "warning" | "danger" | "ember" | "info";
 
 export interface BadgeProps {
   readonly tone?: BadgeTone;
-  readonly className?: string;
+  readonly icon?: string | IconifyIcon;
   readonly children: ReactNode;
+  readonly className?: string;
 }
 
-export function Badge({ tone = "neutral", className, children }: BadgeProps): JSX.Element {
+const TONE_CLASS: Record<BadgeTone, string> = {
+  neutral: "bg-bg-sunken text-text-secondary border border-border",
+  accent: "bg-accent-soft text-accent-text",
+  success: "bg-success-soft text-success",
+  warning: "bg-warning-soft text-warning",
+  danger: "bg-danger-soft text-danger",
+  ember: "bg-ember-soft text-ember",
+  info: "bg-info-soft text-info"
+};
+
+export function Badge({ tone = "neutral", icon, children, className }: BadgeProps): JSX.Element {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-2xs uppercase tracking-wide",
-        TONES[tone],
+        "inline-flex h-5 items-center gap-1 rounded-sm px-1.5",
+        "text-2xs font-semibold uppercase tracking-wide",
+        TONE_CLASS[tone],
         className
       )}
     >
+      {icon !== undefined && (
+        <Icon icon={icon} className="h-3 w-3 shrink-0" aria-hidden="true" />
+      )}
       {children}
     </span>
   );

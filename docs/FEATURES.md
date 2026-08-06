@@ -66,8 +66,7 @@ as `pnpm test:e2e`).
   replace/remove actions, env fallback.
 
 ### Post-processing
-- Trim/collapse whitespace (always on), custom dictionary, filler removal,
-  trailing punctuation; pure functions with unit tests.
+- Trim/collapse whitespace (always on), filler removal, trailing punctuation, and a standalone Dictionary matching engine supporting case sensitivity, whole words, rule toggling, and deletion; pure functions with unit tests.
 
 ### Onboarding and hardware
 - Machine profiling: cores and memory from Node `os`, GPU vendor from
@@ -90,9 +89,10 @@ as `pnpm test:e2e`).
 
 ### Interface
 - Application shell: branded custom title bar, left navigation rail with
-  Dictate, History, and Models at the top, Settings pinned at the bottom,
-  and a flexible content region. Ctrl+1..4 jumps between
+  Dictate, History, Dictionary, and Models at the top, Settings pinned at the bottom,
+  and a flexible content region. Ctrl+1..5 jumps between
   pages, Ctrl+K opens the command palette, Esc closes any overlay.
+  First paint reveals via a two-sheet curtain with trailing soft accent band.
 - Shared component layer in `src/renderer/main/components/ui/`: the
   full component inventory (Button, IconButton, Badge, Kbd, Field,
   SettingsGroup, SettingsRow, Switch, Checkbox, RadioGroup, Select,
@@ -104,10 +104,16 @@ as `pnpm test:e2e`).
 - Dictate is the readiness home: one headline that answers "is it
   ready?", the hold and toggle chords side by side, a live
   microphone meter, the last transcript, three "what lives where"
-  cards, and a status panel with the fix offered inline.
+  cards, a status panel with the fix offered inline, and an activity
+  chart with a weighted draw-in sweep.
 - History is a virtualized list grouped by day (Today, Yesterday, then
   weekday + date), with a search field, copy and a two-step delete per
-  row. Roving tabindex, Enter to copy, Delete to remove.
+  row. Roving tabindex, Enter to copy, Delete to remove. Highly optimized
+  scroll performance with memoized grouping and static Intl formatters.
+- Dictionary is a dedicated view for correction rules: add/edit rules,
+  matchCase and wholeWord toggles, rule enable/disable switches, a live
+  "Try It" sandbox with highlighted match previews and input/output side-by-side,
+  starter suggestions, search, sorting, and native JSON import/export dialogs.
 - Models leads with the current selection and three recommendations based
   on detected hardware. Tiny, Base, Small, Medium, and Large each show the
   three strongest variants first, with every remaining variant available
@@ -118,9 +124,9 @@ as `pnpm test:e2e`).
   Delivery, Text, Appearance. Each is a SettingsGroup of related
   rows. Advanced values (min/max capture, pre-roll, restore delay,
   live transcript interval) live behind a Disclosure in their
-  category. The OpenRouter key field, the model picker, and the
-  words-to-fix editor all live in their category. The voice service
-  picker, the backup service picker, and the theme picker all
+  category. The OpenRouter key field and the model picker live in their category.
+  Text settings include filler and punctuation toggles and a link to the Dictionary tab.
+  The voice service picker, the backup service picker, and the theme picker all
   apply immediately. Capture includes a live level meter under the selected
   microphone so input can be tested without starting a transcription.
 - The capture pill is the floating overlay window. Five states

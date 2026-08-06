@@ -103,17 +103,19 @@ describe("history stats", () => {
     expect(statsStore.stats().totalWords).toBe(before);
   });
 
-  it("returns a full fortnight of days, gaps included, oldest first", () => {
+  it("returns a full month of days, gaps included, oldest first", () => {
     const { daily } = statsStore.stats();
-    expect(daily).toHaveLength(14);
+    expect(daily).toHaveLength(30);
     for (let i = 1; i < daily.length; i += 1) {
       const previous = daily[i - 1];
       const current = daily[i];
       if (previous === undefined || current === undefined) throw new Error("missing day");
       expect(current.dayStartMs).toBeGreaterThan(previous.dayStartMs);
     }
-    // Everything above was inserted now, so only the last slot carries words.
-    expect(daily[13]?.words).toBe(12);
+    // Everything above was inserted now, so only today carries words. Indexed
+    // from the end rather than a literal, so widening the window does not
+    // require editing the assertion.
+    expect(daily[daily.length - 1]?.words).toBe(12);
     expect(daily[0]?.words).toBe(0);
   });
 
@@ -129,6 +131,6 @@ describe("history stats", () => {
     expect(stats.totalWords).toBe(0);
     expect(stats.wpm).toBe(0);
     expect(stats.streakDays).toBe(0);
-    expect(stats.daily).toHaveLength(14);
+    expect(stats.daily).toHaveLength(30);
   });
 });

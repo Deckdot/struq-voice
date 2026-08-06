@@ -40,7 +40,12 @@ const toRecord = (row: TranscriptRow): TranscriptRecord => ({
 });
 
 const DAY_MS = 86_400_000;
-const SPARKLINE_DAYS = 14;
+/**
+ * Days in the activity window. Thirty reads as a habit rather than a
+ * fortnight's noise, and it is still narrow enough that a single busy day is
+ * visible rather than averaged away.
+ */
+const SPARKLINE_DAYS = 30;
 
 interface DayTotals {
   readonly words: number;

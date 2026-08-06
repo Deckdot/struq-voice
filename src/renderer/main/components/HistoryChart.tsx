@@ -3,14 +3,16 @@ import type { JSX } from "react";
 import { motion } from "motion/react";
 import {
   ResponsiveContainer,
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid
 } from "recharts";
 import type { HistoryStatsDay } from "../../../shared/ipc";
+import { useTranslation } from "../lib/useTranslation";
 
 /**
  * The activity chart. The entrance is a weighted draw: recharts reveals each
@@ -52,16 +54,44 @@ interface ChartItem {
   readonly words: number;
   readonly durationSec: number;
   readonly durationMin: number;
+  /**
+   * Words per minute for that day, or null on a day with no dictation so the
+   * line breaks instead of diving to zero.
+   *
+   * This is the second series because words and minutes are not two facts, they
+   * are one fact twice: you speak at a roughly fixed rate, so plotting both on
+   * independently scaled axes drew two curves of the same shape sitting on top
+   * of each other. Pace is the quantity volume does not predict, which is what
+   * makes the pair worth reading together.
+   */
+  readonly wpm: number | null;
 }
 
 interface TooltipPayloadItem {
   readonly payload?: ChartItem;
 }
 
+/**
+ * Copy for the tooltip, resolved by the chart and handed down.
+ *
+ * Recharts clones the tooltip element with its own props rather than rendering
+ * it as a normal child, so calling a hook inside it is not something to rely
+ * on. Resolving the strings once in the parent keeps the translation in the
+ * React tree where it belongs.
+ */
+interface TooltipLabels {
+  readonly words: string;
+  readonly pace: string;
+  readonly spoken: string;
+  readonly noPace: string;
+  readonly wpmValue: (wpm: number) => string;
+}
+
 interface CustomTooltipProps {
   readonly active?: boolean;
   readonly payload?: readonly TooltipPayloadItem[];
   readonly label?: string;
+  readonly labels?: TooltipLabels;
 }
 
 const shortDate = new Intl.DateTimeFormat(undefined, { month: "numeric", day: "numeric" });
@@ -71,8 +101,8 @@ const longDate = new Intl.DateTimeFormat(undefined, {
   day: "numeric"
 });
 
-function CustomTooltip({ active, payload }: CustomTooltipProps): JSX.Element | null {
-  if (!active || !payload || payload.length === 0) return null;
+function CustomTooltip({ active, payload, labels }: CustomTooltipProps): JSX.Element | null {
+  if (!active || !payload || payload.length === 0 || labels === undefined) return null;
 
   const data = payload[0]?.payload;
   if (!data) return null;
@@ -87,18 +117,25 @@ function CustomTooltip({ active, payload }: CustomTooltipProps): JSX.Element | n
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 shadow-lg backdrop-blur-md">
       <p className="text-2xs font-normal text-text-muted">{data.fullDateStr}</p>
-      <div className="flex items-center gap-4 text-xs">
+      <div className="flex flex-col gap-1 text-xs">
         <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-accent" />
-          <span className="text-text-muted">Words:</span>
-          <span className="font-normal text-text tabular-nums" data-numeric>
+          <span className="h-2 w-2 shrink-0 rounded-full bg-accent" />
+          <span className="text-text-muted">{labels.words}</span>
+          <span className="ml-auto font-normal text-text tabular-nums" data-numeric>
             {data.words.toLocaleString()}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-info" />
-          <span className="text-text-muted">Spoken:</span>
-          <span className="font-normal text-text tabular-nums" data-numeric>
+          <span className="h-2 w-2 shrink-0 rounded-full bg-info" />
+          <span className="text-text-muted">{labels.pace}</span>
+          <span className="ml-auto font-normal text-text tabular-nums" data-numeric>
+            {data.wpm === null ? labels.noPace : labels.wpmValue(data.wpm)}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-border-strong" />
+          <span className="text-text-muted">{labels.spoken}</span>
+          <span className="ml-auto font-normal text-text tabular-nums" data-numeric>
             {formatMin(data.durationSec)}
           </span>
         </div>
@@ -110,20 +147,36 @@ function CustomTooltip({ active, payload }: CustomTooltipProps): JSX.Element | n
 export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.Element {
   // Gradient ids are document-global. Two charts on one page would otherwise
   // share one gradient and the second would inherit the first's stops.
+  const { t } = useTranslation();
   const gradientId = useId().replace(/:/g, "");
   const wordsGradient = `sv-words-${gradientId}`;
-  const durationGradient = `sv-duration-${gradientId}`;
+
+  const tooltipLabels: TooltipLabels = useMemo(
+    () => ({
+      words: t("dictate.chart.series.words"),
+      pace: t("dictate.chart.series.pace"),
+      spoken: t("dictate.chart.series.spoken"),
+      noPace: t("dictate.chart.pace.none"),
+      wpmValue: (wpm: number) => t("dictate.chart.pace.value", { wpm: String(wpm) })
+    }),
+    [t]
+  );
 
   const chartData: ChartItem[] = useMemo(
     () =>
       days.map((d) => {
         const durationSec = Math.round(d.durationMs / 1000);
+        // Below a few seconds the ratio is dominated by rounding, so a
+        // two-word aside would report an implausible pace. Those days read as
+        // "no pace" rather than a spike.
+        const measurable = d.durationMs >= 5_000 && d.words > 0;
         return {
           dateStr: shortDate.format(d.dayStartMs),
           fullDateStr: longDate.format(d.dayStartMs),
           words: d.words,
           durationSec,
-          durationMin: Number((durationSec / 60).toFixed(1))
+          durationMin: Number((durationSec / 60).toFixed(1)),
+          wpm: measurable ? Math.round(d.words / (d.durationMs / 60_000)) : null
         };
       }),
     [days]
@@ -150,15 +203,11 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
       className={`w-full h-44 ${className}`}
     >
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+        <ComposedChart data={chartData} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id={wordsGradient} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="var(--sv-accent)" stopOpacity={0.35} />
               <stop offset="95%" stopColor="var(--sv-accent)" stopOpacity={0.0} />
-            </linearGradient>
-            <linearGradient id={durationGradient} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="var(--sv-info)" stopOpacity={0.25} />
-              <stop offset="95%" stopColor="var(--sv-info)" stopOpacity={0.0} />
             </linearGradient>
           </defs>
           <CartesianGrid
@@ -167,6 +216,9 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             opacity={0.4}
             vertical={false}
           />
+          {/* Thirty labels do not fit in 880px, and recharts drops them in an
+              order that reads as arbitrary. Every fifth day keeps the axis
+              legible and the spacing even. */}
           <XAxis
             dataKey="dateStr"
             stroke="var(--sv-text-muted)"
@@ -174,6 +226,8 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             tickLine={false}
             axisLine={false}
             dy={4}
+            interval={4}
+            minTickGap={8}
           />
           <YAxis
             yAxisId="words"
@@ -184,24 +238,25 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             dx={-4}
           />
           <YAxis
-            yAxisId="duration"
+            yAxisId="pace"
             orientation="right"
             stroke="var(--sv-text-muted)"
             fontSize={10}
             tickLine={false}
             axisLine={false}
             dx={4}
-            hide
+            width={34}
+            allowDecimals={false}
           />
           <Tooltip
-            content={<CustomTooltip />}
+            content={<CustomTooltip labels={tooltipLabels} />}
             cursor={{ stroke: "var(--sv-border-strong)", strokeWidth: 1 }}
           />
           <Area
             yAxisId="words"
             type="monotone"
             dataKey="words"
-            name="Words Spoken"
+            name={t("dictate.chart.series.words")}
             stroke="var(--sv-accent)"
             strokeWidth={2}
             fillOpacity={1}
@@ -211,22 +266,28 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             animationDuration={drawing ? WORDS_DRAW_MS : UPDATE_MS}
             animationEasing={drawing ? DRAW_EASE : UPDATE_EASE}
           />
-          <Area
-            yAxisId="duration"
+          {/* Pace rides as a bare line, not a filled area. A fill reads as an
+              accumulating quantity, and words per minute is a rate: the area
+              under it means nothing. connectNulls bridges quiet days so the
+              line describes how fast you speak when you do, rather than
+              collapsing to zero on every day off. */}
+          <Line
+            yAxisId="pace"
             type="monotone"
-            dataKey="durationMin"
-            name="Minutes Spoken"
+            dataKey="wpm"
+            name={t("dictate.chart.series.pace")}
             stroke="var(--sv-info)"
             strokeWidth={1.5}
             strokeDasharray="4 4"
-            fillOpacity={1}
-            fill={`url(#${durationGradient})`}
+            dot={false}
+            activeDot={{ r: 3, strokeWidth: 0, fill: "var(--sv-info)" }}
+            connectNulls
             isAnimationActive={true}
             animationBegin={drawing ? SPOKEN_BEGIN_MS : 0}
             animationDuration={drawing ? SPOKEN_DRAW_MS : UPDATE_MS}
             animationEasing={drawing ? DRAW_EASE : UPDATE_EASE}
           />
-        </AreaChart>
+        </ComposedChart>
       </ResponsiveContainer>
     </motion.div>
   );

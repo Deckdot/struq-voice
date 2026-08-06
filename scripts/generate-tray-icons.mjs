@@ -77,8 +77,6 @@ const variantSvg = (source, markColor, dotColor) => {
 };
 
 const variantBlocksWaveSvg = (blocksWaveSource, color) => {
-  const recoloured = blocksWaveSource.replace(/fill="[^"]+"/, `fill="${color}"`);
-
   const size = 512;
   const target = 0.58;
   const box = { w: 24, h: 24 };
@@ -87,13 +85,13 @@ const variantBlocksWaveSvg = (blocksWaveSource, color) => {
   const ty = (size - box.h * scale) / 2;
 
   const stroke = size * 0.028;
-  const inner = recoloured
+  const inner = blocksWaveSource
     .replace(/^[\s\S]*?<svg[^>]*>/, "")
     .replace(/<\/svg>\s*$/, "");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">
   <rect x="${stroke / 2}" y="${stroke / 2}" width="${size - stroke}" height="${size - stroke}" rx="${size * 0.203}" fill="${TILE}" stroke="${EDGE}" stroke-width="${stroke}" />
-  <g transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(4)})">${inner}</g>
+  <g transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(4)})" fill="${color}">${inner}</g>
 </svg>`;
 };
 

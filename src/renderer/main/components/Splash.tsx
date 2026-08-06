@@ -21,19 +21,48 @@ export const splashSeen = (): boolean => {
 const HOLD_MS = 980;
 const REDUCED_HOLD_MS = 600;
 
-/** --ease-panel. Holds, then commits: the cinematic door. */
+/**
+ * --ease-panel. Holds, then commits: the cinematic door.
+ *
+ * Not expo-out. A curtain travels from one visible position to another, and an
+ * out-ease front-loads the whole distance so the sheet is gone before the eye
+ * registers it left, which is what made the lift read as a jump cut.
+ */
 const CURTAIN_EASE = [0.83, 0, 0.17, 1] as const;
-/** --ease-exit. */
-const EXIT_EASE = [0.7, 0, 0.84, 0] as const;
 
+const LIFT_MS = 0.72;
+
+/**
+ * The sheet travels on a keyframed translateY rather than a percentage y.
+ *
+ * `y: "-100%"` makes Motion resolve a percentage against the element box on
+ * every frame, which it cannot hand to the compositor as a static transform.
+ * On a full-viewport panel that is a layout read per frame, and it is the
+ * single biggest source of the stutter. A pixel-free `translateY` keyframe
+ * pair stays on the GPU.
+ */
 const FRONT_SHEET: Variants = {
-  held: { y: "0%" },
-  lifted: { y: "-100%", transition: { duration: 0.64, ease: CURTAIN_EASE } }
+  held: { translateY: "0vh" },
+  lifted: {
+    translateY: "-101vh",
+    transition: { duration: LIFT_MS, ease: CURTAIN_EASE }
+  }
 };
 
+/**
+ * The mark rides the sheet up and fades only in the last third.
+ *
+ * Fading it in 260ms against a 720ms lift emptied the panel a third of the way
+ * through, so the user saw the logo disappear and then a blank rectangle
+ * slide. Holding it until the sheet is most of the way gone keeps the lift
+ * reading as one object leaving rather than two events.
+ */
 const MARK: Variants = {
   held: { opacity: 1 },
-  lifted: { opacity: 0, transition: { duration: 0.26, ease: EXIT_EASE } }
+  lifted: {
+    opacity: 0,
+    transition: { duration: 0.26, delay: LIFT_MS * 0.55, ease: "linear" }
+  }
 };
 
 export interface SplashProps {
@@ -105,23 +134,28 @@ export function Splash({ onReveal }: SplashProps): JSX.Element | null {
   }
 
   return (
-    <motion.div
-      className="pointer-events-none fixed inset-0 z-50 overflow-hidden"
-      initial="held"
-      animate={state === "lifting" ? "lifted" : "held"}
-      aria-hidden="true"
-    >
+    <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden" aria-hidden="true">
       <motion.div
         variants={FRONT_SHEET}
+        initial="held"
+        animate={state === "lifting" ? "lifted" : "held"}
+        // Promoted for the whole life of the splash, not discovered mid-lift.
+        // Letting the compositor find out when the animation starts costs a
+        // layer-creation hitch on the first frame, which is exactly where a
+        // curtain is most visible.
+        style={{ willChange: "transform", backfaceVisibility: "hidden" }}
         className="absolute inset-0 flex items-center justify-center bg-bg"
-        onAnimationComplete={() => {
-          if (state === "lifting") setState("gone");
+        onAnimationComplete={(definition) => {
+          // Keyed on the variant name. A bare completion handler also fires
+          // when the mark's fade finishes, which unmounted the splash while
+          // the sheet was still travelling and snapped it away.
+          if (definition === "lifted") setState("gone");
         }}
       >
         <motion.span variants={MARK} className="inline-flex">
           <BrandMarkAnimated size={64} className="text-accent" />
         </motion.span>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }

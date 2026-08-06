@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Variants } from "motion/react";
@@ -17,7 +17,6 @@ import { SettingsView } from "./views/SettingsView";
 import type { MainWindowApi } from "../../shared/api";
 import type { Settings } from "../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../shared/settings";
-import { MOCK_ENGINE_ID } from "../../shared/engines";
 import { shouldRunOnboarding } from "../../shared/settings";
 
 /**
@@ -50,15 +49,18 @@ const REDUCED_PAGE_VARIANTS: Variants = {
 };
 
 /**
- * The shell rises into the space the curtain vacates. The delay overlaps the
- * lift rather than queueing behind it, so the two read as one gesture.
+ * The shell settles into the space the curtain vacates.
+ *
+ * It only fades, and it finishes before the sheet clears the top of the
+ * screen. Sliding it as well meant two things moved vertically at once behind
+ * a cover that hid most of the travel, so what reached the eye was the shell
+ * still drifting after the curtain had gone. One moving object per moment.
  */
 const SHELL_VARIANTS: Variants = {
-  hidden: { opacity: 0, y: 14 },
+  hidden: { opacity: 0 },
   revealed: {
     opacity: 1,
-    y: 0,
-    transition: { duration: 0.72, delay: 0.18, ease: [0.16, 1, 0.3, 1] }
+    transition: { duration: 0.34, delay: 0.1, ease: "linear" }
   }
 };
 
@@ -79,6 +81,7 @@ export function App(): JSX.Element {
   const [onboarding, setOnboarding] = useState(false);
   const reducedMotion = useReducedMotion();
 
+  const shellRef = useRef<HTMLDivElement>(null);
   const handleReveal = useCallback(() => {
     setShellRevealed(true);
   }, [setShellRevealed]);
@@ -104,7 +107,7 @@ export function App(): JSX.Element {
     void api.settings.get().then(({ settings: loaded }) => {
       if (cancelled) return;
       setSettings(loaded);
-      setOnboarding(shouldRunOnboarding(loaded, MOCK_ENGINE_ID));
+      setOnboarding(shouldRunOnboarding(loaded));
     });
     return () => {
       cancelled = true;
@@ -121,11 +124,21 @@ export function App(): JSX.Element {
     <div className="flex h-full flex-col bg-bg text-text">
       <Splash onReveal={handleReveal} />
       <TitleBar />
+      {/* The opacity tween promotes this whole subtree to its own layer, which
+          includes the virtualized History list. Clearing the inline opacity
+          once it lands drops the layer again, so scrolling is not paying for
+          an entrance that finished at boot. */}
       <motion.div
         className="flex min-h-0 flex-1 flex-col"
         variants={reducedMotion === true ? REDUCED_SHELL_VARIANTS : SHELL_VARIANTS}
         initial="hidden"
         animate={shellRevealed ? "revealed" : "hidden"}
+        onAnimationComplete={(definition) => {
+          if (definition !== "revealed") return;
+          shellRef.current?.style.removeProperty("opacity");
+          shellRef.current?.style.removeProperty("will-change");
+        }}
+        ref={shellRef}
       >
         {onboarding ? (
           <Onboarding

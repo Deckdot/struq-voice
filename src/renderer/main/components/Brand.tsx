@@ -97,7 +97,7 @@ export function BrandMarkAnimated({ size = 64, className }: BrandMarkProps): JSX
 export function BrandLockup({ size = 20, className }: BrandMarkProps): JSX.Element {
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <BrandMark size={size} className="text-text" />
+      <BrandMark size={size} className="text-text dark:text-ember" />
       <span className="font-display text-sm font-semibold tracking-tight text-text">
         Struq Voice
       </span>

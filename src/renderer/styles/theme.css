@@ -141,17 +141,17 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --sv-bg: oklch(0.18 0.005 250);
-  --sv-bg-sunken: oklch(0.15 0.006 250);
-  --sv-surface: oklch(0.22 0.006 250);
-  --sv-surface-hover: oklch(0.255 0.007 250);
-  --sv-surface-active: oklch(0.285 0.008 250);
+  --sv-bg: oklch(0.23 0.006 250);
+  --sv-bg-sunken: oklch(0.195 0.007 250);
+  --sv-surface: oklch(0.27 0.007 250);
+  --sv-surface-hover: oklch(0.31 0.008 250);
+  --sv-surface-active: oklch(0.34 0.009 250);
   --sv-text: oklch(0.96 0.008 95);
-  --sv-text-secondary: oklch(0.8 0.008 95);
-  --sv-text-muted: oklch(0.65 0.008 250);
-  --sv-text-inverse: oklch(0.18 0.005 250);
-  --sv-border: oklch(0.31 0.008 250);
-  --sv-border-strong: oklch(0.4 0.01 250);
+  --sv-text-secondary: oklch(0.81 0.008 95);
+  --sv-text-muted: oklch(0.66 0.008 250);
+  --sv-text-inverse: oklch(0.23 0.006 250);
+  --sv-border: oklch(0.34 0.008 250);
+  --sv-border-strong: oklch(0.43 0.01 250);
   --sv-accent: oklch(0.7 0.13 43);
   --sv-accent-solid: oklch(0.63 0.14 43);
   --sv-accent-solid-hover: oklch(0.68 0.14 43);

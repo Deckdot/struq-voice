@@ -14,7 +14,7 @@ export function TitleBar(): JSX.Element {
       className="relative flex h-9 shrink-0 items-center justify-between border-b border-border bg-bg"
       style={{ WebkitAppRegion: "drag" } as CSSProperties}
     >
-      <BrandMark size={20} className="pointer-events-none ml-3 text-text" />
+      <BrandMark size={20} className="pointer-events-none ml-3 text-text dark:text-ember" />
 
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <span className="font-display text-xs font-normal tracking-wide text-text-muted">

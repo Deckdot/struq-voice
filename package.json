@@ -1,6 +1,6 @@
 {
   "name": "struq-voice",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Tray-resident Windows dictation. Hold a key, speak, release, text lands at the caret.",
   "main": "./out/main/index.cjs",

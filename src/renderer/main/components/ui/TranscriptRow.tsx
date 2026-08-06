@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { TranscriptRecord } from "../../../../shared/ipc";
@@ -24,11 +24,10 @@ export interface TranscriptRowProps {
   readonly expanded: boolean;
   readonly copyArmed: boolean;
   readonly deleteArmed: boolean;
-  readonly onToggleExpanded: () => void;
-  readonly onCopy: () => void;
-  readonly onArmCopy: () => void;
-  readonly onArmDelete: () => void;
-  readonly onConfirmDelete: () => void;
+  readonly onToggleExpanded: (id: number) => void;
+  readonly onCopy: (id: number, text: string) => void;
+  readonly onArmDelete: (id: number) => void;
+  readonly onConfirmDelete: (id: number) => void;
   readonly onCancelArmedDelete: () => void;
 }
 
@@ -40,12 +39,20 @@ export const TranscriptRow = memo(function TranscriptRow({
   deleteArmed,
   onToggleExpanded,
   onCopy,
-  onArmCopy,
   onArmDelete,
   onConfirmDelete,
   onCancelArmedDelete
 }: TranscriptRowProps): JSX.Element {
-  const words = countWords(record.text);
+  const { words, relative, absolute, iso } = useMemo(
+    () => ({
+      words: countWords(record.text),
+      relative: formatRelativeTime(record.createdAtMs),
+      absolute: formatAbsoluteTime(record.createdAtMs),
+      iso: new Date(record.createdAtMs).toISOString()
+    }),
+    [record]
+  );
+
   return (
     <article
       className={cn(
@@ -59,7 +66,9 @@ export const TranscriptRow = memo(function TranscriptRow({
       )}
       <button
         type="button"
-        onClick={onToggleExpanded}
+        onClick={() => {
+          onToggleExpanded(record.id);
+        }}
         aria-expanded={expanded}
         className="min-w-0 flex-1 cursor-pointer text-left"
       >
@@ -73,8 +82,8 @@ export const TranscriptRow = memo(function TranscriptRow({
           {record.text}
         </p>
         <div className="mt-1.5 flex items-center gap-2 text-xs text-text-muted" data-numeric>
-          <time dateTime={new Date(record.createdAtMs).toISOString()} title={formatAbsoluteTime(record.createdAtMs)}>
-            {formatRelativeTime(record.createdAtMs)}
+          <time dateTime={iso} title={absolute}>
+            {relative}
           </time>
           <span aria-hidden="true">·</span>
           <span>
@@ -101,15 +110,16 @@ export const TranscriptRow = memo(function TranscriptRow({
             label="Copy transcript"
             size="sm"
             onClick={() => {
-              onArmCopy();
-              onCopy();
+              onCopy(record.id, record.text);
             }}
           />
         )}
         {deleteArmed ? (
           <button
             type="button"
-            onClick={onConfirmDelete}
+            onClick={() => {
+              onConfirmDelete(record.id);
+            }}
             onBlur={onCancelArmedDelete}
             className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-danger bg-danger px-2 text-2xs font-semibold uppercase tracking-wide text-text-inverse"
             aria-label="Confirm delete"
@@ -123,7 +133,9 @@ export const TranscriptRow = memo(function TranscriptRow({
             label="Delete transcript"
             size="sm"
             variant="danger"
-            onClick={onArmDelete}
+            onClick={() => {
+              onArmDelete(record.id);
+            }}
           />
         )}
       </div>

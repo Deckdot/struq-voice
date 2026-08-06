@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { MainWindowApi } from "../../../shared/api";
 import type { TranscriptRecord } from "../../../shared/ipc";
 import { EmptyState, SearchInput, TranscriptRow } from "../components/ui";
+import { formatDayHeading } from "../lib/format";
 
 const SEARCH_INPUT_ID = "history-search";
 
@@ -13,6 +14,10 @@ const SEARCH_INPUT_ID = "history-search";
  * a long-running user has thousands; the row's transcript text is the
  * thing the eye should find first, so it is the dominant element, with
  * the date and engine as quiet metadata.
+ *
+ * The virtualizer re-renders this component on every scroll event, so
+ * everything in the render body is scroll-frequency work. Grouping, the row
+ * index table and every handler are memoized for that reason, not for tidiness.
  */
 
 interface GroupHeader {
@@ -29,32 +34,32 @@ interface GroupRow {
 
 type ListEntry = GroupHeader | GroupRow;
 
+const DAY_MS = 86_400_000;
+
 const startOfDay = (epochMs: number): number => {
   const d = new Date(epochMs);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 };
 
-const dayLabel = (epochMs: number, now: number): string => {
-  const day = startOfDay(epochMs);
-  const today = startOfDay(now);
-  const diff = Math.round((today - day) / (1000 * 60 * 60 * 24));
+const dayLabel = (epochMs: number, todayStart: number): string => {
+  const diff = Math.round((todayStart - startOfDay(epochMs)) / DAY_MS);
   if (diff === 0) return "Today";
   if (diff === 1) return "Yesterday";
-  return new Date(epochMs).toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric"
-  });
+  return formatDayHeading(epochMs);
 };
 
-const groupRecords = (records: readonly TranscriptRecord[], now: number): ListEntry[] => {
+const groupRecords = (records: readonly TranscriptRecord[], todayStart: number): ListEntry[] => {
   const out: ListEntry[] = [];
   let lastDay = -1;
   for (const record of records) {
     const day = startOfDay(record.createdAtMs);
     if (day !== lastDay) {
-      out.push({ kind: "header", id: `h-${String(day)}`, label: dayLabel(record.createdAtMs, now) });
+      out.push({
+        kind: "header",
+        id: `h-${String(day)}`,
+        label: dayLabel(record.createdAtMs, todayStart)
+      });
       lastDay = day;
     }
     out.push({ kind: "row", id: `r-${String(record.id)}`, record });
@@ -62,7 +67,14 @@ const groupRecords = (records: readonly TranscriptRecord[], now: number): ListEn
   return out;
 };
 
-const ROW_HEIGHT = 88;
+/**
+ * A collapsed row measures ~93px: 24px of vertical padding, two clamped lines
+ * at text-sm/leading-snug, a 6px gap, the metadata line, and the 8px gutter on
+ * the positioning wrapper. Rows are still measured for real (expanding one
+ * changes its height), but an accurate estimate is what stops the total size
+ * from drifting under the scrollbar mid-drag.
+ */
+const ROW_HEIGHT = 93;
 const HEADER_HEIGHT = 36;
 
 export function HistoryView(): JSX.Element {
@@ -75,41 +87,30 @@ export function HistoryView(): JSX.Element {
   const [deleteArmed, setDeleteArmed] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
 
-  const toggleExpanded = (id: number): void => {
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  };
+  // Stable within a calendar day, so the grouping memo survives every scroll.
+  const todayStart = startOfDay(Date.now());
+  const entries = useMemo(() => groupRecords(records, todayStart), [records, todayStart]);
 
-  const now = Date.now();
-  const entries = groupRecords(records, now);
-
+  // One effect owns the record set. The previous split (a load effect keyed on
+  // [api] plus a search effect that returned early on an empty query) meant
+  // clearing the search left the filtered list on screen.
   useEffect(() => {
     let cancelled = false;
-    const load = (): void => {
-      void api.history.list({ limit: 500 }).then(({ items }) => {
-        if (!cancelled) {
+    const trimmed = query.trim();
+    const timer = window.setTimeout(
+      () => {
+        const request =
+          trimmed.length === 0
+            ? api.history.list({ limit: 500 })
+            : api.history.search({ query: trimmed, limit: 200 });
+        void request.then(({ items }) => {
+          if (cancelled) return;
           setRecords(items);
           setLoading(false);
-        }
-      });
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [api]);
-
-  useEffect(() => {
-    if (query.trim().length === 0) return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void api.history.search({ query: query.trim(), limit: 200 }).then(({ items }) => {
-        if (!cancelled) setRecords(items);
-      });
-    }, 250);
+        });
+      },
+      trimmed.length === 0 ? 0 : 250
+    );
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -160,24 +161,71 @@ export function HistoryView(): JSX.Element {
   }, [query]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const getItemKey = useCallback(
+    (index: number): string | number => entries[index]?.id ?? index,
+    [entries]
+  );
+  const estimateSize = useCallback(
+    (index: number): number => (entries[index]?.kind === "header" ? HEADER_HEIGHT : ROW_HEIGHT),
+    [entries]
+  );
+
   const rowVirtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => scrollRef.current,
-    getItemKey: (index) => entries[index]?.id ?? index,
-    estimateSize: (index) => (entries[index]?.kind === "header" ? HEADER_HEIGHT : ROW_HEIGHT),
-    measureElement: (element) => (element as HTMLElement).offsetHeight,
-    overscan: 12
+    getItemKey,
+    estimateSize,
+    overscan: 6
   });
 
   // Find the first row index so key navigation lands on a row, not a header.
-  const rowIndices = entries
-    .map((entry, index) => (entry.kind === "row" ? index : -1))
-    .filter((value) => value !== -1);
+  const rowIndices = useMemo(() => {
+    const out: number[] = [];
+    entries.forEach((entry, index) => {
+      if (entry.kind === "row") out.push(index);
+    });
+    return out;
+  }, [entries]);
   const firstRowIndex = rowIndices[0] ?? 0;
 
   const focusedEntryIndex = Math.min(Math.max(focusedIndex, 0), entries.length - 1);
   const focusedEntry = entries[focusedEntryIndex];
   const focusedRowId = focusedEntry?.kind === "row" ? focusedEntry.record.id : null;
+
+  const handleCopy = useCallback(
+    (id: number, text: string): void => {
+      api.clipboard.copy(text);
+      setCopyArmed(id);
+    },
+    [api]
+  );
+
+  const handleArmDelete = useCallback((id: number): void => {
+    setDeleteArmed(id);
+  }, []);
+
+  const handleCancelArmedDelete = useCallback((): void => {
+    setDeleteArmed(null);
+  }, []);
+
+  const handleConfirmDelete = useCallback(
+    (id: number): void => {
+      void api.history.remove({ id }).then(() => {
+        setRecords((current) => current.filter((item) => item.id !== id));
+        setDeleteArmed(null);
+      });
+    },
+    [api]
+  );
+
+  const handleToggleExpanded = useCallback((id: number): void => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
 
   const onListKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (rowIndices.length === 0) return;
@@ -193,34 +241,39 @@ export function HistoryView(): JSX.Element {
       rowVirtualizer.scrollToIndex(previous ?? firstRowIndex, { align: "auto" });
     } else if (event.key === "Enter" && focusedEntry?.kind === "row") {
       event.preventDefault();
-      api.clipboard.copy(focusedEntry.record.text);
-      setCopyArmed(focusedEntry.record.id);
-    } else if ((event.key === "Delete" || event.key === "Backspace") && focusedEntry?.kind === "row") {
+      handleCopy(focusedEntry.record.id, focusedEntry.record.text);
+    } else if (
+      (event.key === "Delete" || event.key === "Backspace") &&
+      focusedEntry?.kind === "row"
+    ) {
       event.preventDefault();
       if (deleteArmed === focusedEntry.record.id) {
-        void api.history.remove({ id: focusedEntry.record.id }).then(() => {
-          setRecords((current) => current.filter((item) => item.id !== focusedEntry.record.id));
-          setDeleteArmed(null);
-        });
+        handleConfirmDelete(focusedEntry.record.id);
       } else {
-        setDeleteArmed(focusedEntry.record.id);
+        handleArmDelete(focusedEntry.record.id);
       }
     }
   };
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <div className="flex shrink-0 items-center justify-end px-6 pb-2 pt-4">
-        <SearchInput
-          id={SEARCH_INPUT_ID}
-          value={query}
-          onChange={setQuery}
-          onClear={() => {
-            setQuery("");
-          }}
-          placeholder="Search transcripts"
-          className="w-[280px]"
-        />
+      <div className="flex shrink-0 items-end justify-between gap-5 px-6 pb-4 pt-5">
+        <div>
+          <h1 className="font-display text-2xl font-normal tracking-tight text-text">History</h1>
+          <p className="mt-1 text-sm text-text-muted">Find, copy, and review every transcript.</p>
+        </div>
+        <div className="pb-0.5">
+          <SearchInput
+            id={SEARCH_INPUT_ID}
+            value={query}
+            onChange={setQuery}
+            onClear={() => {
+              setQuery("");
+            }}
+            placeholder="Search transcripts"
+            className="w-[280px]"
+          />
+        </div>
       </div>
 
       <div
@@ -231,17 +284,13 @@ export function HistoryView(): JSX.Element {
         role="list"
         aria-label="Transcripts"
       >
-        {loading && (
-          <p className="px-4 py-6 text-sm text-text-muted">Loading your transcripts...</p>
-        )}
+        {loading && <p className="px-4 py-6 text-sm text-text-muted">Loading your transcripts...</p>}
 
         {!loading && records.length === 0 && (
           <EmptyState
             icon="ph:clock-counter-clockwise"
             title={
-              query.trim().length > 0
-                ? "Nothing matches that search."
-                : "No transcripts yet."
+              query.trim().length > 0 ? "Nothing matches that search." : "No transcripts yet."
             }
             body={
               query.trim().length > 0
@@ -252,9 +301,7 @@ export function HistoryView(): JSX.Element {
         )}
 
         {!loading && records.length > 0 && (
-          <div
-            style={{ height: `${String(rowVirtualizer.getTotalSize())}px`, position: "relative" }}
-          >
+          <div style={{ height: `${String(rowVirtualizer.getTotalSize())}px`, position: "relative" }}>
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const entry = entries[virtualRow.index];
               if (entry === undefined) return null;
@@ -268,8 +315,7 @@ export function HistoryView(): JSX.Element {
                       left: "0",
                       width: "100%",
                       height: `${String(virtualRow.size)}px`,
-                      transform: `translateY(${String(virtualRow.start)}px)`,
-                      willChange: "transform"
+                      transform: `translateY(${String(virtualRow.start)}px)`
                     }}
                     className="flex items-center px-1"
                   >
@@ -291,44 +337,26 @@ export function HistoryView(): JSX.Element {
                     left: "0",
                     width: "100%",
                     transform: `translateY(${String(virtualRow.start)}px)`,
-                    paddingBottom: "8px",
-                    willChange: "transform"
+                    paddingBottom: "8px"
                   }}
                 >
                   <TranscriptRow
                     record={record}
                     focused={record.id === focusedRowId}
                     expanded={expanded.has(record.id)}
-                    onToggleExpanded={() => {
-                      toggleExpanded(record.id);
-                    }}
                     copyArmed={copyArmed === record.id}
                     deleteArmed={deleteArmed === record.id}
-                    onCopy={() => {
-                      api.clipboard.copy(record.text);
-                    }}
-                    onArmCopy={() => {
-                      setCopyArmed(record.id);
-                    }}
-                    onArmDelete={() => {
-                      setDeleteArmed(record.id);
-                    }}
-                    onConfirmDelete={() => {
-                      void api.history.remove({ id: record.id }).then(() => {
-                        setRecords((current) => current.filter((item) => item.id !== record.id));
-                        setDeleteArmed(null);
-                      });
-                    }}
-                    onCancelArmedDelete={() => {
-                      setDeleteArmed(null);
-                    }}
+                    onToggleExpanded={handleToggleExpanded}
+                    onCopy={handleCopy}
+                    onArmDelete={handleArmDelete}
+                    onConfirmDelete={handleConfirmDelete}
+                    onCancelArmedDelete={handleCancelArmedDelete}
                   />
                 </div>
               );
             })}
           </div>
         )}
-
       </div>
     </div>
   );

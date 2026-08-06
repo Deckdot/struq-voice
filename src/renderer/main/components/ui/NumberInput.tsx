@@ -14,17 +14,21 @@ import { cn } from "../../lib/cn";
  */
 export interface NumberInputProps extends Omit<TextInputProps, "leadingIcon" | "trailingIcon" | "type" | "onChange"> {
   readonly unit?: string;
+  readonly min?: number;
+  readonly max?: number;
   readonly onChange?: (value: number) => void;
 }
 
 export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(function NumberInput(
-  { unit, className, onChange, ...rest },
+  { unit, className, onChange, min, max, ...rest },
   ref
 ): JSX.Element {
   return (
     <TextInput
       ref={ref}
       type="number"
+      min={min}
+      max={max}
       className={cn(
         "text-right font-semibold tabular-nums",
         unit !== undefined ? "pr-10" : undefined,
@@ -39,8 +43,13 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
         onChange === undefined
           ? undefined
           : (event: ChangeEvent<HTMLInputElement>) => {
-              const value = Number(event.target.value);
-              if (Number.isFinite(value)) onChange(value);
+              const raw = event.target.value;
+              if (raw === "" || raw === "-") return;
+              const value = Number(raw);
+              if (!Number.isFinite(value)) return;
+              if (min !== undefined && value < min) return;
+              if (max !== undefined && value > max) return;
+              onChange(value);
             }
       }
       {...rest}

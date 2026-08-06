@@ -152,7 +152,7 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
           <span className="flex h-12 w-12 items-center justify-center rounded-pill border border-success bg-surface text-success">
             <Icon icon="ph:check" className="h-6 w-6" aria-hidden="true" />
           </span>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">
+          <h1 className="font-display text-2xl font-medium tracking-tight text-text">
             You are ready.
           </h1>
           <p className="max-w-sm text-sm text-text-muted">

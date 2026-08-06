@@ -252,6 +252,18 @@
       transition: none;
     }
   }
+
+  /* Native <select> dropdowns: give the OS enough signal to use the right
+     palette. The option background and colour are the only properties the
+     OS will honour, and only when color-scheme matches the host page. */
+  select {
+    color-scheme: inherit;
+  }
+
+  select option {
+    background-color: var(--sv-surface);
+    color: var(--sv-text);
+  }
 }
 
 /* ---------------------------------------------------------------------------

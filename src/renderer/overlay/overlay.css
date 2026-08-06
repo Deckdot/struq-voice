@@ -70,12 +70,31 @@ body,
     transparent
   );
   transform: translateX(-100%);
-  animation: shimmer-sweep 600ms var(--ease-micro) 1 both;
+  animation: shimmer-sweep 1200ms var(--ease-micro) infinite;
 }
 
 @keyframes shimmer-sweep {
   to {
     transform: translateX(100%);
+  }
+}
+
+/* Pure-CSS spinner for the transcribing state. Defined here rather than
+   relying on Tailwind's animate-spin, which may not be emitted into the
+   overlay bundle if no component in the overlay uses it. */
+.sv-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--sv-info);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: sv-spin 700ms linear infinite;
+}
+
+@keyframes sv-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -105,5 +124,10 @@ body,
 
   .panel-enter {
     animation: none;
+  }
+
+  .sv-spinner {
+    animation: none;
+    opacity: 0.4;
   }
 }

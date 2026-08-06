@@ -97,7 +97,7 @@ export function SettingsView(): JSX.Element {
     <div className="h-full overflow-y-auto bg-bg" data-selectable>
       <div className="mx-auto w-full max-w-[920px] px-6 py-5">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">Settings</h1>
+          <h1 className="font-display text-2xl font-medium tracking-tight text-text">Settings</h1>
           <p className="mt-1 text-sm text-text-muted">Tune how Struq listens, writes, and stays out of your way.</p>
         </div>
 

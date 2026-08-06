@@ -62,7 +62,7 @@ export function Dialog({
                   SIZES[size]
                 )}
               >
-                <RadixDialog.Title className="font-display text-xl font-semibold text-text">
+                <RadixDialog.Title className="font-display text-xl font-medium text-text">
                   {title}
                 </RadixDialog.Title>
                 {description !== undefined && (

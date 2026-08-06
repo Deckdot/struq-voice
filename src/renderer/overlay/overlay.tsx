@@ -132,7 +132,6 @@ export function Overlay(): JSX.Element | null {
         {state.phase === "transcribing" && (
           <TranscribingView
             key="transcribing"
-            engineId={state.engineId}
             partial={partial}
             liveEnabled={liveEnabled}
             bands={bands}
@@ -198,13 +197,11 @@ function ListeningView({
 }
 
 function TranscribingView({
-  engineId,
   partial,
   liveEnabled,
   bands,
   decayMs
 }: {
-  readonly engineId: string;
   readonly partial: string;
   readonly liveEnabled: boolean;
   readonly bands: readonly number[] | null;
@@ -222,9 +219,10 @@ function TranscribingView({
             <div className="shimmer-line absolute inset-0" aria-hidden="true" />
           </div>
         </div>
-        <span className="shrink-0 text-2xs uppercase tracking-wide text-text-muted">
-          {engineId}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="sv-spinner" aria-hidden="true" />
+          <span className="text-2xs text-text-muted">Transcribing</span>
+        </div>
       </div>
       {liveEnabled && (
         <div className="transcript-scroll min-h-0 flex-1 overflow-y-auto rounded-sm bg-bg-sunken px-2.5 py-1.5">

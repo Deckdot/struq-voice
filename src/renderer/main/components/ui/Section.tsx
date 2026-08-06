@@ -16,7 +16,7 @@ export function Section({ title, description, children, className }: SectionProp
   return (
     <section className={cn("flex flex-col gap-3", className)}>
       <header>
-        <h2 className="font-display text-lg font-semibold text-text">{title}</h2>
+        <h2 className="font-display text-lg font-medium text-text">{title}</h2>
         {description !== undefined && (
           <p className="mt-0.5 text-sm text-text-muted">{description}</p>
         )}

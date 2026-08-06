@@ -53,7 +53,7 @@ export function StepShell({
       </div>
 
       <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-text">{title}</h1>
+        <h1 className="font-display text-2xl font-medium tracking-tight text-text">{title}</h1>
         <p className="mt-1.5 text-sm leading-snug text-text-muted">{description}</p>
       </div>
 

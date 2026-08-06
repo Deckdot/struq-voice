@@ -38,6 +38,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           "h-full w-full appearance-none bg-transparent pl-3 pr-8 text-text focus:outline-none",
           className
         )}
+        style={{ colorScheme: "inherit" }}
         {...rest}
       >
         {children}

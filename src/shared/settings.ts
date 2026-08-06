@@ -11,9 +11,17 @@ import { DEFAULT_WHISPER_MODEL_ID } from "./models";
 
 export const dictionaryEntrySchema = z.object({
   from: z.string().min(1),
-  to: z.string().min(1),
+  to: z.string(),
   matchCase: z.boolean().default(false),
-  wholeWord: z.boolean().default(true)
+  wholeWord: z.boolean().default(true),
+  /** Off keeps the rule in the list without applying it. */
+  enabled: z.boolean().default(true)
+});
+
+export const dictionaryFileSchema = z.object({
+  kind: z.literal("struq-voice-dictionary"),
+  version: z.literal(1),
+  entries: z.array(dictionaryEntrySchema)
 });
 
 export const postProcessingSchema = z.object({

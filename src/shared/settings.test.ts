@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
+  dictionaryFileSchema,
   migrateSettings,
   settingsSchema,
   shouldRunOnboarding
@@ -57,6 +58,38 @@ describe("settings migration", () => {
 
   it("defaults onboarding to incomplete on a fresh install", () => {
     expect(settingsSchema.parse({}).onboarding.completed).toBe(false);
+  });
+
+  it("parses a dictionary entry without enabled to enabled: true", () => {
+    const migrated = migrateSettings({
+      post: {
+        dictionary: [{ from: "struck", to: "Struq", matchCase: false, wholeWord: true }],
+        removeFillers: false,
+        addTrailingPunctuation: false
+      }
+    });
+    expect(migrated.post.dictionary[0]?.enabled).toBe(true);
+  });
+});
+
+describe("dictionaryFileSchema", () => {
+  it("validates a correct dictionary export file", () => {
+    const valid = {
+      kind: "struq-voice-dictionary" as const,
+      version: 1 as const,
+      entries: [{ from: "struck", to: "Struq", matchCase: false, wholeWord: true, enabled: true }]
+    };
+
+    expect(dictionaryFileSchema.parse(valid)).toEqual(valid);
+  });
+
+  it("rejects a file with the wrong kind", () => {
+    const invalid = {
+      kind: "wrong-kind",
+      version: 1,
+      entries: []
+    };
+    expect(dictionaryFileSchema.safeParse(invalid).success).toBe(false);
   });
 });
 

@@ -11,7 +11,7 @@
 import { cpus, totalmem } from "node:os";
 import { app } from "electron";
 import type { GpuVendor, HardwareProfile } from "../../shared/hardware";
-import { UNKNOWN_HARDWARE, hardwareProfileSchema } from "../../shared/hardware";
+import { UNKNOWN_HARDWARE, hardwareProfileSchema, normalizeMemGb } from "../../shared/hardware";
 import { hasCudaRuntime } from "../engines/whisper-cpp";
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
@@ -59,15 +59,36 @@ const vendorFromName = (name: string): GpuVendor => {
   return "unknown";
 };
 
+const cleanGpuName = (raw: string | null): string | null => {
+  if (raw === null) return null;
+  let s = raw.trim();
+  const angleMatch = s.match(/ANGLE\s*\([^,]+,\s*([^,]+)/i);
+  if (angleMatch !== null && angleMatch[1] !== undefined) {
+    s = angleMatch[1].trim();
+  }
+  s = s.replace(/\s+(Direct3D\d*|D3D\d*|OpenGL|vs_\d|ps_\d).*$/i, "").trim();
+  return s.length > 0 ? s : null;
+};
+
 /**
  * The device description lives in auxAttributes under a key that has moved
- * between Chromium versions, so read the known candidates rather than one.
+ * between Chromium versions, or directly in gpuDevice.deviceString.
  */
-const readGpuName = (aux: Record<string, unknown> | undefined): string | null => {
-  if (aux === undefined) return null;
-  for (const key of ["glRenderer", "gpuDeviceDescription", "glVendor"]) {
-    const value = aux[key];
-    if (typeof value === "string" && value.trim() !== "") return value.trim();
+const readGpuName = (
+  aux: Record<string, unknown> | undefined,
+  devices: readonly { readonly active?: boolean; readonly deviceString?: string }[] = []
+): string | null => {
+  const activeDevice = devices.find((candidate) => candidate.active === true) ?? devices[0];
+  if (typeof activeDevice?.deviceString === "string" && activeDevice.deviceString.trim() !== "") {
+    return cleanGpuName(activeDevice.deviceString);
+  }
+  if (aux !== undefined) {
+    for (const key of ["glRenderer", "gpuDeviceDescription", "glVendor"]) {
+      const value = aux[key];
+      if (typeof value === "string" && value.trim() !== "") {
+        return cleanGpuName(value);
+      }
+    }
   }
   return null;
 };
@@ -75,12 +96,12 @@ const readGpuName = (aux: Record<string, unknown> | undefined): string | null =>
 const parseGpu = (info: unknown): { vendor: GpuVendor; name: string | null } => {
   if (typeof info !== "object" || info === null) return { vendor: "unknown", name: null };
   const basic = info as BasicGpuInfo;
+  const devices = basic.gpuDevice ?? [];
 
-  const name = readGpuName(basic.auxAttributes);
+  const name = readGpuName(basic.auxAttributes, devices);
 
   // Prefer the active device: laptops report both the integrated and the
   // discrete card, and the integrated one is usually listed first.
-  const devices = basic.gpuDevice ?? [];
   const device = devices.find((candidate) => candidate.active === true) ?? devices[0];
   const byId = device?.vendorId !== undefined ? PCI_VENDORS[device.vendorId] : undefined;
   if (byId !== undefined) return { vendor: byId, name };
@@ -110,7 +131,7 @@ export const detectHardware = async (
       cpuCores = cores.length;
       cpuModel = cores[0]?.model.trim() ?? UNKNOWN_HARDWARE.cpuModel;
     }
-    totalMemGb = Math.round(readMem() / BYTES_PER_GB);
+    totalMemGb = normalizeMemGb(readMem() / BYTES_PER_GB);
   } catch {
     // Keep the unknown defaults.
   }

@@ -75,7 +75,7 @@ export function Tabs({
   }
 
   return (
-    <div role="tablist" className={cn("relative flex items-center gap-1 overflow-x-auto", className)}>
+    <div role="tablist" className={cn("relative flex items-center justify-center gap-1 overflow-x-auto", className)}>
       {items.map((item) => {
         const isActive = item.id === active;
         return (

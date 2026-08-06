@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { HardwareProfile, MachineTier } from "../../../shared/hardware";
+import { cleanCpuModel, normalizeMemGb, recommendModel } from "../../../shared/hardware";
 import type { ModelStatus, WhisperTier } from "../../../shared/models";
 import { WHISPER_TIER_ORDER, whisperVariant } from "../../../shared/models";
 import {
@@ -55,9 +56,9 @@ const PICK_LABELS: Record<MachineTier, readonly [string, string, string]> = {
 };
 
 const TIER_NAME: Record<MachineTier, string> = {
-  light: "Light workload",
-  balanced: "Balanced workload",
-  performance: "Performance workload"
+  light: "Lightweight",
+  balanced: "Balanced",
+  performance: "High Performance"
 };
 
 const largeRank = [
@@ -96,6 +97,13 @@ const progressFor = (status: ModelStatus): number | null => {
  * jargon. "Whisper large-v3-turbo (q8_0)" becomes "Whisper Large (Balanced)"
  * so anyone can pick without knowing quantisation terminology.
  */
+const formatVariantLabel = (fileName: string): string =>
+  fileName
+    .replace(/^ggml-/, "")
+    .replace(/\.bin$/, "")
+    .replace(/-q[58]_[01]$/, "")
+    .replace(/\.en$/, "");
+
 const humanModelName = (status: ModelStatus): string => {
   if (status.model.engine === "parakeet") {
     if (status.model.id.includes("v3")) return "Parakeet TDT v3";
@@ -104,19 +112,9 @@ const humanModelName = (status: ModelStatus): string => {
   }
   const variant = whisperVariant(status.model.id);
   if (variant === null) return status.model.name;
-  const tierLabel = TIER_LABEL[variant.tier];
-  let qualityLabel: string;
-  if (variant.quant === null) {
-    qualityLabel = "Full precision";
-  } else if (variant.quant === "q8_0") {
-    qualityLabel = "Balanced";
-  } else if (variant.quant.startsWith("q5")) {
-    qualityLabel = "Compact";
-  } else {
-    qualityLabel = variant.quant;
-  }
+  const base = formatVariantLabel(variant.fileName);
   const englishNote = variant.englishOnly ? " · English only" : "";
-  return `Whisper ${tierLabel} (${qualityLabel}${englishNote})`;
+  return `Whisper ${base}${englishNote}`;
 };
 
 interface RecommendationCardProps {
@@ -329,7 +327,6 @@ export function ModelsView(): JSX.Element {
   );
   // Top 3 lightest in the selected tier (smallest download first)
   const lightestTierModels = [...tierModels].sort((a, b) => a.model.bytes - b.model.bytes).slice(0, 3);
-  const featuredTierModels = tierModels.slice(0, 3);
   const otherTierModels = tierModels.slice(3);
   const parakeetModels = statuses.filter((status) => status.model.engine === "parakeet");
 
@@ -342,14 +339,7 @@ export function ModelsView(): JSX.Element {
 
   return (
     <div className="h-full overflow-y-auto bg-bg" data-selectable>
-      <div className="mx-auto flex w-full max-w-[960px] flex-col gap-7 px-6 py-5">
-        <div className="flex items-center justify-end">
-          <Button variant="secondary" size="md" onClick={() => { setSpecsOpen(true); }}>
-            <Icon icon="ph:desktop-tower" className="h-4 w-4" aria-hidden="true" />
-            PC specs
-          </Button>
-        </div>
-
+      <div className="mx-auto flex w-full max-w-[960px] flex-col gap-6 px-6 py-5">
         {/* Honest callout for light machines */}
         {machineTier === "light" && (
           <Card className="border-warning bg-warning-soft">
@@ -400,14 +390,22 @@ export function ModelsView(): JSX.Element {
         </section>
 
         <section>
-          <div className="mb-3">
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-lg font-normal text-text">Recommended for this PC</h2>
-              <Badge tone="neutral">{TIER_NAME[machineTier]}</Badge>
+          <div className="mb-3 flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-display text-lg font-normal text-text">Recommended for this PC</h2>
+                <Badge tone="neutral">{TIER_NAME[machineTier]}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-text-muted">
+                {hardware !== null
+                  ? recommendModel(hardware).reason
+                  : (recommendation?.reason ?? "Reading your processor, memory, and graphics hardware.")}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-text-muted">
-              {recommendation?.reason ?? "Reading your processor, memory, and graphics hardware."}
-            </p>
+            <Button variant="secondary" size="sm" className="shrink-0" onClick={() => { setSpecsOpen(true); }}>
+              <Icon icon="ph:desktop-tower" className="h-3.5 w-3.5" aria-hidden="true" />
+              PC specs
+            </Button>
           </div>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {systemPicks.map((status, index) => (
@@ -433,58 +431,63 @@ export function ModelsView(): JSX.Element {
           </div>
         </section>
 
+        {/* Catalog Tiers */}
         <section>
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-4">
+          <div className="mb-3 flex items-center justify-between gap-4">
             <div>
               <h2 className="font-display text-lg font-normal text-text">Whisper models</h2>
-              <p className="mt-0.5 text-xs text-text-muted">{TIER_GUIDANCE[tier]}</p>
+              <p className="mt-0.5 text-xs text-text-muted">
+                {TIER_GUIDANCE[tier]}
+              </p>
             </div>
             <SegmentedControl<WhisperTier>
-              options={WHISPER_TIER_ORDER.map((value) => ({ value, label: TIER_LABEL[value] }))}
+              options={WHISPER_TIER_ORDER.map((value) => ({
+                value,
+                label: TIER_LABEL[value]
+              }))}
               value={tier}
               onChange={(next) => {
                 setTier(next);
                 setShowAllTier(false);
               }}
-              size="md"
             />
           </div>
 
-          {/* Top 3 lightest in the selected size */}
-          {lightestTierModels.length > 0 && (
-            <div className="mb-4">
-              <p className="mb-2 text-xs font-normal text-text-muted">Lightest downloads</p>
-              <div className="flex flex-col gap-2">
-                {lightestTierModels.map(row)}
-              </div>
-            </div>
-          )}
-
-          <p className="mb-2 text-xs font-normal text-text-muted">All {TIER_LABEL[tier].toLowerCase()} variants</p>
           <div className="flex flex-col gap-2">
-            {featuredTierModels.map(row)}
-            {showAllTier && otherTierModels.map(row)}
-          </div>
-          {otherTierModels.length > 0 && (
-            <div className="mt-3 flex justify-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { setShowAllTier((shown) => !shown); }}
-              >
-                <Icon
-                  icon={showAllTier ? "ph:caret-down" : "ph:plus"}
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                />
-                {showAllTier
-                  ? "Show fewer"
-                  : `Show all ${String(tierModels.length)} ${TIER_LABEL[tier].toLowerCase()} variants`}
-              </Button>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-2xs font-semibold uppercase tracking-wider text-text-muted">
+                Lightest downloads
+              </span>
             </div>
-          )}
+            {lightestTierModels.map(row)}
+
+            {otherTierModels.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                {!showAllTier ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="self-center text-xs text-text-muted hover:text-text"
+                    onClick={() => { setShowAllTier(true); }}
+                  >
+                    + Show all {tierModels.length} {TIER_LABEL[tier].toLowerCase()} variants
+                  </Button>
+                ) : (
+                  <>
+                    <div className="mb-1 flex items-center justify-between pt-2">
+                      <span className="text-2xs font-semibold uppercase tracking-wider text-text-muted">
+                        All {TIER_LABEL[tier].toLowerCase()} variants
+                      </span>
+                    </div>
+                    {tierModels.map(row)}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </section>
 
+        {/* Parakeet section */}
         <section>
           <div className="mb-3 flex items-center gap-2">
             <ProviderMark engine="parakeet" className="h-5 w-5" />
@@ -496,32 +499,28 @@ export function ModelsView(): JSX.Element {
           <div className="flex flex-col gap-2">{parakeetModels.map(row)}</div>
         </section>
 
-        <section>
-          <div className="mb-2 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-display text-lg font-normal text-text">Whisper helper</h2>
-              <p className="mt-0.5 text-xs text-text-muted">Required once for every Whisper model.</p>
+        {!runtimeDone && (
+          <section>
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-display text-lg font-normal text-text">Whisper helper</h2>
+                <p className="mt-0.5 text-xs text-text-muted">Required once for every Whisper model.</p>
+              </div>
             </div>
-          </div>
-          <Card>
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-normal text-text">
-                  {runtimeDone
-                    ? "Installed and ready"
-                    : runtimeDownloading
+            <Card>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-normal text-text">
+                    {runtimeDownloading
                       ? "Installing the local Whisper helper"
                       : runtime.state === "error"
                         ? (runtime.message ?? "The helper install failed")
                         : "Not installed yet"}
-                </p>
-                {runtimeDownloading && runtimeProgress !== null && (
-                  <ProgressBar value={runtimeProgress} tone="accent" className="mt-2" label="Installing helper" />
-                )}
-              </div>
-              {runtimeDone ? (
-                <Badge tone="neutral">Installed</Badge>
-              ) : (
+                  </p>
+                  {runtimeDownloading && runtimeProgress !== null && (
+                    <ProgressBar value={runtimeProgress} tone="accent" className="mt-2" label="Installing helper" />
+                  )}
+                </div>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -535,10 +534,10 @@ export function ModelsView(): JSX.Element {
                   />
                   {runtimeDownloading ? "Installing" : "Install helper"}
                 </Button>
-              )}
-            </div>
-          </Card>
-        </section>
+              </div>
+            </Card>
+          </section>
+        )}
 
         <p className="flex items-center gap-1.5 text-xs text-text-muted" data-numeric>
           <Icon icon="ph:hard-drive" className="h-4 w-4" aria-hidden="true" />
@@ -549,10 +548,14 @@ export function ModelsView(): JSX.Element {
       <Dialog
         open={specsOpen}
         onOpenChange={setSpecsOpen}
-        title="This PC"
-        description="Hardware Struq uses to rank local models."
+        title="Hardware & System Profile"
+        description="Specifications detected to optimize local AI dictation models."
         size="lg"
-        footer={<Button variant="secondary" size="md" onClick={() => { setSpecsOpen(false); }}>Done</Button>}
+        footer={
+          <Button variant="secondary" size="md" onClick={() => { setSpecsOpen(false); }}>
+            Done
+          </Button>
+        }
       >
         {hardware === null ? (
           <div className="flex items-center gap-3 rounded-lg border border-border bg-bg-sunken p-4">
@@ -560,43 +563,80 @@ export function ModelsView(): JSX.Element {
             <p className="text-sm text-text-secondary">Reading hardware details...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="flex items-start gap-3">
-              <Icon icon="ph:cpu" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-text-muted">Processor</p>
-                <p className="mt-1 text-sm font-medium leading-snug text-text">{hardware.cpuModel}</p>
-                <p className="mt-1 text-xs text-text-secondary" data-numeric>{String(hardware.cpuCores)} logical cores</p>
+          <div className="flex flex-col gap-3">
+            {/* Summary Banner */}
+            <div className="flex items-center justify-between rounded-md border border-border bg-surface-hover/50 p-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-surface text-accent shadow-xs">
+                  <Icon icon="ph:desktop-tower" className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-text">
+                      {cleanCpuModel(hardware.cpuModel) || "System Hardware"}
+                    </p>
+                    <Badge tone="accent">{TIER_NAME[machineTier]}</Badge>
+                  </div>
+                  <p className="mt-0.5 text-xs text-text-muted" data-numeric>
+                    {hardware.gpuName ?? "Discrete GPU"} · {String(hardware.cpuCores)} cores · {String(normalizeMemGb(hardware.totalMemGb))} GB RAM
+                  </p>
+                </div>
               </div>
-            </Card>
-            <Card className="flex items-start gap-3">
-              <Icon icon="ph:memory" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <div>
-                <p className="text-xs font-medium text-text-muted">Memory</p>
-                <p className="mt-1 text-lg font-medium text-text" data-numeric>{String(hardware.totalMemGb)} GB RAM</p>
-                <p className="mt-1 text-xs text-text-secondary">Available to Windows and local models</p>
-              </div>
-            </Card>
-            <Card className="flex items-start gap-3">
-              <Icon icon="ph:graphics-card" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-text-muted">Graphics</p>
-                <p className="mt-1 text-sm font-medium leading-snug text-text">
-                  {hardware.gpuName ?? `${hardware.gpuVendor.toUpperCase()} graphics`}
-                </p>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {hardware.cudaRuntime ? "CUDA acceleration ready" : "CPU path available"}
-                </p>
-              </div>
-            </Card>
-            <Card className="flex items-start gap-3 border-accent">
-              <Icon icon="ph:gauge" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-              <div>
-                <p className="text-xs font-medium text-text-muted">Model profile</p>
-                <p className="mt-1 text-lg font-medium text-text">{TIER_NAME[machineTier]}</p>
-                <p className="mt-1 text-xs text-text-secondary">Used to build your top three picks</p>
-              </div>
-            </Card>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="flex items-start gap-3">
+                <Icon icon="ph:cpu" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">Processor (CPU)</p>
+                  <p className="mt-1 text-sm font-medium leading-snug text-text">
+                    {cleanCpuModel(hardware.cpuModel) || hardware.cpuModel}
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary" data-numeric>
+                    {String(hardware.cpuCores)} logical processing cores
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="flex items-start gap-3">
+                <Icon icon="ph:graphics-card" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">Graphics Card (GPU)</p>
+                  <p className="mt-1 text-sm font-medium leading-snug text-text">
+                    {hardware.gpuName ?? (hardware.gpuVendor !== "unknown" ? `${hardware.gpuVendor.toUpperCase()} graphics` : "Standard GPU")}
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {hardware.cudaRuntime ? "CUDA GPU acceleration active" : "CPU inference path active"}
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="flex items-start gap-3">
+                <Icon icon="ph:memory" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">System Memory (RAM)</p>
+                  <p className="mt-1 text-base font-medium text-text" data-numeric>
+                    {String(normalizeMemGb(hardware.totalMemGb))} GB RAM
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Allocated for high-speed AI model weights
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="flex items-start gap-3 border-accent/40 bg-accent-soft/10">
+                <Icon icon="ph:gauge" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">Dictation Profile</p>
+                  <p className="mt-1 text-base font-medium text-text">
+                    {TIER_NAME[machineTier]}
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Ranks Parakeet and Whisper variants automatically
+                  </p>
+                </div>
+              </Card>
+            </div>
           </div>
         )}
       </Dialog>

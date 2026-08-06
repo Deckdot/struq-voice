@@ -12,6 +12,19 @@
 import { z } from "zod";
 import { DEFAULT_WHISPER_MODEL_ID } from "./models";
 
+const STANDARD_RAM_GBS = [4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256];
+
+export function normalizeMemGb(rawGb: number): number {
+  if (rawGb <= 0) return rawGb;
+  const rounded = Math.round(rawGb);
+  for (const std of STANDARD_RAM_GBS) {
+    if (rounded >= std - 2 && rounded <= std) {
+      return std;
+    }
+  }
+  return rounded;
+}
+
 export const gpuVendorSchema = z.enum(["nvidia", "amd", "intel", "apple", "unknown"]);
 
 export type GpuVendor = z.infer<typeof gpuVendorSchema>;
@@ -20,8 +33,12 @@ export const hardwareProfileSchema = z.object({
   /** Logical cores as reported by os.cpus(). */
   cpuCores: z.number().int().min(1).default(1),
   cpuModel: z.string().default("Unknown CPU"),
-  /** Physical memory, rounded to whole GB. */
-  totalMemGb: z.number().min(0).default(0),
+  /** Physical memory, rounded to standard RAM sizes (8, 16, 32, 64 GB). */
+  totalMemGb: z
+    .number()
+    .min(0)
+    .transform((val) => normalizeMemGb(val))
+    .default(0),
   gpuVendor: gpuVendorSchema.default("unknown"),
   gpuName: z.string().nullable().default(null),
   /** The whisper.cpp CUDA runtime is present next to whisper-cli.exe. */
@@ -84,20 +101,37 @@ export function classifyMachine(profile: HardwareProfile): MachineTier {
   return "light";
 }
 
+export function cleanCpuModel(raw: string): string {
+  if (!raw || raw === "Unknown CPU") return "";
+  return raw
+    .replace(/\(R\)|\(TM\)/gi, "")
+    .replace(/@\s*\d+\.\d+GHz/gi, "")
+    .replace(/\b\d+-Core Processor\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const formatMemory = (gb: number): string =>
-  gb > 0 ? `${String(Math.round(gb))} GB RAM` : "unknown memory";
+  gb > 0 ? `${String(normalizeMemGb(gb))} GB RAM` : "unknown memory";
 
 const formatCores = (cores: number): string =>
   `${String(cores)} ${cores === 1 ? "core" : "cores"}`;
 
 /**
- * The hardware sentence. Names the GPU when there is one worth naming,
- * because that is the part a user recognises, then the cores and memory that
- * actually carried the decision.
+ * The hardware sentence. Names the CPU model, GPU when available,
+ * then cores and memory that carried the decision.
  */
 export function describeHardware(profile: HardwareProfile): string {
   const parts: string[] = [];
-  if (profile.gpuName !== null && profile.gpuVendor !== "unknown") {
+  const cpu = cleanCpuModel(profile.cpuModel);
+  if (cpu !== "") {
+    parts.push(cpu);
+  }
+  if (
+    profile.gpuName !== null &&
+    profile.gpuVendor !== "unknown" &&
+    (cpu === "" || !profile.gpuName.toLowerCase().includes(cpu.toLowerCase()))
+  ) {
     parts.push(profile.gpuName);
   }
   parts.push(formatCores(profile.cpuCores));

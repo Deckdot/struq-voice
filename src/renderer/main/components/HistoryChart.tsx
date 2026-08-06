@@ -1,3 +1,4 @@
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { motion } from "motion/react";
 import {
@@ -10,6 +11,35 @@ import {
   CartesianGrid
 } from "recharts";
 import type { HistoryStatsDay } from "../../../shared/ipc";
+
+/**
+ * The activity chart. The entrance is a weighted draw: recharts reveals each
+ * area through a clip rect that sweeps left to right, so the curve appears to
+ * be drawn rather than faded in.
+ *
+ * The easing is deliberately not the expo-out used elsewhere. On a clip sweep
+ * expo spends most of its duration on the last sliver of distance, which reads
+ * as a snap followed by a crawl. --ease-draw is a soft S: it leaves slowly,
+ * carries momentum through the middle, and settles long.
+ *
+ * The long draw is an entrance, not an update. Once it has played, later data
+ * changes interpolate over 420ms so a fresh transcript does not restage the
+ * whole chart.
+ */
+
+/** --ease-draw. Keep in sync with theme.css. No spaces: the recharts
+ *  EasingInput template literal type is happier without them. */
+const DRAW_EASE = "cubic-bezier(0.34,0.05,0.2,1)" as const;
+const UPDATE_EASE = "ease-out" as const;
+
+const WORDS_DRAW_MS = 1500;
+const WORDS_BEGIN_MS = 120;
+const SPOKEN_DRAW_MS = 1750;
+const SPOKEN_BEGIN_MS = 360;
+const UPDATE_MS = 420;
+
+/** When the entrance is over and later renders become plain updates. */
+const DRAW_SETTLED_MS = SPOKEN_BEGIN_MS + SPOKEN_DRAW_MS + 120;
 
 export interface HistoryChartProps {
   readonly days: readonly HistoryStatsDay[];
@@ -33,6 +63,13 @@ interface CustomTooltipProps {
   readonly payload?: readonly TooltipPayloadItem[];
   readonly label?: string;
 }
+
+const shortDate = new Intl.DateTimeFormat(undefined, { month: "numeric", day: "numeric" });
+const longDate = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric"
+});
 
 function CustomTooltip({ active, payload }: CustomTooltipProps): JSX.Element | null {
   if (!active || !payload || payload.length === 0) return null;
@@ -71,45 +108,65 @@ function CustomTooltip({ active, payload }: CustomTooltipProps): JSX.Element | n
 }
 
 export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.Element {
-  const chartData: ChartItem[] = days.map((d) => {
-    const dateObj = new Date(d.dayStartMs);
-    const dateStr = dateObj.toLocaleDateString(undefined, { month: "numeric", day: "numeric" });
-    const fullDateStr = dateObj.toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric"
-    });
-    const durationSec = Math.round(d.durationMs / 1000);
-    const durationMin = Number((durationSec / 60).toFixed(1));
-    return {
-      dateStr,
-      fullDateStr,
-      words: d.words,
-      durationSec,
-      durationMin
+  // Gradient ids are document-global. Two charts on one page would otherwise
+  // share one gradient and the second would inherit the first's stops.
+  const gradientId = useId().replace(/:/g, "");
+  const wordsGradient = `sv-words-${gradientId}`;
+  const durationGradient = `sv-duration-${gradientId}`;
+
+  const chartData: ChartItem[] = useMemo(
+    () =>
+      days.map((d) => {
+        const durationSec = Math.round(d.durationMs / 1000);
+        return {
+          dateStr: shortDate.format(d.dayStartMs),
+          fullDateStr: longDate.format(d.dayStartMs),
+          words: d.words,
+          durationSec,
+          durationMin: Number((durationSec / 60).toFixed(1))
+        };
+      }),
+    [days]
+  );
+
+  const [drawing, setDrawing] = useState(true);
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    const timer = window.setTimeout(() => {
+      setDrawing(false);
+    }, DRAW_SETTLED_MS);
+    return () => {
+      window.clearTimeout(timer);
     };
-  });
+  }, []);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       className={`w-full h-44 ${className}`}
     >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
           <defs>
-            <linearGradient id="wordsGradient" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={wordsGradient} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="var(--sv-accent)" stopOpacity={0.35} />
               <stop offset="95%" stopColor="var(--sv-accent)" stopOpacity={0.0} />
             </linearGradient>
-            <linearGradient id="durationGradient" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={durationGradient} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="var(--sv-info)" stopOpacity={0.25} />
               <stop offset="95%" stopColor="var(--sv-info)" stopOpacity={0.0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--sv-border)" opacity={0.4} vertical={false} />
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="var(--sv-border)"
+            opacity={0.4}
+            vertical={false}
+          />
           <XAxis
             dataKey="dateStr"
             stroke="var(--sv-text-muted)"
@@ -136,7 +193,10 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             dx={4}
             hide
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ stroke: "var(--sv-border-strong)", strokeWidth: 1 }} />
+          <Tooltip
+            content={<CustomTooltip />}
+            cursor={{ stroke: "var(--sv-border-strong)", strokeWidth: 1 }}
+          />
           <Area
             yAxisId="words"
             type="monotone"
@@ -145,10 +205,11 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             stroke="var(--sv-accent)"
             strokeWidth={2}
             fillOpacity={1}
-            fill="url(#wordsGradient)"
+            fill={`url(#${wordsGradient})`}
             isAnimationActive={true}
-            animationDuration={1300}
-            animationEasing="cubic-bezier(0.16, 1, 0.3, 1)"
+            animationBegin={drawing ? WORDS_BEGIN_MS : 0}
+            animationDuration={drawing ? WORDS_DRAW_MS : UPDATE_MS}
+            animationEasing={drawing ? DRAW_EASE : UPDATE_EASE}
           />
           <Area
             yAxisId="duration"
@@ -159,11 +220,11 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             strokeWidth={1.5}
             strokeDasharray="4 4"
             fillOpacity={1}
-            fill="url(#durationGradient)"
+            fill={`url(#${durationGradient})`}
             isAnimationActive={true}
-            animationDuration={1500}
-            animationBegin={150}
-            animationEasing="cubic-bezier(0.16, 1, 0.3, 1)"
+            animationBegin={drawing ? SPOKEN_BEGIN_MS : 0}
+            animationDuration={drawing ? SPOKEN_DRAW_MS : UPDATE_MS}
+            animationEasing={drawing ? DRAW_EASE : UPDATE_EASE}
           />
         </AreaChart>
       </ResponsiveContainer>

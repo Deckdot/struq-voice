@@ -59,6 +59,7 @@ interface Blocker {
 export function DictateView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const capture = useMainStore((state) => state.capture);
+  const shellRevealed = useMainStore((state) => state.shellRevealed);
   const setRoute = useMainStore((state) => state.setRoute);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [models, setModels] = useState<readonly ModelStatus[]>([]);
@@ -198,7 +199,7 @@ export function DictateView(): JSX.Element {
           />
         </div>
 
-        {!statsLoaded ? (
+        {!statsLoaded || !shellRevealed ? (
           <div className="flex h-52 flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3.5">
             <div className="flex items-center justify-between">
               <Skeleton className="h-4 w-28" />

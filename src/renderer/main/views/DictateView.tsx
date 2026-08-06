@@ -56,8 +56,11 @@ interface Blocker {
   readonly run: () => void;
 }
 
+import { useTranslation } from "../lib/useTranslation";
+
 export function DictateView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
+  const { t } = useTranslation();
   const capture = useMainStore((state) => state.capture);
   const shellRevealed = useMainStore((state) => state.shellRevealed);
   const setRoute = useMainStore((state) => state.setRoute);
@@ -269,11 +272,19 @@ export function DictateView(): JSX.Element {
         >
           {recent.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-text-muted">
-              Nothing yet. Hold your key and say a sentence.
+              {t("dictate.recent.empty")}
             </p>
           ) : (
             recent.map((record) => (
-              <div key={record.id} className="group flex items-center gap-3 px-4 py-2.5">
+              <button
+                key={record.id}
+                type="button"
+                onClick={() => {
+                  api.clipboard.copy(record.text);
+                  setCopiedId(record.id);
+                }}
+                className="group flex w-full cursor-pointer items-center gap-3 rounded-md px-4 py-2.5 text-start transition-colors duration-hover hover:bg-surface-hover/80"
+              >
                 <p className="min-w-0 flex-1 truncate text-sm text-text">{record.text}</p>
                 <span className="shrink-0 text-2xs text-text-muted" data-numeric>
                   {formatRelativeTime(record.createdAtMs)}
@@ -285,7 +296,7 @@ export function DictateView(): JSX.Element {
                 ) : (
                   <IconButton
                     icon="ph:copy"
-                    label="Copy transcript"
+                    label={t("dictate.recent.copyTranscript")}
                     size="sm"
                     className="shrink-0"
                     onClick={() => {
@@ -294,7 +305,7 @@ export function DictateView(): JSX.Element {
                     }}
                   />
                 )}
-              </div>
+              </button>
             ))
           )}
         </SettingsGroup>

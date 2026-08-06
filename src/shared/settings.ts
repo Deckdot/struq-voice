@@ -48,6 +48,8 @@ export const ONBOARDING_VERSION = 1;
 
 export const settingsSchema = z.object({
   version: z.literal(1).default(1),
+  /** Whether the user has been notified once that close hides to the tray. */
+  firstHideNotified: z.boolean().default(false),
   /** The appearance of every window: follow the OS, or force one mode. */
   theme: z.enum(["system", "light", "dark"]).default("system"),
   /** "system" follows the Windows language list; anything else forces a locale. */

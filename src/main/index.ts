@@ -169,6 +169,9 @@ if (!gotLock) {
     settingsStore.subscribe((latest) => {
       applyThemeSource(nativeTheme, latest.theme);
     });
+    nativeTheme.on("updated", () => {
+      applyThemeSource(nativeTheme, settingsStore.get().theme);
+    });
     const secrets = createSecretsStore();
     const history = openDatabase(app.getPath("userData"));
     const runtimeRoot = join(app.getPath("userData"), "runtimes");
@@ -644,7 +647,10 @@ if (!gotLock) {
           if (mainWindow !== null) {
             mainWindow.hide();
           }
-          tray.notifyFirstHide();
+          if (!settingsStore.get().firstHideNotified) {
+            settingsStore.update({ firstHideNotified: true });
+            tray.notifyFirstHide();
+          }
         }
       });
     }

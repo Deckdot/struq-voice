@@ -67,10 +67,11 @@ export const TranscriptRow = memo(function TranscriptRow({
       <button
         type="button"
         onClick={() => {
+          onCopy(record.id, record.text);
           onToggleExpanded(record.id);
         }}
         aria-expanded={expanded}
-        className="min-w-0 flex-1 cursor-pointer text-left"
+        className="min-w-0 flex-1 cursor-pointer text-start"
       >
         <p
           className={cn(

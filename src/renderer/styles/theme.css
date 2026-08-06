@@ -90,12 +90,15 @@
   --ease-move: cubic-bezier(0.76, 0, 0.24, 1);
   --ease-panel: cubic-bezier(0.83, 0, 0.17, 1);
   --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-draw: cubic-bezier(0.34, 0.05, 0.2, 1);
   --duration-press: 120ms;
   --duration-hover: 180ms;
   --duration-control: 220ms;
   --duration-pop: 260ms;
   --duration-page: 320ms;
   --duration-splash: 650ms;
+  --duration-curtain: 640ms;
+  --duration-draw: 1600ms;
   --duration-capture: 300ms;
 }
 

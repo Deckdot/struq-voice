@@ -33,10 +33,16 @@ export interface MainWindowState {
   capture: CaptureState;
   readiness: AppReadiness;
   themeMode: "system" | "light" | "dark";
+  /**
+   * True once the splash curtain has started to lift. Views that own an
+   * entrance animation read it so their motion is not spent behind a cover.
+   */
+  shellRevealed: boolean;
   setRoute: (next: Route) => void;
   setCapture: (next: CaptureState) => void;
   setReadiness: (next: AppReadiness) => void;
   setThemeMode: (next: "system" | "light" | "dark") => void;
+  setShellRevealed: (next: boolean) => void;
   getRouteDirection: () => 1 | -1;
 }
 
@@ -46,6 +52,7 @@ export const useMainStore = create<MainWindowState>((set, get) => ({
   capture: INITIAL_CAPTURE_STATE,
   readiness: { microphone: { live: false }, hotkeysActive: false },
   themeMode: "system",
+  shellRevealed: false,
   setRoute: (next) => {
     const prev = get().route;
     const delta = ROUTE_ORDER.indexOf(next) - ROUTE_ORDER.indexOf(prev);
@@ -60,6 +67,9 @@ export const useMainStore = create<MainWindowState>((set, get) => ({
   },
   setThemeMode: (themeMode) => {
     set({ themeMode });
+  },
+  setShellRevealed: (shellRevealed) => {
+    set({ shellRevealed });
   },
   getRouteDirection: () => get().routeDirection
 }));

@@ -1,40 +1,79 @@
 import { useEffect, useRef, useState } from "react";
-import type { JSX } from "react";
+import type { JSX, KeyboardEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Search, Copy, Trash2, FileText, Sparkles } from "lucide-react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { TranscriptRecord } from "../../../shared/ipc";
-import { useMainStore } from "../store/use-main-store";
+import { EmptyState, SearchInput, TranscriptRow } from "../components/ui";
+
 /**
- * The History reader. Every transcript you have dictated, searchable through
- * FTS5. The transcript itself is set in the serif at reading size: a
- * dictation app's output is writing and should look like it. Rows virtualize
- * so thousands of transcripts stay smooth.
+ * The History view. Every transcript Struq Voice has produced, searched
+ * through the keyboard or the search field. Rows are virtualized because
+ * a long-running user has thousands; the row's transcript text is the
+ * thing the eye should find first, so it is the dominant element, with
+ * the date and engine as quiet metadata.
  */
 
-const formatTime = (epochMs: number): string =>
-  new Date(epochMs).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+interface GroupHeader {
+  readonly kind: "header";
+  readonly id: string;
+  readonly label: string;
+}
 
-const formatSeconds = (durationMs: number): string =>
-  `${(durationMs / 1000).toFixed(1)}s`;
+interface GroupRow {
+  readonly kind: "row";
+  readonly id: string;
+  readonly record: TranscriptRecord;
+}
+
+type ListEntry = GroupHeader | GroupRow;
+
+const startOfDay = (epochMs: number): number => {
+  const d = new Date(epochMs);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
+const dayLabel = (epochMs: number, now: number): string => {
+  const day = startOfDay(epochMs);
+  const today = startOfDay(now);
+  const diff = Math.round((today - day) / (1000 * 60 * 60 * 24));
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  return new Date(epochMs).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric"
+  });
+};
+
+const groupRecords = (records: readonly TranscriptRecord[], now: number): ListEntry[] => {
+  const out: ListEntry[] = [];
+  let lastDay = -1;
+  for (const record of records) {
+    const day = startOfDay(record.createdAtMs);
+    if (day !== lastDay) {
+      out.push({ kind: "header", id: `h-${String(day)}`, label: dayLabel(record.createdAtMs, now) });
+      lastDay = day;
+    }
+    out.push({ kind: "row", id: `r-${String(record.id)}`, record });
+  }
+  return out;
+};
+
+const ROW_HEIGHT = 88;
+const HEADER_HEIGHT = 36;
 
 export function HistoryView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
-  const setRoute = useMainStore((state) => state.setRoute);
   const [records, setRecords] = useState<readonly TranscriptRecord[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [copyArmed, setCopyArmed] = useState<number | null>(null);
+  const [deleteArmed, setDeleteArmed] = useState<number | null>(null);
 
-  const addToDictionary = (): void => {
-    // The dictionary lives in Settings; land there so the user can enter the
-    // from/to pair for how this word should be corrected.
-    setRoute("settings");
-  };
+  const now = Date.now();
+  const entries = groupRecords(records, now);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,59 +94,127 @@ export function HistoryView(): JSX.Element {
   useEffect(() => {
     if (query.trim().length === 0) return;
     let cancelled = false;
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       void api.history.search({ query: query.trim(), limit: 200 }).then(({ items }) => {
         if (!cancelled) setRecords(items);
       });
     }, 250);
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      window.clearTimeout(timer);
     };
   }, [query, api]);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (deleteArmed === null) return;
+    const timer = window.setTimeout(() => {
+      setDeleteArmed(null);
+    }, 3000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [deleteArmed]);
 
+  useEffect(() => {
+    if (copyArmed === null) return;
+    const timer = window.setTimeout(() => {
+      setCopyArmed(null);
+    }, 1200);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [copyArmed]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
-    count: records.length,
+    count: entries.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 96,
-    overscan: 8
+    estimateSize: (index) =>
+      entries[index]?.kind === "header" ? HEADER_HEIGHT : ROW_HEIGHT,
+    overscan: 6
   });
 
+  // Find the first row index so key navigation lands on a row, not a header.
+  const rowIndices = entries
+    .map((entry, index) => (entry.kind === "row" ? index : -1))
+    .filter((value) => value !== -1);
+  const firstRowIndex = rowIndices[0] ?? 0;
+
+  const focusedEntryIndex = Math.min(Math.max(focusedIndex, 0), entries.length - 1);
+  const focusedEntry = entries[focusedEntryIndex];
+  const focusedRowId = focusedEntry?.kind === "row" ? focusedEntry.record.id : null;
+
+  const onListKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (rowIndices.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      const next = rowIndices.find((index) => index > focusedEntryIndex) ?? firstRowIndex;
+      setFocusedIndex(next);
+      rowVirtualizer.scrollToIndex(next, { align: "auto" });
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      const previous = [...rowIndices].reverse().find((index) => index < focusedEntryIndex);
+      setFocusedIndex(previous ?? firstRowIndex);
+      rowVirtualizer.scrollToIndex(previous ?? firstRowIndex, { align: "auto" });
+    } else if (event.key === "Enter" && focusedEntry?.kind === "row") {
+      event.preventDefault();
+      api.clipboard.copy(focusedEntry.record.text);
+      setCopyArmed(focusedEntry.record.id);
+    } else if ((event.key === "Delete" || event.key === "Backspace") && focusedEntry?.kind === "row") {
+      event.preventDefault();
+      if (deleteArmed === focusedEntry.record.id) {
+        void api.history.remove({ id: focusedEntry.record.id }).then(() => {
+          setRecords((current) => current.filter((item) => item.id !== focusedEntry.record.id));
+          setDeleteArmed(null);
+        });
+      } else {
+        setDeleteArmed(focusedEntry.record.id);
+      }
+    }
+  };
+
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b border-border px-6 py-5">
-        <h1 className="font-serif text-2xl tracking-tight text-text">History</h1>
-        <div className="mt-3 flex max-w-md items-center gap-2">
-          <Search className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-            }}
-            placeholder="Search transcripts..."
-            className="w-full rounded-md border border-border bg-bg-sunken px-3 py-1.5 text-sm text-text placeholder:text-text-muted focus:border-border-focus focus:outline-none"
-          />
+    <div className="flex h-full flex-col overflow-hidden bg-bg">
+      <div className="flex flex-col gap-3 border-b border-border px-8 py-5">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">History</h1>
+          <p className="mt-1 text-sm text-text-muted">
+            Everything you have dictated, with the words you used and the service that heard them.
+          </p>
         </div>
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Search transcripts..."
+        />
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-        {loading && <p className="text-sm text-text-muted">Loading...</p>}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto px-8 py-4 focus:outline-none"
+        onKeyDown={onListKeyDown}
+        tabIndex={0}
+        role="list"
+        aria-label="Transcripts"
+      >
+        {loading && (
+          <p className="px-4 py-6 text-sm text-text-muted">Loading your transcripts...</p>
+        )}
 
         {!loading && records.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <FileText className="h-8 w-8 text-text-muted" aria-hidden="true" />
-            <p className="text-base text-text">
-              {query.trim().length > 0 ? "Nothing matches that search." : "No transcripts yet."}
-            </p>
-            <p className="max-w-sm text-sm text-text-muted">
-              {query.trim().length > 0
-                ? "Try a different word or clear the search."
-                : "Hold Ctrl+Space anywhere, speak, and release. It will land here."}
-            </p>
-          </div>
+          <EmptyState
+            icon="ph:clock-counter-clockwise"
+            title={
+              query.trim().length > 0
+                ? "Nothing matches that search."
+                : "No transcripts yet."
+            }
+            body={
+              query.trim().length > 0
+                ? "Try a different word, or clear the search to see everything."
+                : "Hold your key, say a sentence, release. It will land here."
+            }
+          />
         )}
 
         {!loading && records.length > 0 && (
@@ -115,11 +222,32 @@ export function HistoryView(): JSX.Element {
             style={{ height: `${String(rowVirtualizer.getTotalSize())}px`, position: "relative" }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const record = records[virtualRow.index];
-              if (record === undefined) return null;
+              const entry = entries[virtualRow.index];
+              if (entry === undefined) return null;
+              if (entry.kind === "header") {
+                return (
+                  <div
+                    key={entry.id}
+                    style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "100%",
+                      height: `${String(virtualRow.size)}px`,
+                      transform: `translateY(${String(virtualRow.start)}px)`
+                    }}
+                    className="flex items-center px-1"
+                  >
+                    <span className="text-2xs font-semibold uppercase tracking-wide text-text-muted">
+                      {entry.label}
+                    </span>
+                  </div>
+                );
+              }
+              const record = entry.record;
               return (
-                <article
-                  key={record.id}
+                <div
+                  key={entry.id}
                   style={{
                     position: "absolute",
                     top: "0",
@@ -127,75 +255,44 @@ export function HistoryView(): JSX.Element {
                     width: "100%",
                     height: `${String(virtualRow.size)}px`,
                     transform: `translateY(${String(virtualRow.start)}px)`,
-                    padding: "0 0 8px 0"
+                    paddingBottom: "8px"
                   }}
-                  className="group"
                 >
-                  <div className="h-full overflow-hidden rounded-lg border border-border bg-surface p-4 transition-colors duration-fast hover:bg-surface-hover">
-                    <div className="flex items-start justify-between gap-4">
-                      <p className="min-w-0 font-serif text-lg leading-prose text-text">
-                        {record.text}
-                      </p>
-                      <div className="flex shrink-0 gap-1 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
-                        <button
-                          type="button"
-                          aria-label="Copy transcript"
-                          title="Copy"
-                          onClick={() => {
-                            api.clipboard.copy(record.text);
-                          }}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-surface-active hover:text-text"
-                        >
-                          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Add to dictionary"
-                          title="Add to dictionary"
-                          onClick={addToDictionary}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-accent-soft hover:text-accent-text"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Delete transcript"
-                          title="Delete"
-                          onClick={() => {
-                            void api.history.remove({ id: record.id }).then(() => {
-                              setRecords((current) =>
-                                current.filter((item) => item.id !== record.id),
-                              );
-                            });
-                          }}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-danger-soft hover:text-danger"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex items-center gap-3 text-xs text-text-muted" data-numeric>
-                      <span>{formatTime(record.createdAtMs)}</span>
-                      <span>&middot;</span>
-                      <span>{formatSeconds(record.durationMs)}</span>
-                      {record.costUsd !== null && record.costUsd > 0 && (
-                        <>
-                          <span>&middot;</span>
-                          <span>${record.costUsd.toFixed(4)}</span>
-                        </>
-                      )}
-                      {record.engineId !== "mock" && (
-                        <>
-                          <span>&middot;</span>
-                          <span>{record.engineId}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </article>
+                  <TranscriptRow
+                    record={record}
+                    focused={record.id === focusedRowId}
+                    copyArmed={copyArmed === record.id}
+                    deleteArmed={deleteArmed === record.id}
+                    onCopy={() => {
+                      api.clipboard.copy(record.text);
+                    }}
+                    onArmCopy={() => {
+                      setCopyArmed(record.id);
+                    }}
+                    onArmDelete={() => {
+                      setDeleteArmed(record.id);
+                    }}
+                    onConfirmDelete={() => {
+                      void api.history.remove({ id: record.id }).then(() => {
+                        setRecords((current) => current.filter((item) => item.id !== record.id));
+                        setDeleteArmed(null);
+                      });
+                    }}
+                    onCancelArmedDelete={() => {
+                      setDeleteArmed(null);
+                    }}
+                  />
+                </div>
               );
             })}
           </div>
+        )}
+
+        {!loading && records.length > 0 && (
+          <p className="mt-6 px-1 text-2xs text-text-muted" data-numeric>
+            Showing the {String(records.length)} most recent transcript{records.length === 1 ? "" : "s"}.
+            Use Up and Down to move, Enter to copy, Delete to remove.
+          </p>
         )}
       </div>
     </div>

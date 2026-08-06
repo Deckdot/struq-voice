@@ -1,28 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
-import { Download, Check, Trash2, Loader2, HardDrive, FolderOpen } from "lucide-react";
+import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
-import type { ModelsListResult, OnboardingProfileResult } from "../../../shared/ipc";
-import type { ModelStatus, WhisperTier } from "../../../shared/models";
-import { WHISPER_TIER_ORDER, findModel, whisperVariant } from "../../../shared/models";
-import { Badge, Button, Card, formatBytes } from "../components/ui";
+import type { ModelStatus } from "../../../shared/models";
+import { findModel } from "../../../shared/models";
+import { WHISPER_TIER_ORDER, whisperVariant } from "../../../shared/models";
+import type { WhisperTier } from "../../../shared/models";
+import {
+  Badge,
+  Button,
+  Card,
+  ModelRow,
+  ProgressBar,
+  SegmentedControl,
+  formatBytes
+} from "../components/ui";
+import type { SpeedLabel } from "../components/ui";
 
 /**
- * The Models view: the one model this machine should run, then the full
- * catalog for anyone who wants to choose. A list of thirty-one entries with
- * no default is a decision handed to someone with no basis for making it.
- *
- * "Measured on this machine" speed figures land once an engine has run;
- * until then a card shows the catalog's one-liner.
+ * The Models view. One model this computer should run, named with the
+ * hardware that chose it, then the full catalog for anyone who wants to
+ * pick a different one. Live speed is shown when an engine has produced
+ * a measured realtime factor; otherwise a tier label.
  */
 
-const formatPercent = (received: number, total: number): string =>
-  total > 0 ? `${String(Math.round((received / total) * 100))}%` : "0%";
-
-/** Size filter across the whisper tiers. Parakeet models always show. */
-type TierFilter = WhisperTier | "all";
-
-const TIER_LABEL: Record<TierFilter, string> = {
+const TIER_LABEL: Record<WhisperTier | "all", string> = {
   all: "All sizes",
   tiny: "Tiny",
   base: "Base",
@@ -31,12 +33,16 @@ const TIER_LABEL: Record<TierFilter, string> = {
   large: "Large"
 };
 
-/**
- * Order: parakeet first (the default engine), then whisper smallest tier to
- * largest, and inside a tier the smallest download first. Quantised builds
- * sort ahead of the full-precision weights because they are what most people
- * should take.
- */
+const TIER_SPEED: Record<WhisperTier, SpeedLabel> = {
+  tiny: "Fast",
+  base: "Fast",
+  small: "Balanced",
+  medium: "Balanced",
+  large: "High accuracy"
+};
+
+type TierFilter = WhisperTier | "all";
+
 const sortModels = (items: readonly ModelStatus[]): ModelStatus[] =>
   [...items].sort((a, b) => {
     const va = whisperVariant(a.model.id);
@@ -53,25 +59,18 @@ const sortModels = (items: readonly ModelStatus[]): ModelStatus[] =>
 export function ModelsView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const [statuses, setStatuses] = useState<readonly ModelStatus[]>([]);
-  const [diskUsed, setDiskUsed] = useState<number | null>(null);
-  const [runtime, setRuntime] = useState<ModelsListResult["whisperRuntime"]>({ state: "idle" });
+  const [diskUsed, setDiskUsed] = useState(0);
+  const [runtime, setRuntime] = useState<{ state: "idle" | "downloading" | "done" | "error"; receivedBytes?: number; totalBytes?: number; message?: string }>({ state: "idle" });
   const [measuredRtf, setMeasuredRtf] = useState<Record<string, number>>({});
   const [tier, setTier] = useState<TierFilter>("all");
   const [englishOnly, setEnglishOnly] = useState(false);
-  const [profile, setProfile] = useState<OnboardingProfileResult | null>(null);
-
-  const visible = useMemo(() => {
-    const filtered = statuses.filter((status) => {
-      const variant = whisperVariant(status.model.id);
-      // Tier and English-only are whisper distinctions, so a non-whisper model
-      // (parakeet) only belongs in the unfiltered list.
-      if (variant === null) return tier === "all" && !englishOnly;
-      if (tier !== "all" && variant.tier !== tier) return false;
-      if (englishOnly && !variant.englishOnly) return false;
-      return true;
-    });
-    return sortModels(filtered);
-  }, [statuses, tier, englishOnly]);
+  const [recommendation, setRecommendation] = useState<{
+    modelId: string;
+    reason: string;
+    engineId: string;
+  } | null>(null);
+  const [activeSelection, setActiveSelection] = useState<{ primary: string; whisperModelId: string } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const refresh = (): void => {
     void api.models.list().then(({ items, totalDiskUsed, whisperRuntime }) => {
@@ -85,258 +84,257 @@ export function ModelsView(): JSX.Element {
   };
 
   useEffect(() => {
-    let cancelled = false;
-    const initialRefresh = (): void => {
-      void api.models.list().then(({ items, totalDiskUsed, whisperRuntime }) => {
-        if (!cancelled) {
-          setStatuses(items);
-          setDiskUsed(totalDiskUsed);
-          setRuntime(whisperRuntime);
-        }
+    void api.onboarding.profile().then((profile) => {
+      setRecommendation({
+        modelId: profile.recommendation.modelId,
+        reason: profile.recommendation.reason,
+        engineId: profile.recommendation.engineId
       });
-      void api.metrics.measuredRtf().then(({ byEngine }) => {
-        if (!cancelled) setMeasuredRtf(byEngine);
-      });
-    };
-    initialRefresh();
-    void api.onboarding.profile().then((result) => {
-      if (!cancelled) setProfile(result);
     });
+    void api.settings.get().then(({ settings }) => {
+      setActiveSelection({ primary: settings.engine.primary, whisperModelId: settings.whisperModelId });
+    });
+    const onSettingsChange = api.settings.onChange((settings) => {
+      setActiveSelection({ primary: settings.engine.primary, whisperModelId: settings.whisperModelId });
+    });
+    return () => {
+      onSettingsChange();
+    };
+  }, [api]);
+
+  useEffect(() => {
+    refresh();
     const unsubscribe = api.models.onDownloadProgress(() => {
       refresh();
     });
     return () => {
-      cancelled = true;
       unsubscribe();
     };
   }, [api]);
 
+  const filtered = sortModels(
+    statuses.filter((status) => {
+      const variant = whisperVariant(status.model.id);
+      if (variant === null) return tier === "all" && !englishOnly;
+      if (tier !== "all" && variant.tier !== tier) return false;
+      if (englishOnly && !variant.englishOnly) return false;
+      return true;
+    })
+  );
+
+  const isModelActive = (status: ModelStatus): boolean => {
+    if (activeSelection === null) return false;
+    if (status.model.engine === "parakeet") {
+      return activeSelection.primary === "parakeet" && activeSelection.whisperModelId === "";
+    }
+    return (
+      activeSelection.primary === "whisper-cpp" &&
+      activeSelection.whisperModelId === status.model.id
+    );
+  };
+
+  const startRecommended = (): void => {
+    setErrorMessage(null);
+    void api.onboarding.startRecommended().then((result) => {
+      if (!result.started && result.message !== undefined && !result.message.startsWith("Already")) {
+        setErrorMessage(result.message);
+      }
+      refresh();
+    });
+  };
+
+  const selectModel = (status: ModelStatus): void => {
+    if (status.model.engine === "parakeet") {
+      void api.settings.update({ engine: { primary: "parakeet", fallback: null }, whisperModelId: "" });
+      return;
+    }
+    void api.settings.update({
+      engine: { primary: "whisper-cpp", fallback: null },
+      whisperModelId: status.model.id
+    });
+  };
+
+  const recommendedModel = recommendation !== null ? findModel(recommendation.modelId) : null;
+  const recommendedStatus = recommendation !== null
+    ? statuses.find((status) => status.model.id === recommendation.modelId)
+    : undefined;
+  const recommendedEngineLabel = recommendation?.engineId === "parakeet" ? "Parakeet" : "Whisper";
+
+  const recommendedDownloading =
+    recommendedStatus !== undefined && recommendedStatus.download.state === "downloading";
+  const recommendedProgress =
+    recommendedStatus?.download.state === "downloading"
+      ? Math.min(
+          1,
+          Math.max(0, recommendedStatus.download.receivedBytes / Math.max(1, recommendedStatus.download.totalBytes))
+        )
+      : null;
+
   const runtimeDownloading = runtime.state === "downloading";
   const runtimeDone = runtime.state === "done";
   const runtimeError = runtime.state === "error";
-
-  const recommended = profile?.recommendation ?? null;
-  const recommendedModel = recommended === null ? null : findModel(recommended.modelId);
-  const recommendedStatus =
-    recommended === null
-      ? undefined
-      : statuses.find((status) => status.model.id === recommended.modelId);
+  const runtimeProgress =
+    runtimeDownloading && runtime.totalBytes !== undefined && runtime.totalBytes > 0
+      ? Math.min(1, Math.max(0, (runtime.receivedBytes ?? 0) / runtime.totalBytes))
+      : null;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b border-border px-6 py-5">
-        <h1 className="font-serif text-2xl tracking-tight text-text">Models</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          Local engines, downloaded to your machine. OpenRouter is the zero-setup
-          cloud path and never appears here.
+    <div className="flex h-full flex-col overflow-hidden bg-bg">
+      <div className="flex flex-col gap-2 border-b border-border px-8 py-5">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-text">Models</h1>
+        <p className="max-w-prose text-sm text-text-muted">
+          The voice helpers that live on this computer. Download the one that suits your machine, or
+          import a folder you already have. The cloud service is configured in Settings, not here.
         </p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-        <div className="flex max-w-2xl flex-col gap-8">
-          {recommendedModel !== null && recommended !== null && (
-            <section>
-              <h2 className="text-base font-semibold text-text">Recommended for this PC</h2>
-              <p className="mt-0.5 text-sm text-text-muted">{recommended.reason}</p>
-              <Card className="mt-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+        <div className="mx-auto flex w-full max-w-[920px] flex-col gap-10">
+          {recommendedModel !== null && recommendation !== null && (
+            <section className="flex flex-col gap-3">
+              <div>
+                <h2 className="font-display text-lg font-semibold text-text">
+                  Best for this computer
+                </h2>
+                <p className="mt-0.5 text-sm text-text-muted">
+                  {recommendation.reason}
+                </p>
+              </div>
+              <Card className="flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium text-text">{recommendedModel.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-medium text-text">{recommendedModel.name}</h3>
+                      <Badge tone="neutral">{recommendedEngineLabel}</Badge>
+                    </div>
                     <p className="mt-0.5 text-sm text-text-muted">{recommendedModel.whenToUse}</p>
-                    <p className="mt-1 text-2xs uppercase tracking-wide text-text-muted">
-                      {recommendedModel.languages} &middot; {formatBytes(recommendedModel.bytes)}
+                    <p className="mt-1 text-2xs text-text-muted" data-numeric>
+                      {recommendedModel.languages} · {formatBytes(recommendedModel.bytes)}
                     </p>
                   </div>
                   {recommendedStatus?.installed === true ? (
-                    <Badge tone="success">
-                      <Check className="h-3 w-3" aria-hidden="true" /> Installed
+                    <Badge tone="success" icon="check-circle">
+                      Ready to use
+                    </Badge>
+                  ) : recommendedDownloading && recommendedProgress !== null ? (
+                    <Badge tone="ember" icon="download-simple">
+                      {Math.round(recommendedProgress * 100)}%
                     </Badge>
                   ) : (
-                    <Button
-                      variant="primary"
-                      size="md"
-                      onClick={() => {
-                        void api.onboarding.startRecommended().then(refresh);
-                      }}
-                    >
-                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Button variant="primary" size="md" onClick={startRecommended}>
+                      <Icon icon="ph:download-simple" className="h-3.5 w-3.5" aria-hidden="true" />
                       Download and use
                     </Button>
                   )}
                 </div>
+                {recommendedDownloading && recommendedProgress !== null && (
+                  <ProgressBar value={recommendedProgress} tone="ember" label="Downloading" />
+                )}
+                {errorMessage !== null && (
+                  <p className="text-sm text-danger" role="alert">
+                    {errorMessage}
+                  </p>
+                )}
               </Card>
             </section>
           )}
 
-          <section>
-            <h2 className="text-base font-semibold text-text">All models</h2>
-            <p className="mt-0.5 text-sm text-text-muted">
-              Every build in the catalog. Smaller is faster, larger is more accurate.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              {(["all", ...WHISPER_TIER_ORDER] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={tier === option}
-                  onClick={() => {
-                    setTier(option);
-                  }}
-                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors duration-fast ${
-                    tier === option
-                      ? "border-accent bg-accent-soft text-accent-text"
-                      : "border-border text-text-muted hover:bg-surface-hover hover:text-text"
-                  }`}
-                >
-                  {TIER_LABEL[option]}
-                </button>
-              ))}
-              <label className="ml-1 flex cursor-pointer items-center gap-1.5 text-xs text-text-muted">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-text">All models</h2>
+              <p className="mt-0.5 text-sm text-text-muted">
+                Smaller downloads are quicker. Larger models are better with accents and noise.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <SegmentedControl<TierFilter>
+                options={(["all", ...WHISPER_TIER_ORDER] as const).map((value) => ({
+                  value,
+                  label: TIER_LABEL[value]
+                }))}
+                value={tier}
+                onChange={setTier}
+                size="sm"
+              />
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-text-muted">
                 <input
                   type="checkbox"
                   checked={englishOnly}
                   onChange={(event) => {
                     setEnglishOnly(event.target.checked);
                   }}
-                  className="accent-[var(--color-accent)]"
+                  className="h-3.5 w-3.5 cursor-pointer accent-[var(--sv-accent)]"
                 />
-                English-only builds
+                English only
               </label>
               <span className="ml-auto text-xs text-text-muted" data-numeric>
-                {String(visible.length)} of {String(statuses.length)}
+                {String(filtered.length)} of {String(statuses.length)}
               </span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {filtered.map((status) => {
+                const variant = whisperVariant(status.model.id);
+                const speed: SpeedLabel = variant !== null ? TIER_SPEED[variant.tier] : "Balanced";
+                const measured = measuredRtf[status.model.engine];
+                return (
+                  <ModelRow
+                    key={status.model.id}
+                    status={status}
+                    active={isModelActive(status)}
+                    speedLabel={speed}
+                    {...(measured !== undefined ? { measuredRtf: measured } : {})}
+                    onDownload={() => {
+                      void api.models.download({ modelId: status.model.id }).then(refresh);
+                    }}
+                    onCancel={() => {
+                      void api.models.cancel({ modelId: status.model.id }).then(refresh);
+                    }}
+                    onRetry={() => {
+                      void api.models.download({ modelId: status.model.id }).then(refresh);
+                    }}
+                    onRemove={() => {
+                      void api.models.remove({ modelId: status.model.id }).then(refresh);
+                    }}
+                    onSelect={() => {
+                      selectModel(status);
+                    }}
+                    onImport={() => {
+                      void api.models.import({ modelId: status.model.id }).then(refresh);
+                    }}
+                  />
+                );
+              })}
             </div>
           </section>
 
-          <div className="flex flex-col gap-3">
-            {visible.map((status) => {
-            const downloading = status.download.state === "downloading";
-            const verifying = status.download.state === "verifying";
-            const done = status.installed;
-            const error = status.download.state === "error";
-            const progress =
-              status.download.state === "downloading"
-                ? formatPercent(status.download.receivedBytes, status.download.totalBytes)
-                : null;
-            const measured = measuredRtf[status.model.engine];
-            return (
-              <Card key={status.model.id}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-medium text-text">{status.model.name}</h3>
-                    <p className="mt-0.5 text-sm text-text-muted">{status.model.whenToUse}</p>
-                    <p className="mt-1 text-2xs uppercase tracking-wide text-text-muted">
-                      {status.model.languages} &middot; {formatBytes(status.model.bytes)}
-                      {measured !== undefined && (
-                        <>
-                          {" "}&middot; measured RTF {measured.toFixed(2)}x
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {done && (
-                      <Badge tone="success">
-                        <Check className="h-3 w-3" aria-hidden="true" /> Installed
-                      </Badge>
-                    )}
-                    {downloading && (
-                      <Badge tone="accent">
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                        {progress}
-                      </Badge>
-                    )}
-                    {verifying && (
-                      <Badge tone="accent">
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> Verifying
-                      </Badge>
-                    )}
-                    {error && status.download.state === "error" && (
-                      <Badge tone="danger">{status.download.message}</Badge>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <span className="text-xs text-text-muted">
-                    {status.installed
-                      ? `${formatBytes(status.installedBytes)} on disk`
-                      : "Not installed"}
-                  </span>
-                  {done ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => {
-                        void api.models.remove({ modelId: status.model.id }).then(refresh);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
-                    </Button>
-                  ) : downloading || verifying ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        void api.models.cancel({ modelId: status.model.id }).then(refresh);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          void api.models.import({ modelId: status.model.id }).then(refresh);
-                        }}
-                      >
-                        <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" /> Import folder
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          void api.models.download({ modelId: status.model.id }).then(refresh);
-                        }}
-                      >
-                        <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
-                      </Button>
-                    </div>
+          <section className="flex flex-col gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-text">Whisper helper</h2>
+              <p className="mt-0.5 text-sm text-text-muted">
+                A small file Struq Voice needs in order to run the Whisper family of models. It
+                usually installs itself the first time you start the app.
+              </p>
+            </div>
+            <Card>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm text-text">
+                    {runtimeDone
+                      ? "Installed and ready."
+                      : runtimeDownloading
+                        ? `Downloading ${runtimeProgress !== null ? `${String(Math.round(runtimeProgress * 100))}%` : "..."}`
+                        : runtimeError
+                          ? (runtime.message ?? "The helper download failed.")
+                          : "Not installed yet."}
+                  </p>
+                  {runtimeDownloading && runtimeProgress !== null && (
+                    <ProgressBar value={runtimeProgress} tone="accent" className="mt-2" label="Downloading helper" />
                   )}
                 </div>
-              </Card>
-            );
-            })}
-          </div>
-
-          {/* Infrastructure rather than a choice, so it sits after the models
-              it exists to serve. */}
-          <section>
-            <h2 className="text-base font-semibold text-text">Whisper runtime</h2>
-            <p className="mt-0.5 text-sm text-text-muted">
-              whisper-cli.exe, required by the Whisper.cpp models. CPU build, around 8MB.
-              Installs itself on first run; the button is for when that failed.
-            </p>
-            <Card className="mt-3">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm text-text-muted">
-                  {runtimeDone
-                    ? "Installed and ready."
-                    : runtimeDownloading
-                      ? `Downloading, ${
-                          runtime.totalBytes !== undefined
-                            ? formatPercent(runtime.receivedBytes ?? 0, runtime.totalBytes)
-                            : "starting"
-                        }`
-                      : runtimeError
-                        ? runtime.message ?? "The download failed."
-                        : "Not installed."}
-                </span>
                 {runtimeDone ? (
-                  <Badge tone="success">
-                    <Check className="h-3 w-3" aria-hidden="true" /> Ready
+                  <Badge tone="success" icon="check-circle">
+                    Ready
                   </Badge>
                 ) : (
                   <Button
@@ -348,20 +346,20 @@ export function ModelsView(): JSX.Element {
                     }}
                   >
                     {runtimeDownloading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      <Icon icon="ph:circle-notch" className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" />
                     ) : (
-                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Icon icon="ph:download-simple" className="h-3.5 w-3.5" aria-hidden="true" />
                     )}
-                    {runtimeDownloading ? "Downloading" : "Install runtime"}
+                    {runtimeDownloading ? "Downloading" : "Install helper"}
                   </Button>
                 )}
               </div>
             </Card>
           </section>
 
-          <p className="flex items-center gap-1.5 text-xs text-text-muted" data-numeric>
-            <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
-            {formatBytes(diskUsed ?? 0)} used by models
+          <p className="flex items-center gap-1.5 text-2xs text-text-muted" data-numeric>
+            <Icon icon="ph:hard-drive" className="h-3.5 w-3.5" aria-hidden="true" />
+            {formatBytes(diskUsed)} used by models on this computer
           </p>
         </div>
       </div>

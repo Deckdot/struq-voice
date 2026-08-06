@@ -14,15 +14,12 @@ import {
   EmptyState,
   IconButton,
   InlineError,
-  SearchInput,
   Select,
   Switch,
   TextInput
 } from "../components/ui";
 
 import { useTranslation } from "../lib/useTranslation";
-
-const SEARCH_INPUT_ID = "dictionary-search";
 
 interface Draft {
   readonly from: string;
@@ -43,7 +40,6 @@ export function DictionaryView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const { t } = useTranslation();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recent" | "alphabetical">("recent");
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editingFrom, setEditingFrom] = useState<string | null>(null);
@@ -51,7 +47,6 @@ export function DictionaryView(): JSX.Element {
   const [sample, setSample] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
   const [deleteArmedFrom, setDeleteArmedFrom] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const fromInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,37 +68,17 @@ export function DictionaryView(): JSX.Element {
   }, [deleteArmedFrom]);
 
   useEffect(() => {
-    if (statusMessage === null) return;
-    const timer = window.setTimeout(() => {
-      setStatusMessage(null);
-    }, 4000);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [statusMessage]);
-
-  useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        document.getElementById(SEARCH_INPUT_ID)?.focus();
-        return;
-      }
-      if (event.key === "Escape") {
-        if (editingFrom !== null) {
-          setEditingFrom(null);
-          setDraft(EMPTY_DRAFT);
-        } else if (query.length > 0) {
-          event.preventDefault();
-          setQuery("");
-        }
+      if (event.key === "Escape" && editingFrom !== null) {
+        setEditingFrom(null);
+        setDraft(EMPTY_DRAFT);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [query, editingFrom]);
+  }, [editingFrom]);
 
   const dictionary: readonly DictionaryRule[] = settings.post.dictionary;
 
@@ -119,19 +94,10 @@ export function DictionaryView(): JSX.Element {
   );
 
   const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const filtered =
-      needle.length === 0
-        ? dictionary
-        : dictionary.filter(
-            (entry) =>
-              entry.from.toLowerCase().includes(needle) ||
-              entry.to.toLowerCase().includes(needle)
-          );
     return sort === "alphabetical"
-      ? [...filtered].sort((a, b) => a.from.localeCompare(b.from))
-      : [...filtered].reverse();
-  }, [dictionary, query, sort]);
+      ? [...dictionary].sort((a, b) => a.from.localeCompare(b.from))
+      : [...dictionary].reverse();
+  }, [dictionary, sort]);
 
   const activeSample = sample.length > 0 ? sample : t("dictionary.typeSample");
   const preview = useMemo(() => applyDictionary(activeSample, dictionary), [activeSample, dictionary]);
@@ -226,24 +192,6 @@ export function DictionaryView(): JSX.Element {
     setConfirmClear(false);
   };
 
-  const handleExport = async (): Promise<void> => {
-    const res = await api.dictionary.export();
-    if (res.ok && res.path) {
-      setStatusMessage(t("dictionary.msg.exported"));
-    } else if (res.message && res.message !== "Export cancelled.") {
-      setStatusMessage(t("dictionary.msg.exportFailed", { message: res.message }));
-    }
-  };
-
-  const handleImport = async (): Promise<void> => {
-    const res = await api.dictionary.import();
-    if (res.ok) {
-      setStatusMessage(t("dictionary.msg.imported", { added: res.added, skipped: res.skipped }));
-    } else if (res.message && res.message !== "Import cancelled.") {
-      setStatusMessage(t("dictionary.msg.importFailed", { message: res.message }));
-    }
-  };
-
   // Render text with matches highlighted
   const renderHighlightedSample = (): JSX.Element => {
     const enabledRules = dictionary.filter((r) => r.enabled && r.from.length > 0);
@@ -300,32 +248,6 @@ export function DictionaryView(): JSX.Element {
     <div className="flex h-full flex-col overflow-hidden bg-bg">
       <PageBody>
         <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between gap-4">
-            <SearchInput
-              id={SEARCH_INPUT_ID}
-              value={query}
-              onChange={setQuery}
-              onClear={() => {
-                setQuery("");
-              }}
-              placeholder={t("dictionary.searchPlaceholder")}
-              className="w-[240px]"
-            />
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={() => void handleImport()}>
-                {t("dictionary.import")}
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => void handleExport()}>
-                {t("dictionary.export")}
-              </Button>
-            </div>
-          </div>
-          {statusMessage && (
-            <div className="rounded-md border border-border bg-surface px-4 py-2.5 text-xs text-text">
-              {statusMessage}
-            </div>
-          )}
-
           {/* Add or Edit Rule Card */}
           <div className="rounded-lg border border-border bg-surface p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -405,7 +327,7 @@ export function DictionaryView(): JSX.Element {
           </div>
 
           {/* Try It Sandbox */}
-          <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-surface p-4">
+          <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
                 {t("dictionary.tryIt")}
@@ -415,26 +337,28 @@ export function DictionaryView(): JSX.Element {
               </span>
             </div>
             <textarea
-              rows={3}
+              rows={2}
               value={sample}
               onChange={(e) => {
                 setSample(e.target.value);
               }}
               placeholder={t("dictionary.typeSample")}
-              className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-accent"
+              className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text transition-colors duration-hover focus:border-accent focus:outline-none"
               data-selectable
             />
-            <div className="min-h-[42px] rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text">
-              <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-text-muted">
-                {t("dictionary.matchesSample")}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex min-h-[42px] flex-col justify-center rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text">
+                <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-text-muted">
+                  {t("dictionary.matchesSample")}
+                </div>
+                <div className="leading-snug">{renderHighlightedSample()}</div>
               </div>
-              <div className="leading-snug">{renderHighlightedSample()}</div>
-            </div>
-            <div className="min-h-[42px] rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text">
-              <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-text-muted">
-                {t("dictionary.resultSample")}
+              <div className="flex min-h-[42px] flex-col justify-center rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text">
+                <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-text-muted">
+                  {t("dictionary.resultSample")}
+                </div>
+                <div className="leading-snug">{preview}</div>
               </div>
-              <div className="leading-snug">{preview}</div>
             </div>
           </div>
 
@@ -471,7 +395,7 @@ export function DictionaryView(): JSX.Element {
 
           {/* Rules List or Empty State */}
           {dictionary.length === 0 ? (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 py-2">
               <EmptyState
                 icon="ph:book-open-text"
                 title={t("dictionary.empty.title")}
@@ -493,9 +417,10 @@ export function DictionaryView(): JSX.Element {
                         });
                         fromInputRef.current?.focus();
                       }}
-                      className="cursor-pointer rounded-full border border-border bg-surface px-3 py-1 text-xs text-text transition-colors hover:border-accent hover:bg-surface-hover"
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text transition-colors hover:border-accent hover:bg-surface-hover"
                     >
-                      {sugg.from} → {sugg.to}
+                      <Icon icon="ph:plus" className="h-3 w-3 text-accent" />
+                      <span>{sugg.from} → {sugg.to}</span>
                     </button>
                   ))}
                 </div>

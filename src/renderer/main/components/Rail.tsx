@@ -36,7 +36,7 @@ export function Rail(): JSX.Element {
 
   return (
     <nav
-      className="flex w-[184px] shrink-0 flex-col border-r border-border bg-bg-sunken"
+      className="flex w-[184px] shrink-0 flex-col border-r border-border bg-bg"
       aria-label={t("app.name")}
     >
       <div className="flex flex-col gap-0.5 p-2">

@@ -152,8 +152,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
             aria-label={rest["aria-label"]}
             className={cn(
               "relative flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border bg-bg-sunken px-3 text-start transition-colors duration-hover",
-              "hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-              open ? "border-accent ring-1 ring-accent/20" : invalid ? "border-danger" : "border-border",
+              "hover:border-border-strong focus-visible:outline-none focus-visible:border-accent",
+              open ? "border-accent" : invalid ? "border-danger" : "border-border",
               disabled ? "cursor-not-allowed bg-surface opacity-50" : "hover:bg-surface-hover/50",
               HEIGHTS[size],
               className

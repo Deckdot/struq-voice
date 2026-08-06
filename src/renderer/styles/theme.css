@@ -142,7 +142,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --sv-bg: oklch(0.23 0.006 250);
-  --sv-bg-sunken: oklch(0.195 0.007 250);
+  --sv-bg-sunken: oklch(0.23 0.006 250);
   --sv-surface: oklch(0.27 0.007 250);
   --sv-surface-hover: oklch(0.31 0.008 250);
   --sv-surface-active: oklch(0.34 0.009 250);
@@ -212,13 +212,37 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* One focus ring for the entire application, accent-coloured, offset so
-     it never crowds the element it belongs to. Visible only for keyboard
-     users, present for all of them. */
+  /* Single, ultra-clean border focus transition.
+     Eliminates duplicate double rings by removing outer box-shadow outlines,
+     relying strictly on a single smooth border color shift. */
+  *,
+  *:focus,
+  *:focus-visible,
+  input:focus,
+  textarea:focus,
+  select:focus,
+  button:focus {
+    outline: none !important;
+    outline-style: none !important;
+  }
+
   :focus-visible {
-    outline: 2px solid var(--sv-accent);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
+    border-color: var(--sv-accent) !important;
+    box-shadow: none !important;
+    transition: border-color 180ms var(--ease-micro);
+  }
+
+  input,
+  textarea,
+  select {
+    transition: border-color 180ms var(--ease-micro), background-color 180ms var(--ease-micro);
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: var(--sv-accent) !important;
+    box-shadow: none !important;
   }
 
   ::selection {

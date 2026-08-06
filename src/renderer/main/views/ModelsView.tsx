@@ -343,10 +343,7 @@ export function ModelsView(): JSX.Element {
   return (
     <div className="h-full overflow-y-auto bg-bg" data-selectable>
       <div className="mx-auto flex w-full max-w-[960px] flex-col gap-7 px-6 py-5">
-        <div className="flex items-end justify-between gap-5">
-          <div>
-            <h1 className="font-display text-2xl font-normal tracking-tight text-text">Models</h1>
-          </div>
+        <div className="flex items-center justify-end">
           <Button variant="secondary" size="md" onClick={() => { setSpecsOpen(true); }}>
             <Icon icon="ph:desktop-tower" className="h-4 w-4" aria-hidden="true" />
             PC specs

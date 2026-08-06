@@ -95,19 +95,14 @@ export function SettingsView(): JSX.Element {
 
   return (
     <div className="h-full overflow-y-auto bg-bg" data-selectable>
-      <div className="mx-auto w-full max-w-[920px] px-6 py-5">
-        <div>
-          <h1 className="font-display text-2xl font-normal tracking-tight text-text">Settings</h1>
-          <p className="mt-1 text-sm text-text-muted">Tune how Struq listens, writes, and stays out of your way.</p>
-        </div>
-
+      <div className="mx-auto w-full max-w-[920px] px-6 py-4">
         <Tabs
           items={CATEGORIES}
           active={category}
           onSelect={(next) => {
             if (isCategory(next)) setCategory(next);
           }}
-          className="mt-5 border-b border-border"
+          className="border-b border-border"
         />
 
         <div className="mx-auto mt-5 w-full max-w-[800px]" role="tabpanel">

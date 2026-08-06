@@ -161,10 +161,6 @@ export function DictateView(): JSX.Element {
   return (
     <div className="flex h-full flex-col bg-bg">
       <PageBody>
-        <div>
-          <h1 className="font-display text-2xl font-normal tracking-tight text-text">Dictate</h1>
-          <p className="mt-1 text-sm text-text-muted">Your voice workspace is ready wherever you type.</p>
-        </div>
         {blocker !== null && (
           <div className="flex items-center gap-3 rounded-lg border border-warning bg-warning-soft px-4 py-3">
             <Icon icon="ph:warning" className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />

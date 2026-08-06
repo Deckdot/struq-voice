@@ -223,6 +223,31 @@
     color: var(--sv-text);
   }
 
+  /* Sleek custom scrollbars with green accent */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.45 0.085 160) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: oklch(0.45 0.085 160);
+    border-radius: 9999px;
+    transition: background-color 150ms var(--ease-micro);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: oklch(0.38 0.095 160);
+  }
+
   /* Theme switches blend over 200ms instead of flashing. The transition is
      off until the renderer marks the page ready (theme-ready), so the first
      paint is never animated. */

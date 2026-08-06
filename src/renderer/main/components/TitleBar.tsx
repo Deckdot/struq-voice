@@ -4,7 +4,7 @@ import type { MainWindowApi } from "../../../shared/api";
 import { BrandMark } from "./Brand";
 
 const CONTROL_BASE =
-  "flex h-9 w-[46px] items-center justify-center text-text-secondary transition-colors duration-hover hover:bg-surface-hover hover:text-text active:bg-surface-active";
+  "flex h-9 w-[46px] items-center justify-center text-text-secondary transition-colors duration-hover hover:bg-border/70 hover:text-text active:bg-border-strong/80";
 
 export function TitleBar(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;

@@ -5,7 +5,6 @@ import type { MainWindowApi } from "../../../../shared/api";
 import type { RecorderDevice } from "../../../../shared/ipc";
 import type { Settings } from "../../../../shared/settings";
 import {
-  Disclosure,
   HotkeyRecorder,
   NumberInput,
   Select,
@@ -73,6 +72,7 @@ export function CaptureTab({
             <HotkeyRecorder
               label="press to toggle key"
               accelerator={settings.toggleAccelerator}
+              size="md"
               onChange={(toggleAccelerator) => {
                 update({ toggleAccelerator });
               }}
@@ -109,7 +109,7 @@ export function CaptureTab({
           }
         />
         <div className="px-4 py-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="mb-2 flex h-5 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <Icon
                 icon="ph:waveform"
@@ -206,66 +206,60 @@ export function CaptureTab({
         title="Capture timing"
         description="The defaults suit most people."
       >
-        <div className="px-4 py-3">
-          <Disclosure label="Advanced capture timing">
-            <div className="flex flex-col gap-4">
-              <SettingsRow
-                label="Shortest capture"
-                hint="Shorter captures are discarded."
-                control={
-                  <div className="w-28">
-                    <NumberInput
-                      value={settings.minCaptureMs}
-                      min={100}
-                      max={5000}
-                      step={50}
-                      unit="ms"
-                      onChange={(value) => {
-                        update({ minCaptureMs: value });
-                      }}
-                    />
-                  </div>
-                }
-              />
-              <SettingsRow
-                label="Longest capture"
-                hint="Longer captures are force-stopped."
-                control={
-                  <div className="w-32">
-                    <NumberInput
-                      value={settings.maxCaptureMs}
-                      min={5000}
-                      max={600000}
-                      step={1000}
-                      unit="ms"
-                      onChange={(value) => {
-                        update({ maxCaptureMs: value });
-                      }}
-                    />
-                  </div>
-                }
-              />
-              <SettingsRow
-                label="Pre-roll"
-                hint="Kept from before the key went down, so early words survive."
-                control={
-                  <div className="w-28">
-                    <NumberInput
-                      value={settings.prerollMs}
-                      min={0}
-                      max={1000}
-                      step={50}
-                      unit="ms"
-                      onChange={(value) => {
-                        update({ prerollMs: value });
-                      }}
-                    />
-                  </div>
-                }
+        <SettingsRow
+          label="Shortest capture"
+          hint="Shorter captures are discarded."
+          control={
+            <div className="w-28">
+              <NumberInput
+                value={settings.minCaptureMs}
+                min={100}
+                max={5000}
+                step={50}
+                unit="ms"
+                onChange={(value) => {
+                  update({ minCaptureMs: value });
+                }}
               />
             </div>
-          </Disclosure>
-        </div>
+          }
+        />
+        <SettingsRow
+          label="Longest capture"
+          hint="Longer captures are force-stopped."
+          control={
+            <div className="w-32">
+              <NumberInput
+                value={settings.maxCaptureMs}
+                min={5000}
+                max={600000}
+                step={1000}
+                unit="ms"
+                onChange={(value) => {
+                  update({ maxCaptureMs: value });
+                }}
+              />
+            </div>
+          }
+        />
+        <SettingsRow
+          label="Pre-roll"
+          hint="Kept from before the key went down, so early words survive."
+          control={
+            <div className="w-28">
+              <NumberInput
+                value={settings.prerollMs}
+                min={0}
+                max={1000}
+                step={50}
+                unit="ms"
+                onChange={(value) => {
+                  update({ prerollMs: value });
+                }}
+              />
+            </div>
+          }
+        />
       </SettingsGroup>
     </div>
   );

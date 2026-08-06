@@ -45,7 +45,7 @@ export function HotkeyRecorder({
 
   if (recording) {
     return (
-      <div className="flex flex-col items-end gap-1">
+      <div className="relative flex flex-col items-end min-h-[36px] justify-center">
         <button
           type="button"
           autoFocus
@@ -74,16 +74,16 @@ export function HotkeyRecorder({
             "inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-dashed border-accent bg-surface px-3 text-sm text-accent-text"
           )}
         >
-          <Icon icon="ph:keyboard" className="h-4 w-4" aria-hidden="true" />
+          <Icon icon="ph:keyboard" className="h-4 w-4 animate-pulse" aria-hidden="true" />
           Press a chord
         </button>
-        <span className="text-2xs text-text-muted">Esc to cancel</span>
+        <span className="absolute -bottom-4 text-2xs text-text-muted whitespace-nowrap">Esc to cancel</span>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="relative flex flex-col items-end min-h-[36px] justify-center">
       <div className="flex items-center gap-2">
         <Kbd accelerator={accelerator} size={size} />
         <Button
@@ -98,7 +98,7 @@ export function HotkeyRecorder({
         </Button>
       </div>
       {conflict !== undefined && conflict.length > 0 && (
-        <span className="text-2xs text-warning">{conflict}</span>
+        <span className="absolute -bottom-4 text-2xs text-warning whitespace-nowrap">{conflict}</span>
       )}
     </div>
   );

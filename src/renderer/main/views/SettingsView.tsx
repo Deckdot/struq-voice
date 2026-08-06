@@ -94,7 +94,7 @@ export function SettingsView(): JSX.Element {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-bg" data-selectable>
+    <div className="h-full overflow-y-auto bg-bg [scrollbar-gutter:stable]" data-selectable>
       <div className="mx-auto w-full max-w-[920px] px-6 py-4">
         <Tabs
           items={CATEGORIES}

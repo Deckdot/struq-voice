@@ -24,7 +24,7 @@ export function Rail(): JSX.Element {
 
   return (
     <nav
-      className="flex w-[200px] shrink-0 flex-col border-r border-border bg-bg-sunken"
+      className="flex w-[184px] shrink-0 flex-col border-r border-border bg-bg-sunken"
       aria-label="Struq Voice"
     >
       <div className="flex flex-col gap-0.5 p-2">
@@ -39,17 +39,17 @@ export function Rail(): JSX.Element {
               }}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-text-secondary transition-colors duration-hover hover:bg-surface-hover hover:text-text",
+                "relative flex h-9 w-full cursor-pointer items-center gap-3 rounded-md px-3 text-left text-sm text-text-secondary transition-colors duration-hover hover:bg-surface-hover hover:text-text",
                 active && "bg-surface font-medium text-text"
               )}
             >
               {active && (
                 <motion.span
                   layoutId="nav-rail-indicator"
-                  className="absolute left-0 top-1/2 h-3 w-[3px] -translate-y-1/2 rounded-r-pill bg-accent"
+                  className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-pill bg-accent"
                 />
               )}
-              <Icon icon={ROUTE_ICONS[item]} className="h-4 w-4" aria-hidden="true" />
+              <Icon icon={ROUTE_ICONS[item]} className="h-[18px] w-[18px]" aria-hidden="true" />
               {ROUTE_LABELS[item]}
             </button>
           );

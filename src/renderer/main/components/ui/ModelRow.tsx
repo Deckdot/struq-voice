@@ -67,33 +67,31 @@ export function ModelRow({
         active ? "border-l-2 border-l-accent border-border" : "border-border"
       )}
     >
+      {/* Size, languages and speed live in the subtitle rather than in their
+          own fixed columns. Five fixed columns plus a name left too little
+          room at this width: the name collapsed to "P..." and the action
+          slot was clipped away by the row's overflow-hidden. */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="truncate text-sm font-medium text-text">{status.model.name}</h3>
           {active && <Badge tone="accent">In use</Badge>}
         </div>
-        <p className="mt-0.5 truncate text-xs text-text-muted">{status.model.whenToUse}</p>
-      </div>
-
-      <div className="hidden w-[90px] shrink-0 text-right text-xs tabular-nums text-text-secondary md:block" data-numeric>
-        {formatBytes(status.model.bytes)}
-      </div>
-
-      <div className="hidden w-[140px] shrink-0 truncate text-xs text-text-muted lg:block" title={status.model.languages}>
-        {status.model.languages}
-      </div>
-
-      <div className="hidden w-[120px] shrink-0 text-xs text-text-muted md:block">
-        {measuredRtf !== undefined ? (
+        <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-text-muted">
           <span className="tabular-nums" data-numeric>
-            {measuredRtf.toFixed(2)}x speed
+            {formatBytes(status.model.bytes)}
           </span>
-        ) : (
-          speedLabel
-        )}
+          <span aria-hidden="true">·</span>
+          <span>
+            {measuredRtf !== undefined ? `${measuredRtf.toFixed(2)}x speed` : speedLabel}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="truncate" title={status.model.languages}>
+            {status.model.languages}
+          </span>
+        </p>
       </div>
 
-      <div className="w-[160px] shrink-0">
+      <div className="w-[130px] shrink-0">
         {downloading && progress !== null ? (
           <div className="flex flex-col gap-1">
             <ProgressBar value={progress} tone="ember" />
@@ -116,7 +114,7 @@ export function ModelRow({
         )}
       </div>
 
-      <div className="flex w-[200px] shrink-0 items-center justify-end gap-2">
+      <div className="flex w-[176px] shrink-0 items-center justify-end gap-2">
         {downloading || verifying ? (
           <Button variant="secondary" size="sm" onClick={onCancel}>
             Cancel

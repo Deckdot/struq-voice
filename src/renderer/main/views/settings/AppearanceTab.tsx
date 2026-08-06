@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import type { MainWindowApi } from "../../../../shared/api";
 import type { Settings } from "../../../../shared/settings";
-import { Button, Card, SegmentedControl, SettingsGroup, SettingsRow } from "../../components/ui";
+import { Button, SegmentedControl, SettingsGroup, SettingsRow } from "../../components/ui";
 
 /**
  * The Appearance settings tab: theme and the floating capture panel.
@@ -23,10 +23,9 @@ const THEME_OPTIONS: readonly { value: Theme; label: string; icon: string }[] = 
 export function AppearanceTab({ settings, update }: AppearanceTabProps): JSX.Element {
   const theme: Theme = settings.theme;
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <SettingsGroup
         title="Theme"
-        description="Struq Voice follows your choice. Follow Windows means it tracks the setting in the Windows Settings app."
       >
         <SettingsRow
           label="Color theme"
@@ -45,11 +44,11 @@ export function AppearanceTab({ settings, update }: AppearanceTabProps): JSX.Ele
 
       <SettingsGroup
         title="Capture panel"
-        description="The small window that appears while you dictate. You can drag it anywhere; the position is remembered."
+        description="Drag it anywhere. The position is remembered."
       >
         <SettingsRow
           label="Reset panel position"
-          hint="If the panel has wandered off screen or onto a display you no longer use, this brings it back to the bottom center."
+          hint="Brings it back to the bottom centre."
           control={
             <Button
               variant="secondary"
@@ -64,17 +63,6 @@ export function AppearanceTab({ settings, update }: AppearanceTabProps): JSX.Ele
         />
       </SettingsGroup>
 
-      <SettingsGroup
-        title="Motion"
-        description="Struq Voice follows the Windows reduced motion setting automatically. No toggle needed here."
-      >
-        <Card>
-          <p className="text-sm text-text-secondary">
-            When Windows is set to reduce motion, animations become simpler and shorter. The
-            capture pill still updates while you speak, just without the rise and settle.
-          </p>
-        </Card>
-      </SettingsGroup>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import type {
   HistorySearchResult,
   HistoryDeleteResult,
   HistoryClearResult,
+  HistoryStatsResult,
   ModelsModelRequest,
   ModelsListResult,
   ModelsModelResult,
@@ -107,7 +108,9 @@ const api: MainWindowApi = {
     remove: (request: HistoryDeleteRequest) =>
       ipcRenderer.invoke(channels.history.delete, request) as Promise<HistoryDeleteResult>,
     clear: () =>
-      ipcRenderer.invoke(channels.history.clear) as Promise<HistoryClearResult>
+      ipcRenderer.invoke(channels.history.clear) as Promise<HistoryClearResult>,
+    stats: () =>
+      ipcRenderer.invoke(channels.history.stats) as Promise<HistoryStatsResult>
   },
   models: {
     list: () =>

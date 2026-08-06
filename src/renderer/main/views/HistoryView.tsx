@@ -4,6 +4,9 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { MainWindowApi } from "../../../shared/api";
 import type { TranscriptRecord } from "../../../shared/ipc";
 import { EmptyState, SearchInput, TranscriptRow } from "../components/ui";
+import { PageHeader } from "../components/PageHeader";
+
+const SEARCH_INPUT_ID = "history-search";
 
 /**
  * The History view. Every transcript Struq Voice has produced, searched
@@ -71,6 +74,15 @@ export function HistoryView(): JSX.Element {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [copyArmed, setCopyArmed] = useState<number | null>(null);
   const [deleteArmed, setDeleteArmed] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
+
+  const toggleExpanded = (id: number): void => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  };
 
   const now = Date.now();
   const entries = groupRecords(records, now);
@@ -125,12 +137,38 @@ export function HistoryView(): JSX.Element {
     };
   }, [copyArmed]);
 
+  // Ctrl+F is what every desktop app binds to "find in this list". Escape
+  // clears the query rather than only blurring, because a stale filter is the
+  // reason a list looks empty.
+  useEffect(() => {
+    // The React KeyboardEvent is imported above for the list handler, so the
+    // DOM one has to be named explicitly here.
+    const onKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        document.getElementById(SEARCH_INPUT_ID)?.focus();
+        return;
+      }
+      if (event.key === "Escape" && query.length > 0) {
+        event.preventDefault();
+        setQuery("");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [query]);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (index) =>
-      entries[index]?.kind === "header" ? HEADER_HEIGHT : ROW_HEIGHT,
+    estimateSize: (index) => (entries[index]?.kind === "header" ? HEADER_HEIGHT : ROW_HEIGHT),
+    // Expanded rows have no knowable height, so every row reports its real
+    // one after layout. Without this an expanded transcript overlaps the row
+    // beneath it, because positions are absolute.
+    measureElement: (element) => element.getBoundingClientRect().height,
     overscan: 6
   });
 
@@ -175,23 +213,26 @@ export function HistoryView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <div className="flex flex-col gap-3 border-b border-border px-8 py-5">
-        <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-text">History</h1>
-          <p className="mt-1 text-sm text-text-muted">
-            Everything you have dictated, with the words you used and the service that heard them.
-          </p>
-        </div>
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          placeholder="Search transcripts..."
-        />
-      </div>
+      <PageHeader
+        icon="ph:clock-counter-clockwise"
+        title="History"
+        actions={
+          <SearchInput
+            id={SEARCH_INPUT_ID}
+            value={query}
+            onChange={setQuery}
+            onClear={() => {
+              setQuery("");
+            }}
+            placeholder="Search transcripts"
+            className="w-[280px]"
+          />
+        }
+      />
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto px-8 py-4 focus:outline-none"
+        className="min-h-0 flex-1 overflow-y-auto px-6 py-4 focus:outline-none"
         onKeyDown={onListKeyDown}
         tabIndex={0}
         role="list"
@@ -248,12 +289,13 @@ export function HistoryView(): JSX.Element {
               return (
                 <div
                   key={entry.id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
                   style={{
                     position: "absolute",
                     top: "0",
                     left: "0",
                     width: "100%",
-                    height: `${String(virtualRow.size)}px`,
                     transform: `translateY(${String(virtualRow.start)}px)`,
                     paddingBottom: "8px"
                   }}
@@ -261,6 +303,10 @@ export function HistoryView(): JSX.Element {
                   <TranscriptRow
                     record={record}
                     focused={record.id === focusedRowId}
+                    expanded={expanded.has(record.id)}
+                    onToggleExpanded={() => {
+                      toggleExpanded(record.id);
+                    }}
                     copyArmed={copyArmed === record.id}
                     deleteArmed={deleteArmed === record.id}
                     onCopy={() => {
@@ -288,12 +334,6 @@ export function HistoryView(): JSX.Element {
           </div>
         )}
 
-        {!loading && records.length > 0 && (
-          <p className="mt-6 px-1 text-2xs text-text-muted" data-numeric>
-            Showing the {String(records.length)} most recent transcript{records.length === 1 ? "" : "s"}.
-            Use Up and Down to move, Enter to copy, Delete to remove.
-          </p>
-        )}
       </div>
     </div>
   );

@@ -71,7 +71,29 @@ const WHITELIST = [
   "eraser",
   "text-t",
   "command",
-  "broom"
+  "broom",
+  "chart-line",
+  "chart-bar",
+  "timer",
+  "flame",
+  "article",
+  "speaker-high",
+  "paint-brush",
+  "shield-check",
+  "arrow-square-out",
+  "dots-three",
+  "funnel",
+  "warning",
+  "caret-up-down",
+  "house",
+  "note-pencil",
+  "trend-up",
+  "calendar-blank",
+  "cloud",
+  "desktop-tower",
+  "power",
+  "arrows-clockwise",
+  "flask"
 ];
 
 const source = JSON.parse(readFileSync(sourcePath, "utf8"));
@@ -97,9 +119,21 @@ for (const name of WHITELIST) {
   icons[name] = available[name];
 }
 
+// Phosphor draws on a 256x256 grid and declares that once at the collection
+// level, not per icon. Dropping it makes Iconify fall back to a 16x16 viewBox,
+// so every path renders far outside the frame and the icon silently vanishes:
+// valid SVG, correct size, nothing visible. Carry the defaults through.
+if (typeof source.width !== "number" || typeof source.height !== "number") {
+  throw new Error(
+    "Phosphor source is missing collection-level width/height; icons would render blank"
+  );
+}
+
 const output = {
   prefix: "ph",
   lastModified: source.lastModified,
+  width: source.width,
+  height: source.height,
   icons
 };
 

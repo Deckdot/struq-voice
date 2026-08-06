@@ -5,7 +5,7 @@
  */
 
 import type { CaptureState } from "./capture";
-import type { AppReadiness, TranscriptRecord } from "./ipc";
+import type { AppReadiness, HistoryStatsResult, TranscriptRecord } from "./ipc";
 import type { ModelsListResult, ModelsModelResult } from "./ipc";
 import type { OnboardingProfileResult, OnboardingStartRecommendedResult } from "./ipc";
 import type { Settings } from "./settings";
@@ -37,6 +37,7 @@ export interface MainWindowApi {
     }>;
     remove: (request: { id: number }) => Promise<{ ok: boolean }>;
     clear: () => Promise<{ ok: boolean }>;
+    stats: () => Promise<HistoryStatsResult>;
   };
   readonly models: {
     list: () => Promise<ModelsListResult>;

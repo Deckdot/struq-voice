@@ -12,6 +12,7 @@ import type {
   HistoryDeleteRequest,
   HistoryListRequest,
   HistorySearchRequest,
+  HistoryStatsResult,
   ModelsModelRequest,
   OnboardingCompleteResult,
   OnboardingProfileResult,
@@ -35,6 +36,7 @@ import {
   historyDeleteChannel,
   historyListChannel,
   historySearchChannel,
+  historyStatsChannel,
   modelsCancelChannel,
   modelsDeleteChannel,
   modelsDownloadChannel,
@@ -86,6 +88,18 @@ export interface ReadinessDeps {
 const SAFE_EMPTY_READINESS: AppReadiness = {
   microphone: { live: false },
   hotkeysActive: false
+};
+
+const EMPTY_HISTORY_STATS: HistoryStatsResult = {
+  todayWords: 0,
+  todayDurationMs: 0,
+  todayCount: 0,
+  wpm: 0,
+  streakDays: 0,
+  totalTranscripts: 0,
+  totalWords: 0,
+  totalDurationMs: 0,
+  daily: []
 };
 
 export const registerIpcHandlers = (
@@ -256,6 +270,10 @@ export const registerIpcHandlers = (
     history?.removeAll();
     return { ok: true };
   });
+
+  // Without a database there is nothing to count, so the dashboard shows
+  // zeroes rather than failing: history is a degradable feature.
+  ipcMain.handle(historyStatsChannel, () => history?.stats() ?? EMPTY_HISTORY_STATS);
 
   ipcMain.handle(metricsMeasuredRtfChannel, () => {
     return { byEngine: history?.measuredRtf() ?? {} };

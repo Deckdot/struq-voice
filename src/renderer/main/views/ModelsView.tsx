@@ -16,6 +16,7 @@ import {
   formatBytes
 } from "../components/ui";
 import type { SpeedLabel } from "../components/ui";
+import { PageHeader } from "../components/PageHeader";
 
 /**
  * The Models view. One model this computer should run, named with the
@@ -180,25 +181,17 @@ export function ModelsView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <div className="flex flex-col gap-2 border-b border-border px-8 py-5">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-text">Models</h1>
-        <p className="max-w-prose text-sm text-text-muted">
-          The voice helpers that live on this computer. Download the one that suits your machine, or
-          import a folder you already have. The cloud service is configured in Settings, not here.
-        </p>
-      </div>
+      <PageHeader icon="ph:cube" title="Models" />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
-        <div className="mx-auto flex w-full max-w-[920px] flex-col gap-10">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div className="mx-auto flex w-full max-w-[880px] flex-col gap-6">
           {recommendedModel !== null && recommendation !== null && (
-            <section className="flex flex-col gap-3">
-              <div>
-                <h2 className="font-display text-lg font-semibold text-text">
+            <section className="flex flex-col gap-2">
+              <div className="flex min-h-5 items-center gap-2 px-0.5">
+                <h2 className="text-2xs font-semibold uppercase tracking-wide text-text-muted">
                   Best for this computer
                 </h2>
-                <p className="mt-0.5 text-sm text-text-muted">
-                  {recommendation.reason}
-                </p>
+                <p className="min-w-0 truncate text-xs text-text-muted">{recommendation.reason}</p>
               </div>
               <Card className="flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-4">
@@ -239,11 +232,13 @@ export function ModelsView(): JSX.Element {
             </section>
           )}
 
-          <section className="flex flex-col gap-3">
-            <div>
-              <h2 className="font-display text-lg font-semibold text-text">All models</h2>
-              <p className="mt-0.5 text-sm text-text-muted">
-                Smaller downloads are quicker. Larger models are better with accents and noise.
+          <section className="flex flex-col gap-2">
+            <div className="flex min-h-5 items-center gap-2 px-0.5">
+              <h2 className="text-2xs font-semibold uppercase tracking-wide text-text-muted">
+                All models
+              </h2>
+              <p className="min-w-0 truncate text-xs text-text-muted">
+                Larger models handle accents and noise better.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -308,12 +303,13 @@ export function ModelsView(): JSX.Element {
             </div>
           </section>
 
-          <section className="flex flex-col gap-3">
-            <div>
-              <h2 className="font-display text-lg font-semibold text-text">Whisper helper</h2>
-              <p className="mt-0.5 text-sm text-text-muted">
-                A small file Struq Voice needs in order to run the Whisper family of models. It
-                usually installs itself the first time you start the app.
+          <section className="flex flex-col gap-2">
+            <div className="flex min-h-5 items-center gap-2 px-0.5">
+              <h2 className="text-2xs font-semibold uppercase tracking-wide text-text-muted">
+                Whisper helper
+              </h2>
+              <p className="min-w-0 truncate text-xs text-text-muted">
+                Needed to run Whisper models. Usually installs itself.
               </p>
             </div>
             <Card>

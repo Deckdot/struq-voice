@@ -2,7 +2,7 @@ import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../../shared/api";
 import type { Settings } from "../../../../shared/settings";
-import { Button, Card, SettingsGroup, SettingsRow, Switch } from "../../components/ui";
+import { Button, SettingsGroup, SettingsNote, SettingsRow, Switch } from "../../components/ui";
 
 /**
  * The General settings tab: when Struq Voice starts, what happens when you
@@ -42,14 +42,13 @@ export function GeneralTab({
   })();
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <SettingsGroup
         title="Startup"
-        description="What Struq Voice does when Windows starts and when you close the window."
       >
         <SettingsRow
           label="Start with Windows"
-          hint="Opens in the system tray. Your key works from the moment you log in."
+          hint="Opens in the tray, ready from login."
           control={
             <Switch
               checked={settings.autostart}
@@ -61,7 +60,7 @@ export function GeneralTab({
         />
         <SettingsRow
           label="Close button"
-          hint="Closing the window keeps Struq Voice running in the tray. Use the tray icon to quit."
+          hint="Quit from the tray icon."
           control={<span className="text-2xs text-text-muted">Always hides to tray</span>}
         />
       </SettingsGroup>
@@ -106,7 +105,7 @@ export function GeneralTab({
         {updateState.phase === "refused" && (
           <SettingsRow
             label="Why this happened"
-            hint="Nothing was installed. The download did not match the release signature, so it was discarded to keep your computer safe."
+            hint="The download failed its signature check and was discarded."
             control={
               <Icon icon="ph:warning-circle" className="h-4 w-4 text-warning" aria-hidden="true" />
             }
@@ -114,23 +113,11 @@ export function GeneralTab({
         )}
       </SettingsGroup>
 
-      <SettingsGroup
-        title="This computer"
-        description="A short summary of the machine Struq Voice detected. Used to pick a voice helper that fits."
-      >
-        <Card>
-          <div className="flex items-start gap-3">
-            <Icon icon="ph:monitor" className="mt-0.5 h-4 w-4 text-text-muted" aria-hidden="true" />
-            <div>
-              <p className="text-sm font-medium text-text">Hardware profile</p>
-              <p className="mt-1 text-sm text-text-muted">
-                Struq Voice used the processor, memory and graphics card it found on this machine
-                to recommend a model. If you upgrade any of those, run a download again from the
-                Models tab.
-              </p>
-            </div>
-          </div>
-        </Card>
+      <SettingsGroup title="This computer">
+        <SettingsNote icon="ph:monitor">
+          Your processor, memory and graphics card decide which model is recommended. After a
+          hardware upgrade, check the Models tab again.
+        </SettingsNote>
       </SettingsGroup>
     </div>
   );

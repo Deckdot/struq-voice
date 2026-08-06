@@ -1,14 +1,16 @@
 import type { CSSProperties, JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
-import { BrandLockup } from "./Brand";
-
-const CONTROL_BASE =
-  "flex h-8 w-[46px] items-center justify-center rounded-md text-text-muted transition-colors duration-hover hover:bg-surface-hover hover:text-text active:bg-surface-active";
 
 /**
  * The custom title bar of the frameless main window. Draggable via the
  * native -webkit-app-region, which requires the buttons to opt out.
+ *
+ * The caption buttons follow the Windows 11 metrics rather than a web
+ * convention: 46x36, square, flush into the top-right corner with no gap
+ * and no rounding, and close fills with the system red on hover. That red
+ * is hard-coded because it is a Windows constant, not a brand colour, and
+ * it stays the same in both themes.
  *
  * Every control is wrapped in an arrow function rather than passed as a bare
  * reference. React hands the click handler its SyntheticEvent, and a
@@ -16,17 +18,22 @@ const CONTROL_BASE =
  * SyntheticEvent fails to structured-clone: the call throws "An object could
  * not be cloned" and the send never happens. The wrapper drops the argument.
  */
+const CONTROL_BASE =
+  "flex h-9 w-[46px] items-center justify-center text-text-secondary transition-colors duration-hover hover:bg-surface-hover hover:text-text active:bg-surface-active";
+
 export function TitleBar(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
 
   return (
     <header
-      className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-bg px-2"
+      className="relative flex h-9 shrink-0 items-center justify-end border-b border-border bg-bg"
       style={{ WebkitAppRegion: "drag" } as CSSProperties}
     >
-      <BrandLockup size={20} className="px-2" />
+      <span className="pointer-events-none absolute inset-x-0 text-center text-xs font-medium tracking-wide text-text-secondary">
+        Struq
+      </span>
       <div
-        className="flex items-center gap-1"
+        className="relative flex items-center"
         style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
       >
         <button
@@ -47,7 +54,7 @@ export function TitleBar(): JSX.Element {
           }}
           className={CONTROL_BASE}
         >
-          <Icon icon="ph:square" className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icon icon="ph:square" className="h-3 w-3" aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -55,7 +62,7 @@ export function TitleBar(): JSX.Element {
           onClick={() => {
             api.window.close();
           }}
-          className="flex h-8 w-[46px] items-center justify-center rounded-md text-text-muted transition-colors duration-hover hover:bg-danger-soft hover:text-danger active:bg-surface-active"
+          className="flex h-9 w-[46px] items-center justify-center text-text-secondary transition-colors duration-hover hover:bg-[#c42b1c] hover:text-white active:bg-[#b0271a] active:text-white"
         >
           <Icon icon="ph:x" className="h-4 w-4" aria-hidden="true" />
         </button>

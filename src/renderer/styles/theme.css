@@ -8,6 +8,23 @@
 
    The semantic set (bg, surface, text, border, accent, state-*) is stable
    across both palettes. Hue and chroma hold, lightness moves.
+
+   Every *-soft token is opaque, never an alpha of its base colour. A
+   translucent fill composites with whatever sits behind it, so the same
+   badge reads differently on bg, on surface, and on the transparent overlay
+   window. Each tint is authored per theme instead.
+
+   DENSITY CONTRACT. This is a desktop chrome, not a document. Use Tailwind's
+   native 4px scale and pick from these sizes only:
+
+     titlebar   h-9   (36px)      page gutter    px-6 (24px)
+     nav item   h-9   (36px)      page top       py-5 (20px)
+     list row   h-8   (32px)      section gap    gap-6 (24px)
+     control    h-7   (28px)      card padding   p-4  (16px)
+     label gap  gap-2 (8px)       label to value 2px (mt-0.5)
+
+   Anything outside this set is a bug. The old layout mixed gap-8, gap-5,
+   px-8 and py-8 with no scale, which is what made it read as a web page.
    ========================================================================= */
 
 @theme inline {
@@ -105,17 +122,17 @@
   --sv-accent-solid-hover: oklch(0.41 0.085 160);
   --sv-accent-solid-active: oklch(0.37 0.085 160);
   --sv-accent-text: oklch(0.42 0.09 160);
-  --sv-accent-soft: oklch(0.45 0.085 160 / 0.1);
+  --sv-accent-soft: oklch(0.94 0.022 160);
   --sv-ember: oklch(0.56 0.115 42);
-  --sv-ember-soft: oklch(0.56 0.115 42 / 0.12);
+  --sv-ember-soft: oklch(0.93 0.03 42);
   --sv-success: oklch(0.5 0.09 155);
-  --sv-success-soft: oklch(0.5 0.09 155 / 0.1);
+  --sv-success-soft: oklch(0.94 0.025 155);
   --sv-warning: oklch(0.55 0.11 75);
-  --sv-warning-soft: oklch(0.55 0.11 75 / 0.12);
+  --sv-warning-soft: oklch(0.945 0.03 75);
   --sv-danger: oklch(0.5 0.14 27);
-  --sv-danger-soft: oklch(0.5 0.14 27 / 0.1);
+  --sv-danger-soft: oklch(0.94 0.03 27);
   --sv-info: oklch(0.5 0.06 230);
-  --sv-info-soft: oklch(0.5 0.06 230 / 0.1);
+  --sv-info-soft: oklch(0.94 0.02 230);
 }
 
 :root[data-theme="dark"] {
@@ -136,17 +153,17 @@
   --sv-accent-solid-hover: oklch(0.59 0.095 160);
   --sv-accent-solid-active: oklch(0.63 0.095 160);
   --sv-accent-text: oklch(0.72 0.09 160);
-  --sv-accent-soft: oklch(0.62 0.1 160 / 0.14);
+  --sv-accent-soft: oklch(0.28 0.035 160);
   --sv-ember: oklch(0.65 0.12 45);
-  --sv-ember-soft: oklch(0.65 0.12 45 / 0.16);
+  --sv-ember-soft: oklch(0.3 0.04 45);
   --sv-success: oklch(0.68 0.1 155);
-  --sv-success-soft: oklch(0.68 0.1 155 / 0.12);
+  --sv-success-soft: oklch(0.28 0.035 155);
   --sv-warning: oklch(0.68 0.1 80);
-  --sv-warning-soft: oklch(0.68 0.1 80 / 0.14);
+  --sv-warning-soft: oklch(0.29 0.04 80);
   --sv-danger: oklch(0.62 0.13 25);
-  --sv-danger-soft: oklch(0.62 0.13 25 / 0.12);
+  --sv-danger-soft: oklch(0.28 0.045 25);
   --sv-info: oklch(0.66 0.07 230);
-  --sv-info-soft: oklch(0.66 0.07 230 / 0.12);
+  --sv-info-soft: oklch(0.28 0.03 230);
 }
 
 /* ---------------------------------------------------------------------------

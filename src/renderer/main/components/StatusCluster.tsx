@@ -1,36 +1,39 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { Icon } from "@iconify/react";
-import type { MainWindowApi, RecorderDevice } from "../../../shared/api";
+import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
-import { formatAccelerator } from "../../../shared/hotkeys";
 import { MOCK_ENGINE_ID, engineOption } from "../../../shared/engines";
 import type { ModelStatus } from "../../../shared/models";
 import { useMainStore } from "../store/use-main-store";
-import { Badge, StatusDot } from "./ui";
-
-const ROW_CLASS =
-  "flex cursor-pointer items-center gap-2 text-left text-xs transition-colors duration-hover hover:text-text";
 
 const openSettingsCategory = (category: string): void => {
   useMainStore.getState().setRoute("settings");
   window.dispatchEvent(new CustomEvent("struq:open-settings-category", { detail: category }));
 };
 
+interface Fault {
+  readonly label: string;
+  readonly open: () => void;
+}
+
 /**
- * The live readiness cluster at the bottom of the rail: microphone, hotkey
- * and voice engine, each showing a dot for its state and a value that names
- * what is wrong when it is not ready. Rows navigate to the settings tab that
- * can fix them.
+ * The fault footer at the bottom of the rail. When everything works it
+ * renders nothing at all: a permanent green "Ready" is a status line
+ * reporting the absence of news, and it trains the eye to ignore the exact
+ * corner that needs to shout when something does break.
+ *
+ * It deliberately never shows the current engine. That is a decision made
+ * once during setup, and a permanent "Local / Parakeet" badge spends the
+ * quietest corner of the window on a value that never changes. Settings and
+ * the command palette both still show it.
  */
-export function StatusCluster(): JSX.Element {
+export function StatusCluster(): JSX.Element | null {
   const api = window.struqVoice as MainWindowApi;
   const readiness = useMainStore((state) => state.readiness);
   const setRoute = useMainStore((state) => state.setRoute);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [devices, setDevices] = useState<readonly RecorderDevice[]>([]);
-  const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
   const [models, setModels] = useState<readonly ModelStatus[]>([]);
   const [keyConfigured, setKeyConfigured] = useState(false);
 
@@ -46,13 +49,6 @@ export function StatusCluster(): JSX.Element {
       setModels(items);
     });
   }, [api]);
-
-  useEffect(() => {
-    void api.devices.list().then(({ devices: list, currentDeviceId: id }) => {
-      setDevices(list);
-      setCurrentDeviceId(id);
-    });
-  }, [api, readiness.microphone.live]);
 
   const engine = engineOption(settings.engine.primary);
   const isLocal = engine?.kind === "local";
@@ -78,78 +74,52 @@ export function StatusCluster(): JSX.Element {
     settings.engine.primary !== MOCK_ENGINE_ID &&
     (isLocal ? modelStatus?.installed === true : isCloud ? keyConfigured : false);
 
-  const device = devices.find((entry) => entry.deviceId === currentDeviceId) ?? devices[0];
-  const micLive = readiness.microphone.live;
-  const micValue = micLive
-    ? (device?.label ?? "Microphone")
-    : (readiness.microphone.reason ?? device?.label ?? "Off");
-
-  const engineValue = engineReady
-    ? (engine?.displayName ?? settings.engine.primary)
-    : isCloud && !keyConfigured
-      ? "Need API key"
-      : isLocal && modelStatus?.installed !== true
-        ? "Not downloaded"
-        : (engine?.displayName ?? settings.engine.primary);
-
-  const openEngine = (): void => {
-    if (!engineReady) {
-      if (isCloud) {
-        openSettingsCategory("transcription");
-        return;
+  // First fault wins. Listing three simultaneous problems helps nobody: the
+  // microphone is the prerequisite for the rest anyway.
+  const fault: Fault | null = !readiness.microphone.live
+    ? {
+        label: "Microphone off",
+        open: () => {
+          openSettingsCategory("capture");
+        }
       }
-      setRoute("models");
-      return;
-    }
-    openSettingsCategory("transcription");
-  };
+    : !readiness.hotkeysActive
+      ? {
+          label: "Shortcuts off",
+          open: () => {
+            openSettingsCategory("capture");
+          }
+        }
+      : !engineReady
+        ? {
+            label:
+              settings.engine.primary === MOCK_ENGINE_ID
+                ? "Practice mode"
+                : isCloud
+                  ? "API key needed"
+                  : "Model not downloaded",
+            open: () => {
+              if (isLocal && settings.engine.primary !== MOCK_ENGINE_ID) {
+                setRoute("models");
+                return;
+              }
+              openSettingsCategory("transcription");
+            }
+          }
+        : null;
+
+  if (fault === null) return null;
 
   return (
-    <div className="flex flex-col gap-2 border-t border-border px-3 py-3">
+    <div className="border-t border-border p-2">
       <button
         type="button"
-        onClick={() => {
-          openSettingsCategory("capture");
-        }}
-        className={ROW_CLASS}
+        onClick={fault.open}
+        className="flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-md px-2 text-left text-xs text-warning transition-colors duration-hover hover:bg-surface-hover"
       >
-        <StatusDot state={micLive ? "ready" : "off"} size="sm" />
-        <span className="w-[64px] shrink-0 text-text-muted">Microphone</span>
-        <span className="min-w-0 flex-1 truncate text-text">{micValue}</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => {
-          openSettingsCategory("capture");
-        }}
-        className={ROW_CLASS}
-      >
-        <StatusDot state={readiness.hotkeysActive ? "ready" : "off"} size="sm" />
-        <span className="w-[64px] shrink-0 text-text-muted">Hotkey</span>
-        <span className="min-w-0 flex-1 truncate text-text">
-          {readiness.hotkeysActive ? formatAccelerator(settings.pttAccelerator) : "Off"}
-        </span>
-      </button>
-
-      <button type="button" onClick={openEngine} className={ROW_CLASS}>
-        <StatusDot state={engineReady ? "ready" : "warning"} size="sm" />
-        <span className="w-[64px] shrink-0 text-text-muted">Voice engine</span>
-        <span className="min-w-0 flex-1 truncate text-text">{engineValue}</span>
-        <Badge tone={isCloud ? "warning" : "neutral"}>
-          {isCloud ? "Cloud" : isLocal ? "Local" : "Test"}
-        </Badge>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => {
-          setRoute("settings");
-        }}
-        className="flex cursor-pointer items-center gap-1 self-start text-xs text-text-muted transition-colors duration-hover hover:text-text"
-      >
-        More
-        <Icon icon="ph:caret-right" className="h-3 w-3" aria-hidden="true" />
+        <Icon icon="ph:warning" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">{fault.label}</span>
+        <Icon icon="ph:caret-right" className="h-3 w-3 shrink-0" aria-hidden="true" />
       </button>
     </div>
   );

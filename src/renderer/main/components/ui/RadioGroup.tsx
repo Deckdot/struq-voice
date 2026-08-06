@@ -9,14 +9,20 @@ import type { BadgeTone } from "./Badge";
 /**
  * A list of radio options. Each option can carry a description and a small
  * icon, and is the kind of control a Settings panel uses to pick a voice
- * engine: the label and the description are the bulk of the row, the
- * accent border shows the selection.
+ * engine: the label and the description are the bulk of the row.
+ *
+ * Rows are flat and hairline-separated so the group can sit directly inside
+ * a SettingsGroup card. Giving every option its own border produced a card
+ * inside a card, which reads as a web page rather than a settings list.
+ * Selection is the filled radio and a weighted label, not a tinted panel.
  */
 export interface RadioOption<T extends string> {
   readonly value: T;
   readonly label: string;
   readonly description?: string;
   readonly icon?: string | IconifyIcon;
+  /** Badge text, for example "Cloud". Without it no badge renders. */
+  readonly badge?: string;
   readonly tone?: BadgeTone;
   readonly detail?: ReactNode;
 }
@@ -46,7 +52,7 @@ export function RadioGroup<T extends string>({
       }}
       name={name}
       disabled={disabled}
-      className={cn("flex flex-col gap-2", className)}
+      className={cn("flex flex-col divide-y divide-border", className)}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -54,11 +60,9 @@ export function RadioGroup<T extends string>({
           <label
             key={option.value}
             className={cn(
-              "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5",
+              "flex cursor-pointer items-start gap-3 px-4 py-2.5",
               "transition-colors duration-control",
-              active
-                ? "border-accent bg-accent-soft"
-                : "border-border hover:bg-surface-hover",
+              active ? "bg-surface-active" : "hover:bg-surface-hover",
               disabled && "cursor-not-allowed opacity-45"
             )}
           >
@@ -80,16 +84,23 @@ export function RadioGroup<T extends string>({
               />
             </RadixRadio.Item>
             <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2 text-sm font-medium text-text">
+              <span
+                className={cn(
+                  "flex items-center gap-2 text-sm text-text",
+                  active ? "font-medium" : "font-normal"
+                )}
+              >
                 {option.icon !== undefined && (
                   <Icon
                     icon={option.icon}
-                    className="h-4 w-4 shrink-0"
+                    className="h-4 w-4 shrink-0 text-text-muted"
                     aria-hidden="true"
                   />
                 )}
                 {option.label}
-                {option.tone !== undefined && <Badge tone={option.tone}>{option.tone}</Badge>}
+                {option.badge !== undefined && (
+                  <Badge tone={option.tone ?? "neutral"}>{option.badge}</Badge>
+                )}
               </span>
               {option.description !== undefined && (
                 <span className="mt-0.5 block text-xs leading-snug text-text-muted">

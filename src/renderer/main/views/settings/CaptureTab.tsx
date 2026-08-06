@@ -34,14 +34,13 @@ export function CaptureTab({
   currentDeviceId
 }: CaptureTabProps): JSX.Element {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <SettingsGroup
         title="Keys"
-        description="The shortcuts for starting and stopping a dictation. Struq Voice re-registers them as soon as you change them."
       >
         <SettingsRow
           label="Hold to record"
-          hint="Hold anywhere in Windows, speak, release. The text lands in the field you were using."
+          hint="Hold, speak, release."
           control={
             <HotkeyRecorder
               label="hold to record key"
@@ -55,7 +54,7 @@ export function CaptureTab({
         />
         <SettingsRow
           label="Press to toggle"
-          hint="Press once to start, once to stop. Useful for longer dictation."
+          hint="Press once to start, once to stop."
           control={
             <HotkeyRecorder
               label="press to toggle key"
@@ -70,11 +69,10 @@ export function CaptureTab({
 
       <SettingsGroup
         title="Microphone"
-        description="The device Struq Voice listens through. If you plug in a different one, choose it here."
       >
         <SettingsRow
           label="Active microphone"
-          hint="If the list is empty, Windows has not yet given Struq Voice permission to use the microphone."
+          hint="An empty list means Windows has not granted microphone permission."
           control={
             <div className="w-72">
               <Select
@@ -100,11 +98,11 @@ export function CaptureTab({
 
       <SettingsGroup
         title="Sounds"
-        description="A short chime when a capture starts and ends. Helps you hear that the microphone is live, even when you are not looking."
+        description="Confirms the microphone is live without looking."
       >
         <SettingsRow
           label="Play capture sounds"
-          hint="Leave on if you want a confirmation you can hear. Turn off for silent recording."
+          hint="A chime when a capture starts and ends."
           control={
             <Switch
               checked={settings.captureSounds}
@@ -116,7 +114,7 @@ export function CaptureTab({
         />
         <SettingsRow
           label="Volume"
-          hint="How loud the chime plays. Has no effect when capture sounds are off."
+          hint="No effect when sounds are off."
           control={
             <div className="w-48">
               <Slider
@@ -137,11 +135,11 @@ export function CaptureTab({
 
       <SettingsGroup
         title="Live transcript"
-        description="Struq Voice can show the words it has understood so far while you are still speaking. It costs extra processing."
+        description="Costs extra processing while you speak."
       >
         <SettingsRow
           label="Show words as I speak"
-          hint="Useful for long dictation. Off by default because it competes with the final pass on slower machines."
+          hint="Competes with the final pass on slower machines."
           control={
             <Switch
               checked={settings.liveTranscription}
@@ -174,14 +172,14 @@ export function CaptureTab({
 
       <SettingsGroup
         title="Capture timing"
-        description="The rules that decide what counts as a real dictation. The defaults suit most people; only change these if you know what you want."
+        description="The defaults suit most people."
       >
         <div className="px-4 py-3">
           <Disclosure label="Advanced capture timing">
             <div className="flex flex-col gap-4">
               <SettingsRow
                 label="Shortest capture"
-                hint="A capture shorter than this is discarded. Prevents a mistyped key from pasting a single sound."
+                hint="Shorter captures are discarded."
                 control={
                   <div className="w-28">
                     <NumberInput
@@ -199,7 +197,7 @@ export function CaptureTab({
               />
               <SettingsRow
                 label="Longest capture"
-                hint="A capture longer than this is force-stopped. Catches a stuck key."
+                hint="Longer captures are force-stopped."
                 control={
                   <div className="w-32">
                     <NumberInput
@@ -217,7 +215,7 @@ export function CaptureTab({
               />
               <SettingsRow
                 label="Pre-roll"
-                hint="Audio kept from just before the key went down, so an early first word survives."
+                hint="Kept from before the key went down, so early words survive."
                 control={
                   <div className="w-28">
                     <NumberInput

@@ -15,13 +15,9 @@ const engineToOption = (option: EngineOption): RadioOption<string> => ({
   value: option.id,
   label: option.displayName,
   description: option.hint,
+  badge: option.kind === "cloud" ? "Cloud" : option.kind === "test" ? "Practice" : "Local",
   tone: option.kind === "cloud" ? "warning" : option.kind === "test" ? "neutral" : "accent",
-  icon:
-    option.kind === "cloud"
-      ? "ph:wave-sine"
-      : option.kind === "test"
-        ? "ph:circle-notch"
-        : "ph:microphone"
+  icon: option.kind === "cloud" ? "ph:cloud" : option.kind === "test" ? "ph:flask" : "ph:desktop-tower"
 });
 
 /**
@@ -87,26 +83,24 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
   const isCloud = settings.engine.primary === "openrouter";
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <SettingsGroup
         title="Main voice service"
-        description="What Struq Voice uses to turn your words into text. Local services keep everything on this computer."
+        description="Local services keep audio on this computer."
       >
-        <div className="px-4 py-3">
-          <RadioGroup
-            value={settings.engine.primary}
-            onChange={(next) => {
-              update({ engine: { primary: next, fallback: settings.engine.fallback } });
-            }}
-            options={options}
-          />
-        </div>
+        <RadioGroup
+          value={settings.engine.primary}
+          onChange={(next) => {
+            update({ engine: { primary: next, fallback: settings.engine.fallback } });
+          }}
+          options={options}
+        />
       </SettingsGroup>
 
       {isCloud && (
         <Card className="border-warning bg-warning-soft">
-          <div className="flex items-start gap-3">
-            <Icon icon="ph:warning-circle" className="mt-0.5 h-4 w-4 text-warning" aria-hidden="true" />
+          <div className="flex items-center gap-3">
+            <Icon icon="ph:warning-circle" className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
             <div>
               <p className="text-sm font-medium text-text">Your audio leaves this computer.</p>
               <p className="mt-1 text-sm text-text-muted">
@@ -120,11 +114,11 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
 
       <SettingsGroup
         title="Backup service"
-        description="What Struq Voice tries if the main one cannot help. Local services are the safer default."
+        description="Used when the main service cannot help."
       >
         <SettingsRow
           label="If the main service fails"
-          hint="None means Struq Voice will not try again. Choose another local service for a quiet fallback, or OpenRouter as a last resort."
+          hint="Tried only when the main service fails."
           control={
             <div className="w-56">
               <Select
@@ -158,7 +152,7 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
       {settings.engine.primary === "whisper-cpp" && (
         <SettingsGroup
           title="Whisper model"
-          description="Bigger models understand accents and noise better but are slower. Download more from the Models tab."
+          description="Bigger models are slower but handle accents better."
         >
           <SettingsRow
             label="Active model"
@@ -186,7 +180,7 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
 
       <SettingsGroup
         title="OpenRouter API key"
-        description="Required if you choose OpenRouter for the main or backup service. Stored encrypted on this computer."
+        description="Stored encrypted on this computer."
       >
         {keyEditing ? (
           <div className="px-4 py-3">

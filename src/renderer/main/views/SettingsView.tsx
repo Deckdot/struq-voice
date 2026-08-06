@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from "../../../shared/settings";
 import type { UpdateState } from "../../../shared/updates";
 import { INITIAL_UPDATE_STATE } from "../../../shared/updates";
 import type { RecorderDevice } from "../../../shared/ipc";
-import { SettingsGroup } from "../components/ui";
+import { PageHeader } from "../components/PageHeader";
 import { GeneralTab } from "./settings/GeneralTab";
 import { CaptureTab } from "./settings/CaptureTab";
 import { TranscriptionTab } from "./settings/TranscriptionTab";
@@ -28,16 +28,15 @@ interface CategoryMeta {
   readonly id: Category;
   readonly label: string;
   readonly icon: string;
-  readonly hint: string;
 }
 
 const CATEGORIES: readonly CategoryMeta[] = [
-  { id: "general", label: "General", icon: "ph:sliders-horizontal", hint: "Startup, updates, this computer." },
-  { id: "capture", label: "Capture", icon: "ph:microphone", hint: "Keys, microphone, sounds, timing." },
-  { id: "transcription", label: "Transcription", icon: "ph:wave-sine", hint: "Voice service, backup, keys, models." },
-  { id: "delivery", label: "Delivery", icon: "ph:clipboard-text", hint: "How the text reaches your app." },
-  { id: "text", label: "Text", icon: "ph:text-t", hint: "Cleanups and the words Struq Voice fixes." },
-  { id: "appearance", label: "Appearance", icon: "ph:circle-half", hint: "Theme and the capture panel." }
+  { id: "general", label: "General", icon: "ph:sliders-horizontal" },
+  { id: "capture", label: "Capture", icon: "ph:microphone" },
+  { id: "transcription", label: "Transcription", icon: "ph:wave-sine" },
+  { id: "delivery", label: "Delivery", icon: "ph:clipboard-text" },
+  { id: "text", label: "Text", icon: "ph:text-t" },
+  { id: "appearance", label: "Appearance", icon: "ph:circle-half" }
 ];
 
 const isCategory = (value: string): value is Category =>
@@ -97,17 +96,12 @@ export function SettingsView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <div className="border-b border-border px-8 py-5">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-text">Settings</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          Changes apply immediately. Nothing here needs a restart.
-        </p>
-      </div>
+      <PageHeader icon="ph:gear" title="Settings" />
 
       <div className="flex min-h-0 flex-1">
         <nav
           aria-label="Settings categories"
-          className="flex w-[180px] shrink-0 flex-col gap-0.5 border-r border-border bg-bg-sunken p-3"
+          className="flex w-[176px] shrink-0 flex-col gap-0.5 border-r border-border bg-bg-sunken p-2"
         >
           {CATEGORIES.map((entry) => {
             const active = entry.id === category;
@@ -119,23 +113,20 @@ export function SettingsView(): JSX.Element {
                 onClick={() => {
                   setCategory(entry.id);
                 }}
-                className={`flex items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors duration-hover ${
+                className={`flex h-9 cursor-pointer items-center gap-3 rounded-md px-3 text-left text-sm transition-colors duration-hover ${
                   active
-                    ? "bg-surface text-text"
+                    ? "bg-surface font-medium text-text"
                     : "text-text-secondary hover:bg-surface-hover hover:text-text"
                 }`}
               >
-                <Icon icon={entry.icon} className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">{entry.label}</span>
-                  <span className="mt-0.5 block truncate text-2xs text-text-muted">{entry.hint}</span>
-                </span>
+                <Icon icon={entry.icon} className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+                <span className="min-w-0 truncate">{entry.label}</span>
               </button>
             );
           })}
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6" data-selectable>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5" data-selectable>
           <div className="mx-auto w-full max-w-[760px]">
             {category === "general" && (
               <GeneralTab
@@ -161,19 +152,6 @@ export function SettingsView(): JSX.Element {
             {category === "delivery" && <DeliveryTab settings={settings} update={update} />}
             {category === "text" && <TextTab api={api} settings={settings} update={update} />}
             {category === "appearance" && <AppearanceTab api={api} settings={settings} update={update} />}
-
-            <div className="mt-10">
-              <SettingsGroup
-                title="Need to start over?"
-                description="These are the only settings that may not be obvious from their names. Reach out if anything is unclear."
-              >
-                <p className="px-4 py-3 text-sm text-text-secondary">
-                  Struq Voice saves settings as you change them. There is no Save button because
-                  there is nothing to save. The only thing that gets reset by reinstalling is the
-                  Whisper helper, which Struq Voice will fetch again the next time you need it.
-                </p>
-              </SettingsGroup>
-            </div>
           </div>
         </div>
       </div>

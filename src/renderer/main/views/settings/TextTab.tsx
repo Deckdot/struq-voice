@@ -94,10 +94,10 @@ export function TextTab({ settings, update }: TextTabProps): JSX.Element {
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <SettingsGroup
         title="Cleanups"
-        description="Small touches Struq Voice applies to every transcript before it lands in the destination app."
+        description="Applied to every transcript before it lands."
       >
         <SettingsRow
           label="Remove filler words"
@@ -113,7 +113,7 @@ export function TextTab({ settings, update }: TextTabProps): JSX.Element {
         />
         <SettingsRow
           label="Add a period at the end"
-          hint="If your transcript does not end with punctuation, Struq Voice adds a period."
+          hint="Adds a period when one is missing."
           control={
             <Switch
               checked={settings.post.addTrailingPunctuation}
@@ -125,7 +125,7 @@ export function TextTab({ settings, update }: TextTabProps): JSX.Element {
         />
         <SettingsRow
           label="Whitespace"
-          hint="Struq Voice always trims extra spaces and collapses multiple blanks into one. This cannot be turned off."
+          hint="Always on. Trims and collapses extra spaces."
           control={<span className="text-2xs text-text-muted">Always on</span>}
         />
       </SettingsGroup>

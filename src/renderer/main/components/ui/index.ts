@@ -81,6 +81,10 @@ export type { SkeletonProps } from "./Skeleton";
 export { Slider } from "./Slider";
 export type { SliderProps } from "./Slider";
 
+export { SettingsNote } from "./SettingsNote";
+export type { SettingsNoteProps } from "./SettingsNote";
+export { StatTile, Sparkline } from "./StatTile";
+export type { StatTileProps } from "./StatTile";
 export { StatusDot } from "./StatusDot";
 export type { StatusDotProps, StatusState } from "./StatusDot";
 

@@ -5,6 +5,11 @@ import { cn } from "../../lib/cn";
  * A single labelled row inside a SettingsGroup. The label and hint sit on the
  * left, the control on the right. Footer content (disclosures) renders full
  * width below the row, separated by a hairline.
+ *
+ * The control is centred against the whole label block, not top-aligned to
+ * its first line. With items-start a 28px switch beside a two-line hint hangs
+ * near the top of the row and every control in the panel reads as sitting too
+ * high.
  */
 export interface SettingsRowProps {
   readonly label: string;
@@ -25,7 +30,7 @@ export function SettingsRow({
 }: SettingsRowProps): JSX.Element {
   return (
     <div className={cn("px-4 py-3", className)}>
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex min-h-8 items-center justify-between gap-4">
         <div className="min-w-0">
           <label
             htmlFor={htmlFor}

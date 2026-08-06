@@ -47,7 +47,7 @@ export function Button({
       className={cn(
         "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md font-medium",
         "transition-colors duration-hover",
-        "disabled:cursor-not-allowed disabled:opacity-45",
+        "disabled:cursor-not-allowed disabled:border-border disabled:bg-bg-sunken disabled:text-text-muted",
         VARIANTS[variant],
         SIZES[size],
         className

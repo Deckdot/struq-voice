@@ -63,7 +63,7 @@ export function RadioGroup<T extends string>({
               "flex cursor-pointer items-start gap-3 px-4 py-2.5",
               "transition-colors duration-control",
               active ? "bg-surface-active" : "hover:bg-surface-hover",
-              disabled && "cursor-not-allowed opacity-45"
+              disabled && "cursor-not-allowed text-text-muted"
             )}
           >
             <RadixRadio.Item

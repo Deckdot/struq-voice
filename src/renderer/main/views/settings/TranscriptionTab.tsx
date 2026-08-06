@@ -112,13 +112,10 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
         </Card>
       )}
 
-      <SettingsGroup
-        title="Backup service"
-        description="Used when the main service cannot help."
-      >
+      <SettingsGroup title="Backup service">
         <SettingsRow
           label="If the main service fails"
-          hint="Tried only when the main service fails."
+          hint="Tried only when the main service cannot help."
           control={
             <div className="w-56">
               <Select

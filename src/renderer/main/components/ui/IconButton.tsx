@@ -40,7 +40,7 @@ export function IconButton({
   const base = cn(
     "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md",
     "transition-colors duration-hover",
-    "disabled:cursor-not-allowed disabled:opacity-45",
+    "disabled:cursor-not-allowed disabled:bg-transparent disabled:text-text-muted",
     square,
     variant === "secondary" && "bg-surface text-text-secondary border border-border hover:bg-surface-hover hover:text-text active:bg-surface-active",
     variant === "ghost" && "text-text-secondary hover:bg-surface-hover hover:text-text active:bg-surface-active",

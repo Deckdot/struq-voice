@@ -25,10 +25,10 @@ export interface DropdownMenuProps {
 }
 
 const ITEM_CLASS =
-  "flex h-8 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm text-text outline-none data-[highlighted]:bg-surface-hover data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45";
+  "flex h-8 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm text-text outline-none data-[highlighted]:bg-surface-hover data-[disabled]:cursor-not-allowed data-[disabled]:text-text-muted";
 
 const DANGER_ITEM_CLASS =
-  "flex h-8 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm text-danger outline-none data-[highlighted]:bg-danger-soft data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45";
+  "flex h-8 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm text-danger outline-none data-[highlighted]:bg-danger-soft data-[disabled]:cursor-not-allowed data-[disabled]:text-text-muted";
 
 export function DropdownMenu({
   trigger,

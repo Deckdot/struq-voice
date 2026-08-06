@@ -57,7 +57,7 @@ export function Slider({
         }}
         className={cn(
           "h-1 w-full cursor-pointer appearance-none rounded-pill outline-none",
-          "disabled:cursor-not-allowed disabled:opacity-45",
+          "disabled:cursor-not-allowed disabled:accent-text-muted",
           "[&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-pill [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-accent-solid [&::-webkit-slider-thumb]:bg-bg [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-press motion-safe:[&::-webkit-slider-thumb]:hover:scale-110",
           "[&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-pill [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-accent-solid [&::-moz-range-thumb]:bg-bg"
         )}

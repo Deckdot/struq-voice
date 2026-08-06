@@ -33,7 +33,7 @@ export function Switch({
         "relative h-5 w-9 shrink-0 cursor-pointer rounded-pill border border-transparent",
         "transition-colors duration-hover",
         "bg-border data-[state=checked]:bg-accent-solid",
-        "disabled:cursor-not-allowed disabled:opacity-45",
+        "disabled:cursor-not-allowed disabled:bg-bg-sunken",
         className
       )}
     >

@@ -19,6 +19,8 @@ import type {
   SettingsGetResult,
   SettingsUpdateResult,
   SettingsChangedEvent,
+  DictionaryExportResult,
+  DictionaryImportResult,
   UpdatesInstallResult,
   UpdatesStateResult
 } from "../shared/ipc";
@@ -171,6 +173,12 @@ const api: MainWindowApi = {
         ipcRenderer.removeListener(channels.settings.changed, handler);
       };
     }
+  },
+  dictionary: {
+    export: () =>
+      ipcRenderer.invoke(channels.dictionary.export) as Promise<DictionaryExportResult>,
+    import: () =>
+      ipcRenderer.invoke(channels.dictionary.import) as Promise<DictionaryImportResult>
   },
   openRouterKey: {
     status: () =>

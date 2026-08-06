@@ -1,14 +1,18 @@
+import { readFile, writeFile } from "node:fs/promises";
 import { BrowserWindow, app, clipboard, dialog, ipcMain } from "electron";
 import type { HistoryStore } from "./db/history-store";
 import type { ModelsService } from "./models";
 import type { SecretsStore } from "./store/secrets";
 import type { SettingsStore } from "./store/settings-store";
-import { ONBOARDING_VERSION, migrateSettings } from "../shared/settings";
+import { ONBOARDING_VERSION, dictionaryFileSchema, migrateSettings } from "../shared/settings";
 import type { HardwareProfile, ModelRecommendation } from "../shared/hardware";
 import { UNKNOWN_HARDWARE, recommendModel } from "../shared/hardware";
 import type {
   AppReadiness,
   DevicesListResult,
+  DictionaryExportResult,
+  DictionaryFile,
+  DictionaryImportResult,
   HistoryDeleteRequest,
   HistoryListRequest,
   HistorySearchRequest,
@@ -27,6 +31,8 @@ import type {
 import {
   appGetReadinessChannel,
   appGetVersionChannel,
+  dictionaryExportChannel,
+  dictionaryImportChannel,
   onboardingCompleteChannel,
   onboardingProfileChannel,
   onboardingStartRecommendedChannel,
@@ -389,6 +395,71 @@ export const registerIpcHandlers = (
       return { settings: settingsStore?.get() ?? migrateSettings({}) };
     }
   );
+
+  ipcMain.handle(dictionaryExportChannel, async (): Promise<DictionaryExportResult> => {
+    if (settingsStore === null) return { ok: false, message: "Settings unavailable." };
+    const picked = await dialog.showSaveDialog({
+      title: "Export dictionary",
+      defaultPath: "struq-voice-dictionary.json",
+      filters: [{ name: "JSON", extensions: ["json"] }]
+    });
+    if (picked.canceled || picked.filePath.length === 0) {
+      return { ok: false, message: "Export cancelled." };
+    }
+    const file: DictionaryFile = {
+      kind: "struq-voice-dictionary",
+      version: 1,
+      entries: settingsStore.get().post.dictionary
+    };
+    await writeFile(picked.filePath, `${JSON.stringify(file, null, 2)}\n`, "utf8");
+    return { ok: true, path: picked.filePath };
+  });
+
+  ipcMain.handle(dictionaryImportChannel, async (): Promise<DictionaryImportResult> => {
+    if (settingsStore === null) {
+      return { ok: false, added: 0, skipped: 0, message: "Settings unavailable." };
+    }
+    const picked = await dialog.showOpenDialog({
+      title: "Import dictionary file",
+      properties: ["openFile"],
+      filters: [{ name: "JSON", extensions: ["json"] }]
+    });
+    if (picked.canceled || picked.filePaths.length === 0 || picked.filePaths[0] === undefined) {
+      return { ok: false, added: 0, skipped: 0, message: "Import cancelled." };
+    }
+    try {
+      const content = await readFile(picked.filePaths[0], "utf8");
+      const json: unknown = JSON.parse(content);
+      const parsed = dictionaryFileSchema.safeParse(json);
+      if (!parsed.success) {
+        return { ok: false, added: 0, skipped: 0, message: "Invalid dictionary file format." };
+      }
+      const current = settingsStore.get();
+      const existing = current.post.dictionary;
+      const existingFromSet = new Set(existing.map((e) => e.from.toLowerCase()));
+      let added = 0;
+      let skipped = 0;
+      const newEntries = [...existing];
+
+      for (const entry of parsed.data.entries) {
+        if (existingFromSet.has(entry.from.toLowerCase())) {
+          skipped++;
+        } else {
+          existingFromSet.add(entry.from.toLowerCase());
+          newEntries.push(entry);
+          added++;
+        }
+      }
+
+      settingsStore.update({
+        post: { ...current.post, dictionary: newEntries }
+      });
+      return { ok: true, added, skipped };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to read file.";
+      return { ok: false, added: 0, skipped: 0, message };
+    }
+  });
 
   if (settingsStore !== null) {
     settingsStore.subscribe((settings) => {

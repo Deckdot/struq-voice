@@ -68,6 +68,10 @@ export interface MainWindowApi {
     update: (patch: Partial<Settings>) => Promise<{ settings: Settings }>;
     onChange: (listener: (settings: Settings) => void) => () => void;
   };
+  readonly dictionary: {
+    export: () => Promise<{ ok: boolean; path?: string; message?: string }>;
+    import: () => Promise<{ ok: boolean; added: number; skipped: number; message?: string }>;
+  };
   readonly openRouterKey: {
     status: () => Promise<{ configured: boolean; stored: boolean }>;
     set: (key: string) => Promise<{ ok: boolean; message?: string }>;

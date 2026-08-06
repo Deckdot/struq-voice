@@ -231,9 +231,10 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.delivery.clipboard.title": "Klembord",
   "settings.delivery.restore.label": "Vorig klembord herstellen",
   "settings.delivery.restore.hint": "Zet terug wat je had gekopieerd voor het plakken.",
-  "settings.delivery.advanced": "Geavanceerd",
   "settings.delivery.delay.label": "Herstelvertraging",
   "settings.delivery.delay.hint": "Verhoog als een trage app het klembord nog leest.",
+  "settings.delivery.pressEnter.label": "Druk op Enter na plakken",
+  "settings.delivery.pressEnter.hint": "Verstuurt automatisch een Enter-toetsaanslag naar het geopende venster na het invoegen.",
   "settings.delivery.pasteFallback": "Als plakken ooit mislukt, staat de tekst nog op je klembord. Druk zelf op Ctrl+V.",
 
   // Text Tab

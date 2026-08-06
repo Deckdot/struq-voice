@@ -227,9 +227,10 @@ export const es: Partial<Record<MessageKey, unknown>> = {
   "settings.delivery.clipboard.title": "Portapapeles",
   "settings.delivery.restore.label": "Restaurar portapapeles anterior",
   "settings.delivery.restore.hint": "Restaura lo que tenías copiado antes del pegado.",
-  "settings.delivery.advanced": "Avanzado",
   "settings.delivery.delay.label": "Retardo de restauración",
   "settings.delivery.delay.hint": "Aumenta si una aplicación lenta aún está leyendo el portapapeles.",
+  "settings.delivery.pressEnter.label": "Presionar Enter después de pegar",
+  "settings.delivery.pressEnter.hint": "Envía una pulsación de tecla Enter a la ventana enfocada inmediatamente después de pegar.",
   "settings.delivery.pasteFallback": "Si el pegado automático falla, el texto sigue en tu portapapeles. Presiona Ctrl+V.",
 
   "settings.text.post.title": "Limpieza",

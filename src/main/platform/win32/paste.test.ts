@@ -13,7 +13,9 @@ interface Fakes {
   readText: ReturnType<typeof vi.fn<() => string>>;
   writeText: ReturnType<typeof vi.fn<(text: string) => void>>;
   keyTap: ReturnType<typeof vi.fn<() => void>>;
+  keyTapEnter: ReturnType<typeof vi.fn<() => void>>;
   execPowershell: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  execPowershellEnter: ReturnType<typeof vi.fn<() => Promise<void>>>;
   delay: ReturnType<typeof vi.fn<(ms: number) => Promise<void>>>;
 }
 
@@ -34,12 +36,14 @@ const makeFakes = (overrides: FakesOverrides = {}): Fakes => {
   const keyTap = vi.fn<() => void>(() => {
     if (overrides.keyTapError !== undefined) throw overrides.keyTapError;
   });
+  const keyTapEnter = vi.fn<() => void>();
   const execPowershell = vi.fn<() => Promise<void>>(() => {
     if (overrides.powershellError !== undefined) {
       return Promise.reject(overrides.powershellError);
     }
     return Promise.resolve();
   });
+  const execPowershellEnter = vi.fn<() => Promise<void>>(() => Promise.resolve());
   const delay = vi.fn<(ms: number) => Promise<void>>(
     (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   );
@@ -48,14 +52,18 @@ const makeFakes = (overrides: FakesOverrides = {}): Fakes => {
       getFocusedWindow,
       clipboard: { readText, writeText },
       keyTap,
+      keyTapEnter,
       execPowershell,
+      execPowershellEnter,
       delay,
     },
     getFocusedWindow,
     readText,
     writeText,
     keyTap,
+    keyTapEnter,
     execPowershell,
+    execPowershellEnter,
     delay,
   };
 };
@@ -146,5 +154,16 @@ describe("paste delivery", () => {
     expect(f.writeText).toHaveBeenCalledTimes(1);
     expect(f.writeText).toHaveBeenCalledWith("transcript");
     expect(f.delay).not.toHaveBeenCalled();
+  });
+
+  it("synthesizes enter key when pressEnterAfterPaste is enabled", async () => {
+    const f = makeFakes({ stash: "" });
+    const promise = insertTextIntoActiveApp("transcript", { ...OPTIONS, pressEnterAfterPaste: true }, f.deps);
+
+    await vi.advanceTimersByTimeAsync(50);
+    const result = await promise;
+
+    expect(result).toEqual({ ok: true, value: { inserted: true } });
+    expect(f.keyTapEnter).toHaveBeenCalledTimes(1);
   });
 });

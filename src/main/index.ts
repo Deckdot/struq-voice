@@ -426,6 +426,7 @@ if (!gotLock) {
           // since this capture started.
           restoreClipboard: settingsStore.get().restoreClipboard,
           restoreClipboardDelayMs: settingsStore.get().restoreClipboardDelayMs,
+          pressEnterAfterPaste: settingsStore.get().pressEnterAfterPaste,
         });
         return outcome.ok ? outcome.value : { inserted: false };
       },

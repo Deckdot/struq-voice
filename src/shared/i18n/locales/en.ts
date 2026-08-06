@@ -244,9 +244,10 @@ export const en = {
   "settings.delivery.clipboard.title": "Clipboard",
   "settings.delivery.restore.label": "Restore previous clipboard",
   "settings.delivery.restore.hint": "Puts back what you had copied before the paste.",
-  "settings.delivery.advanced": "Advanced",
   "settings.delivery.delay.label": "Restore delay",
   "settings.delivery.delay.hint": "Increase if a slow app is still reading the clipboard.",
+  "settings.delivery.pressEnter.label": "Press Enter after paste",
+  "settings.delivery.pressEnter.hint": "Sends an Enter keypress to the focused window immediately after pasting.",
   "settings.delivery.pasteFallback": "If a paste ever fails, the text is still on your clipboard. Press Ctrl+V yourself.",
 
   // Text Tab

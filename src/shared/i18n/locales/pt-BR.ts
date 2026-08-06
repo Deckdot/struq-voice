@@ -227,9 +227,10 @@ export const ptBR: Partial<Record<MessageKey, unknown>> = {
   "settings.delivery.clipboard.title": "Área de transferência",
   "settings.delivery.restore.label": "Restaurar área de transferência anterior",
   "settings.delivery.restore.hint": "Restaura o que você tinha copiado antes de colar.",
-  "settings.delivery.advanced": "Avançado",
   "settings.delivery.delay.label": "Atraso na restauração",
   "settings.delivery.delay.hint": "Aumente se um aplicativo lento ainda estiver lendo a área de transferência.",
+  "settings.delivery.pressEnter.label": "Pressionar Enter após colar",
+  "settings.delivery.pressEnter.hint": "Envia um pressionamento de tecla Enter para a janela focada imediatamente após colar.",
   "settings.delivery.pasteFallback": "Se a colagem automática falhar, o texto continua na área de transferência. Pressione Ctrl+V.",
 
   "settings.text.post.title": "Limpeza",

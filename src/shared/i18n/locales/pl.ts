@@ -227,9 +227,10 @@ export const pl: Partial<Record<MessageKey, unknown>> = {
   "settings.delivery.clipboard.title": "Schowek",
   "settings.delivery.restore.label": "Przywróć poprzedni schowek",
   "settings.delivery.restore.hint": "Przywraca zawartość skopiowaną przed wklejeniem dyktowania.",
-  "settings.delivery.advanced": "Zaawansowane",
   "settings.delivery.delay.label": "Opóźnienie przywracania",
   "settings.delivery.delay.hint": "Zwiększ, jeśli wolniejsza aplikacja wciąż odczytuje schowek.",
+  "settings.delivery.pressEnter.label": "Naciśnij Enter po wklejeniu",
+  "settings.delivery.pressEnter.hint": "Wysyła naciśnięcie klawisza Enter do aktywnego okna zaraz po wklejeniu.",
   "settings.delivery.pasteFallback": "Jeśli automatyczne wklejanie nie zadziała, tekst pozostanie w schowku. Naciśnij Ctrl+V.",
 
   "settings.text.post.title": "Czyszczenie tekstu",

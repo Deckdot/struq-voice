@@ -227,9 +227,10 @@ export const de: Partial<Record<MessageKey, unknown>> = {
   "settings.delivery.clipboard.title": "Zwischenablage",
   "settings.delivery.restore.label": "Vorherige Zwischenablage wiederherstellen",
   "settings.delivery.restore.hint": "Stellt wieder her, was vor dem Einfügen kopiert war.",
-  "settings.delivery.advanced": "Erweitert",
   "settings.delivery.delay.label": "Wiederherstellungsverzögerung",
   "settings.delivery.delay.hint": "Erhöhen Sie diesen Wert, wenn eine langsame App noch aus der Zwischenablage liest.",
+  "settings.delivery.pressEnter.label": "Enter nach dem Einfügen drücken",
+  "settings.delivery.pressEnter.hint": "Sendet sofort nach dem Einfügen einen Enter-Tastendruck an das fokussierte Fenster.",
   "settings.delivery.pasteFallback": "Falls das Einfügen fehlschlägt, befindet sich der Text weiterhin in der Zwischenablage. Drücken Sie Strg+V.",
 
   "settings.text.post.title": "Bereinigung",

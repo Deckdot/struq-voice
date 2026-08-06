@@ -227,9 +227,10 @@ export const fr: Partial<Record<MessageKey, unknown>> = {
   "settings.delivery.clipboard.title": "Presse-papiers",
   "settings.delivery.restore.label": "Restaurer le presse-papiers précédent",
   "settings.delivery.restore.hint": "Remet ce qui était copié avant la dictée.",
-  "settings.delivery.advanced": "Avancé",
   "settings.delivery.delay.label": "Délai de restauration",
   "settings.delivery.delay.hint": "Augmentez si une application lente lit encore le presse-papiers.",
+  "settings.delivery.pressEnter.label": "Appuyer sur Entrée après le collage",
+  "settings.delivery.pressEnter.hint": "Envoie une touche Entrée à la fenêtre active immédiatement après le collage.",
   "settings.delivery.pasteFallback": "Si l'insertion automatique échoue, le texte reste dans votre presse-papiers. Appuyez sur Ctrl+V.",
 
   "settings.text.post.title": "Nettoyage",

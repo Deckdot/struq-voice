@@ -66,6 +66,8 @@ export const settingsSchema = z.object({
   restoreClipboard: z.boolean().default(true),
   /** How long to wait before restoring the clipboard (ms). */
   restoreClipboardDelayMs: z.number().int().min(0).max(5000).default(400),
+  /** Synthesize an Enter keystroke into the active window after pasting. */
+  pressEnterAfterPaste: z.boolean().default(false),
   /** Start with Windows, hidden to the tray. */
   autostart: z.boolean().default(false),
   /** Press-and-hold accelerator ("CommandOrControl+Space"). */

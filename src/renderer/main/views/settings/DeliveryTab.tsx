@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { Settings } from "../../../../shared/settings";
-import { Disclosure, NumberInput, SettingsGroup, SettingsNote, SettingsRow, Switch } from "../../components/ui";
+import { NumberInput, SettingsGroup, SettingsNote, SettingsRow, Switch } from "../../components/ui";
 import { useTranslation } from "../../lib/useTranslation";
 
 /**
@@ -30,28 +30,36 @@ export function DeliveryTab({ settings, update }: DeliveryTabProps): JSX.Element
             />
           }
         />
-        <div className="px-4 py-3">
-          <Disclosure label={t("settings.delivery.advanced")}>
-            <SettingsRow
-              label={t("settings.delivery.delay.label")}
-              hint={t("settings.delivery.delay.hint")}
-              control={
-                <div className="w-32">
-                  <NumberInput
-                    value={settings.restoreClipboardDelayMs}
-                    min={0}
-                    max={5000}
-                    step={50}
-                    unit="ms"
-                    onChange={(value) => {
-                      update({ restoreClipboardDelayMs: value });
-                    }}
-                  />
-                </div>
-              }
+        <SettingsRow
+          label={t("settings.delivery.delay.label")}
+          hint={t("settings.delivery.delay.hint")}
+          control={
+            <div className="w-32">
+              <NumberInput
+                value={settings.restoreClipboardDelayMs}
+                min={0}
+                max={5000}
+                step={50}
+                unit="ms"
+                onChange={(value) => {
+                  update({ restoreClipboardDelayMs: value });
+                }}
+              />
+            </div>
+          }
+        />
+        <SettingsRow
+          label={t("settings.delivery.pressEnter.label")}
+          hint={t("settings.delivery.pressEnter.hint")}
+          control={
+            <Switch
+              checked={settings.pressEnterAfterPaste}
+              onChange={(pressEnterAfterPaste) => {
+                update({ pressEnterAfterPaste });
+              }}
             />
-          </Disclosure>
-        </div>
+          }
+        />
         <SettingsNote icon="ph:info">
           {t("settings.delivery.pasteFallback")}
         </SettingsNote>

@@ -227,9 +227,10 @@ export const it: Partial<Record<MessageKey, unknown>> = {
   "settings.delivery.clipboard.title": "Appunti",
   "settings.delivery.restore.label": "Ripristina appunti precedenti",
   "settings.delivery.restore.hint": "Ripristina ciò che avevi copiato prima dell'inserimento.",
-  "settings.delivery.advanced": "Avanzate",
   "settings.delivery.delay.label": "Ritardo di ripristino",
   "settings.delivery.delay.hint": "Aumenta se un'applicazione lenta sta ancora leggendo gli appunti.",
+  "settings.delivery.pressEnter.label": "Premi Invio dopo l'incolla",
+  "settings.delivery.pressEnter.hint": "Invia una pressione del tasto Invio alla finestra attiva subito dopo l'incolla.",
   "settings.delivery.pasteFallback": "Se l'inserimento automatico fallisce, il testo resta negli appunti. Premi Ctrl+V.",
 
   "settings.text.post.title": "Pulizia",

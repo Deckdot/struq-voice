@@ -95,6 +95,17 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
   useEffect(() => {
     return api.models.onDownloadProgress((event) => {
       if (profile === null || event.modelId !== profile.recommendation.modelId) return;
+      if (event.state === "done") {
+        setInstalled(true);
+        return;
+      }
+      if (event.state === "error") {
+        // A failed download must flip the step off "Downloading" and show the
+        // cause; without the terminal push it would spin forever.
+        setInstalled(false);
+        setFailure(event.message);
+        return;
+      }
       setReceivedBytes(event.receivedBytes);
 
       const now = Date.now();

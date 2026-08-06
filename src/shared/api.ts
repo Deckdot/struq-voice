@@ -5,7 +5,12 @@
  */
 
 import type { CaptureState } from "./capture";
-import type { AppReadiness, HistoryStatsResult, TranscriptRecord } from "./ipc";
+import type {
+  AppReadiness,
+  HistoryStatsResult,
+  ModelsDownloadProgressEvent,
+  TranscriptRecord
+} from "./ipc";
 import type { ModelsListResult, ModelsModelResult } from "./ipc";
 import type { OnboardingProfileResult, OnboardingStartRecommendedResult } from "./ipc";
 import type { Settings } from "./settings";
@@ -52,11 +57,7 @@ export interface MainWindowApi {
       message?: string;
     }>;
     onDownloadProgress: (
-      listener: (event: {
-        modelId: string;
-        receivedBytes: number;
-        totalBytes: number;
-      }) => void
+      listener: (event: ModelsDownloadProgressEvent) => void
     ) => () => void;
   };
   readonly metrics: {

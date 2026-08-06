@@ -6,7 +6,7 @@
 
 import type { CaptureState } from "./capture";
 import type { HardwareProfile, ModelRecommendation } from "./hardware";
-import type { ModelStatus } from "./models";
+import type { ModelDownloadErrorCode, ModelStatus } from "./models";
 import type { Settings } from "./settings";
 import type { UpdateState } from "./updates";
 
@@ -314,12 +314,25 @@ export interface ModelsListResult {
   };
 }
 
-/** Main to renderer: download progress for one model, unthrottled. */
-export interface ModelsDownloadProgressEvent {
-  readonly modelId: string;
-  readonly receivedBytes: number;
-  readonly totalBytes: number;
-}
+/**
+ * Main to renderer: download state changes for one model. Progress events are
+ * throttled by the downloader; a terminal event (done or error) is pushed once
+ * so the Models view and onboarding never freeze on the last progress tick.
+ */
+export type ModelsDownloadProgressEvent =
+  | {
+      readonly state: "downloading";
+      readonly modelId: string;
+      readonly receivedBytes: number;
+      readonly totalBytes: number;
+    }
+  | { readonly state: "done"; readonly modelId: string }
+  | {
+      readonly state: "error";
+      readonly modelId: string;
+      readonly code: ModelDownloadErrorCode;
+      readonly message: string;
+    };
 
 export const settingsGetChannel = "settings:get" as const;
 export const settingsUpdateChannel = "settings:update" as const;

@@ -69,7 +69,9 @@ const YELLOW = "\u001b[33m";
 const OFF = "\u001b[0m";
 
 let step = 0;
-const total = skipGates ? 5 : 6;
+/* Read commits, tree, plan, [gates], cut, build+sign+verify, push, publish.
+   A dry run stops after the build, so it never reaches the last two. */
+const total = (skipGates ? 5 : 6) + (dryRun ? 0 : 1);
 
 function heading(text) {
   step += 1;
@@ -343,7 +345,7 @@ if (dryRun) {
  * 6. Build, sign, verify, publish.
  * ------------------------------------------------------------------ */
 
-heading(dryRun ? "Building, signing and verifying" : "Building, signing, verifying and publishing");
+heading("Building, signing and verifying");
 
 if (dryRun) {
   /* A dry run still builds and verifies. A "dry run" that skips the only steps
@@ -372,29 +374,42 @@ try {
   );
 }
 
-try {
-  stream(process.execPath, [resolve("scripts/publish-release.mjs")]);
-} catch {
-  die(
-    "publishing failed",
-    `The release is built, signed and verified, and v${target} is tagged\n` +
-      "locally. Retry the upload alone with `pnpm release:publish`."
-  );
-}
+/* Push BEFORE publishing, because `gh release create` refuses a tag that is
+   only local: "tag vX.Y.Z exists locally but has not been pushed". Pushing
+   afterwards deadlocks the pipeline on its own last step.
 
-/* Push last. The tag is what makes a published release reproducible, so it
-   goes up only once there is something on the feed for it to correspond to. */
+   The safety property is unchanged. What must not reach the remote is an
+   unverified build, and the push still happens after build, sign and verify.
+   A pushed tag with no release attached is harmless and self-correcting: the
+   feed serves the previous version until the upload lands, and a retry with
+   `pnpm release:publish` completes it. */
 heading("Pushing the commit and tag");
 try {
   stream("git", ["push", "origin", branch]);
   stream("git", ["push", "origin", `v${target}`]);
   console.log(`  ${GREEN}pushed${OFF} ${branch} and v${target}`);
 } catch {
-  console.error(
-    `\n${YELLOW}release-auto: the release is live but the push failed.${OFF}\n` +
-      `  Run: git push origin ${branch} && git push origin v${target}`
+  die(
+    "the push failed, so nothing was published",
+    `v${target} is built, signed and verified locally but the tag never\n` +
+      "reached the remote, and a release cannot be created without it.\n" +
+      `Fix the remote, then: git push origin ${branch} && git push origin v${target}\n` +
+      "followed by `pnpm release:publish`."
   );
-  process.exit(1);
+}
+
+heading("Publishing to the feed");
+try {
+  stream(process.execPath, [resolve("scripts/publish-release.mjs")]);
+  console.log(`  ${GREEN}published${OFF} v${target}`);
+} catch {
+  die(
+    "publishing failed",
+    `The release is built, signed and verified, and v${target} is pushed.\n` +
+      "Only the upload is missing, so the feed still serves the previous\n" +
+      "version and no installed copy has seen a broken update.\n" +
+      "Retry the upload alone with `pnpm release:publish`."
+  );
 }
 
 console.log(`\n${GREEN}${BOLD}release-auto: OK${OFF}`);

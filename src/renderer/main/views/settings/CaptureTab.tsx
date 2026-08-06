@@ -15,6 +15,8 @@ import {
 } from "../../components/ui";
 import { MicrophoneMeter } from "../../components/MicrophoneMeter";
 
+import { useTranslation } from "../../lib/useTranslation";
+
 /**
  * The Capture settings tab: the keys, the microphone, the sounds Struq
  * Voice plays, the optional live transcript. Things that affect what
@@ -35,6 +37,7 @@ export function CaptureTab({
   devices,
   currentDeviceId
 }: CaptureTabProps): JSX.Element {
+  const { t } = useTranslation();
   const [level, setLevel] = useState(0);
 
   useEffect(() => {
@@ -49,11 +52,11 @@ export function CaptureTab({
   return (
     <div className="flex flex-col gap-6">
       <SettingsGroup
-        title="Keys"
+        title={t("settings.general.hotkeys.title")}
       >
         <SettingsRow
-          label="Hold to record"
-          hint="Hold, speak, release."
+          label={t("settings.general.ptt.label")}
+          hint={t("settings.general.ptt.hint")}
           control={
             <HotkeyRecorder
               label="hold to record key"
@@ -66,8 +69,8 @@ export function CaptureTab({
           }
         />
         <SettingsRow
-          label="Press to toggle"
-          hint="Press once to start, once to stop."
+          label={t("settings.general.toggle.label")}
+          hint={t("settings.general.toggle.hint")}
           control={
             <HotkeyRecorder
               label="press to toggle key"
@@ -82,11 +85,11 @@ export function CaptureTab({
       </SettingsGroup>
 
       <SettingsGroup
-        title="Microphone"
+        title={t("settings.capture.device.title")}
       >
         <SettingsRow
-          label="Active microphone"
-          hint="An empty list means Windows has not granted microphone permission."
+          label={t("settings.capture.device.label")}
+          hint={t("settings.capture.device.permissionHint")}
           control={
             <div className="w-72">
               <Select
@@ -98,7 +101,7 @@ export function CaptureTab({
                 }}
                 disabled={devices.length === 0}
               >
-                {devices.length === 0 && <option value="">No microphones found</option>}
+                {devices.length === 0 && <option value="">{t("settings.capture.device.none")}</option>}
                 {devices.map((device) => (
                   <option key={device.deviceId} value={device.deviceId}>
                     {device.label}
@@ -117,24 +120,24 @@ export function CaptureTab({
                 aria-hidden="true"
               />
               <span className="text-xs font-medium text-text">
-                {signalDetected ? "Signal detected" : "Speak to test your microphone"}
+                {signalDetected ? t("settings.capture.device.signalDetected") : t("settings.capture.device.speakToTest")}
               </span>
             </div>
             <span className="shrink-0 text-2xs text-text-muted tabular-nums" data-numeric>
               {String(meterValue)}%
             </span>
           </div>
-          <MicrophoneMeter level={level} label="Microphone test level" />
+          <MicrophoneMeter level={level} label={t("settings.capture.device.meterLabel")} />
         </div>
       </SettingsGroup>
 
       <SettingsGroup
-        title="Sounds"
-        description="Confirms the microphone is live without looking."
+        title={t("settings.capture.audio.title")}
+        description={t("settings.capture.audio.subtitle")}
       >
         <SettingsRow
-          label="Play capture sounds"
-          hint="A chime when a capture starts and ends."
+          label={t("settings.capture.sounds.label")}
+          hint={t("settings.capture.sounds.hint")}
           control={
             <Switch
               checked={settings.captureSounds}
@@ -145,8 +148,8 @@ export function CaptureTab({
           }
         />
         <SettingsRow
-          label="Volume"
-          hint="No effect when sounds are off."
+          label={t("settings.capture.volume.label")}
+          hint={t("settings.capture.volume.hint")}
           control={
             <div className="w-48">
               <Slider
@@ -166,12 +169,12 @@ export function CaptureTab({
       </SettingsGroup>
 
       <SettingsGroup
-        title="Live transcript"
-        description="Costs extra processing while you speak."
+        title={t("settings.capture.live.title")}
+        description={t("settings.capture.live.subtitle")}
       >
         <SettingsRow
-          label="Show words as I speak"
-          hint="Competes with the final pass on slower machines."
+          label={t("settings.capture.live.label")}
+          hint={t("settings.capture.live.hint")}
           control={
             <Switch
               checked={settings.liveTranscription}
@@ -182,8 +185,8 @@ export function CaptureTab({
           }
         />
         <SettingsRow
-          label="How often to refresh"
-          hint="Lower numbers are smoother but use more processor time."
+          label={t("settings.capture.live.refreshLabel")}
+          hint={t("settings.capture.live.refreshHint")}
           control={
             <div className="w-32">
               <NumberInput
@@ -203,12 +206,11 @@ export function CaptureTab({
       </SettingsGroup>
 
       <SettingsGroup
-        title="Capture timing"
-        description="The defaults suit most people."
+        title={t("settings.capture.duration.title")}
       >
         <SettingsRow
-          label="Shortest capture"
-          hint="Shorter captures are discarded."
+          label={t("settings.capture.minDuration.label")}
+          hint={t("settings.capture.minDuration.hintText")}
           control={
             <div className="w-28">
               <NumberInput
@@ -225,8 +227,8 @@ export function CaptureTab({
           }
         />
         <SettingsRow
-          label="Longest capture"
-          hint="Longer captures are force-stopped."
+          label={t("settings.capture.maxDuration.label")}
+          hint={t("settings.capture.maxDuration.hintText")}
           control={
             <div className="w-32">
               <NumberInput
@@ -243,8 +245,8 @@ export function CaptureTab({
           }
         />
         <SettingsRow
-          label="Pre-roll"
-          hint="Kept from before the key went down, so early words survive."
+          label={t("settings.capture.preroll.label")}
+          hint={t("settings.capture.preroll.hintText")}
           control={
             <div className="w-28">
               <NumberInput

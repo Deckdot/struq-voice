@@ -1,12 +1,11 @@
 import type { JSX } from "react";
 import type { MainWindowApi } from "../../../../shared/api";
 import type { Settings } from "../../../../shared/settings";
-import { Button, SegmentedControl, Select, SettingsGroup, SettingsRow } from "../../components/ui";
+import { Button, SegmentedControl, SettingsGroup, SettingsRow } from "../../components/ui";
 import { useTranslation } from "../../lib/useTranslation";
-import { LOCALE_META, resolveLocale, SUPPORTED_LOCALES } from "../../../../shared/i18n";
 
 /**
- * The Appearance settings tab: theme, interface language and the floating capture panel.
+ * The Appearance settings tab: theme and the floating capture panel position.
  */
 export interface AppearanceTabProps {
   readonly api: MainWindowApi;
@@ -16,28 +15,25 @@ export interface AppearanceTabProps {
 
 type Theme = "system" | "light" | "dark";
 
-const THEME_OPTIONS: readonly { value: Theme; label: string; icon: string }[] = [
-  { value: "system", label: "Follow Windows", icon: "ph:circle-half" },
-  { value: "light", label: "Light", icon: "ph:sun" },
-  { value: "dark", label: "Dark", icon: "ph:moon" }
-];
-
 export function AppearanceTab({ settings, update }: AppearanceTabProps): JSX.Element {
   const { t } = useTranslation();
   const theme: Theme = settings.theme;
 
-  const resolvedSystemLocale = resolveLocale(navigator.languages);
-  const resolvedSystemMeta = LOCALE_META[resolvedSystemLocale];
+  const themeOptions: readonly { value: Theme; label: string; icon: string }[] = [
+    { value: "system", label: t("settings.appearance.theme.system"), icon: "ph:circle-half" },
+    { value: "light", label: t("settings.appearance.theme.light"), icon: "ph:sun" },
+    { value: "dark", label: t("settings.appearance.theme.dark"), icon: "ph:moon" }
+  ];
 
   return (
     <div className="flex flex-col gap-6">
       <SettingsGroup title={t("settings.appearance.theme.title")}>
         <SettingsRow
           label={t("settings.appearance.theme.label")}
-          hint="Affects the whole window, including menus and dialogs."
+          hint={t("settings.appearance.theme.hint")}
           control={
             <SegmentedControl<Theme>
-              options={THEME_OPTIONS}
+              options={themeOptions}
               value={theme}
               onChange={(next) => {
                 update({ theme: next });
@@ -47,41 +43,13 @@ export function AppearanceTab({ settings, update }: AppearanceTabProps): JSX.Ele
         />
       </SettingsGroup>
 
-      <SettingsGroup title={t("settings.appearance.language.title")}>
-        <SettingsRow
-          label={t("settings.appearance.language.label")}
-          hint="Change the display language for menus, settings, and notifications."
-          control={
-            <Select
-              value={settings.locale}
-              onChange={(e) => {
-                update({ locale: e.target.value });
-              }}
-            >
-              <option value="system">
-                {t("settings.appearance.language.system", { resolved: resolvedSystemMeta.endonym })}
-              </option>
-              {SUPPORTED_LOCALES.map((code) => {
-                const meta = LOCALE_META[code];
-                const betaTag = meta.reviewed ? "" : " (Beta)";
-                return (
-                  <option key={code} value={code}>
-                    {meta.endonym}{betaTag}
-                  </option>
-                );
-              })}
-            </Select>
-          }
-        />
-      </SettingsGroup>
-
       <SettingsGroup
-        title="Capture panel"
-        description="Drag it anywhere. The position is remembered."
+        title={t("settings.appearance.panel.title")}
+        description={t("settings.appearance.panel.subtitle")}
       >
         <SettingsRow
-          label="Reset panel position"
-          hint="Brings it back to the bottom centre."
+          label={t("settings.appearance.panel.resetLabel")}
+          hint={t("settings.appearance.panel.resetHint")}
           control={
             <Button
               variant="secondary"
@@ -90,7 +58,7 @@ export function AppearanceTab({ settings, update }: AppearanceTabProps): JSX.Ele
                 update({ overlayPosition: null });
               }}
             >
-              Reset position
+              {t("settings.appearance.panel.resetBtn")}
             </Button>
           }
         />

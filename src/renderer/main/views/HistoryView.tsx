@@ -6,19 +6,9 @@ import type { TranscriptRecord } from "../../../shared/ipc";
 import { EmptyState, SearchInput, TranscriptRow } from "../components/ui";
 import { formatDayHeading } from "../lib/format";
 
-const SEARCH_INPUT_ID = "history-search";
+import { useTranslation } from "../lib/useTranslation";
 
-/**
- * The History view. Every transcript Struq Voice has produced, searched
- * through the keyboard or the search field. Rows are virtualized because
- * a long-running user has thousands; the row's transcript text is the
- * thing the eye should find first, so it is the dominant element, with
- * the date and engine as quiet metadata.
- *
- * The virtualizer re-renders this component on every scroll event, so
- * everything in the render body is scroll-frequency work. Grouping, the row
- * index table and every handler are memoized for that reason, not for tidiness.
- */
+const SEARCH_INPUT_ID = "history-search";
 
 interface GroupHeader {
   readonly kind: "header";
@@ -42,23 +32,27 @@ const startOfDay = (epochMs: number): number => {
   return d.getTime();
 };
 
-const dayLabel = (epochMs: number, todayStart: number): string => {
-  const diff = Math.round((todayStart - startOfDay(epochMs)) / DAY_MS);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Yesterday";
-  return formatDayHeading(epochMs);
-};
-
-const groupRecords = (records: readonly TranscriptRecord[], todayStart: number): ListEntry[] => {
+const groupRecords = (
+  records: readonly TranscriptRecord[],
+  todayStart: number,
+  t: ReturnType<typeof useTranslation>["t"]
+): ListEntry[] => {
   const out: ListEntry[] = [];
   let lastDay = -1;
   for (const record of records) {
     const day = startOfDay(record.createdAtMs);
     if (day !== lastDay) {
+      const diff = Math.round((todayStart - day) / DAY_MS);
+      const label =
+        diff === 0
+          ? t("history.day.today")
+          : diff === 1
+            ? t("history.day.yesterday")
+            : formatDayHeading(record.createdAtMs);
       out.push({
         kind: "header",
         id: `h-${String(day)}`,
-        label: dayLabel(record.createdAtMs, todayStart)
+        label
       });
       lastDay = day;
     }
@@ -79,6 +73,7 @@ const HEADER_HEIGHT = 36;
 
 export function HistoryView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
+  const { t } = useTranslation();
   const [records, setRecords] = useState<readonly TranscriptRecord[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -89,7 +84,7 @@ export function HistoryView(): JSX.Element {
 
   // Stable within a calendar day, so the grouping memo survives every scroll.
   const todayStart = startOfDay(Date.now());
-  const entries = useMemo(() => groupRecords(records, todayStart), [records, todayStart]);
+  const entries = useMemo(() => groupRecords(records, todayStart, t), [records, todayStart, t]);
 
   // One effect owns the record set. The previous split (a load effect keyed on
   // [api] plus a search effect that returned early on an empty query) meant
@@ -265,12 +260,12 @@ export function HistoryView(): JSX.Element {
           onClear={() => {
             setQuery("");
           }}
-          placeholder="Search transcripts"
+          placeholder={t("history.searchPlaceholder")}
           className="w-[280px]"
         />
         {!loading && records.length > 0 && (
           <span className="text-2xs text-text-muted" data-numeric>
-            {String(records.length)} transcript{records.length === 1 ? "" : "s"}
+            {t("history.count", { count: records.length })}
           </span>
         )}
       </div>
@@ -283,18 +278,20 @@ export function HistoryView(): JSX.Element {
         role="list"
         aria-label="Transcripts"
       >
-        {loading && <p className="px-4 py-6 text-sm text-text-muted">Loading your transcripts...</p>}
+        {loading && <p className="px-4 py-6 text-sm text-text-muted">{t("history.loading")}</p>}
 
         {!loading && records.length === 0 && (
           <EmptyState
             icon="ph:clock-counter-clockwise"
             title={
-              query.trim().length > 0 ? "Nothing matches that search." : "No transcripts yet."
+              query.trim().length > 0
+                ? t("history.emptySearch.title")
+                : t("history.empty.title")
             }
             body={
               query.trim().length > 0
-                ? "Try a different word, or clear the search to see everything."
-                : "Hold your key, say a sentence, release. It will land here."
+                ? t("history.emptySearch.body")
+                : t("history.empty.body")
             }
           />
         )}

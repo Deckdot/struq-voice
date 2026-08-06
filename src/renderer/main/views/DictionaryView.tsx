@@ -20,6 +20,8 @@ import {
   TextInput
 } from "../components/ui";
 
+import { useTranslation } from "../lib/useTranslation";
+
 const SEARCH_INPUT_ID = "dictionary-search";
 
 interface Draft {
@@ -31,9 +33,6 @@ interface Draft {
 
 const EMPTY_DRAFT: Draft = { from: "", to: "", matchCase: false, wholeWord: true };
 
-const DEFAULT_SAMPLE =
-  "Type a sentence here to see which rules fire before you rely on them.";
-
 const STARTER_SUGGESTIONS: readonly { from: string; to: string }[] = [
   { from: "struck", to: "Struq" },
   { from: "get hub", to: "GitHub" },
@@ -42,13 +41,14 @@ const STARTER_SUGGESTIONS: readonly { from: string; to: string }[] = [
 
 export function DictionaryView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recent" | "alphabetical">("recent");
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editingFrom, setEditingFrom] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sample, setSample] = useState(DEFAULT_SAMPLE);
+  const [sample, setSample] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
   const [deleteArmedFrom, setDeleteArmedFrom] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -133,8 +133,9 @@ export function DictionaryView(): JSX.Element {
       : [...filtered].reverse();
   }, [dictionary, query, sort]);
 
-  const preview = useMemo(() => applyDictionary(sample, dictionary), [sample, dictionary]);
-  const hits = useMemo(() => countRuleHits(sample, dictionary), [sample, dictionary]);
+  const activeSample = sample.length > 0 ? sample : t("dictionary.typeSample");
+  const preview = useMemo(() => applyDictionary(activeSample, dictionary), [activeSample, dictionary]);
+  const hits = useMemo(() => countRuleHits(activeSample, dictionary), [activeSample, dictionary]);
   const firingCount = useMemo(
     () => [...hits.values()].filter((count) => count > 0).length,
     [hits]
@@ -152,11 +153,11 @@ export function DictionaryView(): JSX.Element {
   const handleAddOrUpdateRule = (): void => {
     const trimmedFrom = draft.from.trim();
     if (trimmedFrom.length === 0) {
-      setError("Please enter the word or phrase to replace.");
+      setError(t("dictionary.err.emptyFrom"));
       return;
     }
     if (checkDuplicate(trimmedFrom, editingFrom)) {
-      setError(`You already have a rule for "${trimmedFrom}".`);
+      setError(t("dictionary.err.duplicate", { from: trimmedFrom }));
       return;
     }
     setError(null);
@@ -228,38 +229,36 @@ export function DictionaryView(): JSX.Element {
   const handleExport = async (): Promise<void> => {
     const res = await api.dictionary.export();
     if (res.ok && res.path) {
-      setStatusMessage("Dictionary exported successfully.");
+      setStatusMessage(t("dictionary.msg.exported"));
     } else if (res.message && res.message !== "Export cancelled.") {
-      setStatusMessage(`Export failed: ${res.message}`);
+      setStatusMessage(t("dictionary.msg.exportFailed", { message: res.message }));
     }
   };
 
   const handleImport = async (): Promise<void> => {
     const res = await api.dictionary.import();
     if (res.ok) {
-      setStatusMessage(
-        `Added ${String(res.added)} rule${res.added === 1 ? "" : "s"}, skipped ${String(res.skipped)} duplicate${res.skipped === 1 ? "" : "s"}.`
-      );
+      setStatusMessage(t("dictionary.msg.imported", { added: res.added, skipped: res.skipped }));
     } else if (res.message && res.message !== "Import cancelled.") {
-      setStatusMessage(`Import failed: ${res.message}`);
+      setStatusMessage(t("dictionary.msg.importFailed", { message: res.message }));
     }
   };
 
   // Render text with matches highlighted
   const renderHighlightedSample = (): JSX.Element => {
     const enabledRules = dictionary.filter((r) => r.enabled && r.from.length > 0);
-    if (enabledRules.length === 0 || sample.length === 0) {
-      return <span>{sample}</span>;
+    if (enabledRules.length === 0 || activeSample.length === 0) {
+      return <span>{activeSample}</span>;
     }
 
     const ranges: { start: number; end: number }[] = [];
     for (const rule of enabledRules) {
-      for (const m of findRuleMatches(sample, rule)) {
+      for (const m of findRuleMatches(activeSample, rule)) {
         ranges.push({ start: m.start, end: m.end });
       }
     }
     if (ranges.length === 0) {
-      return <span>{sample}</span>;
+      return <span>{activeSample}</span>;
     }
 
     // Merge overlapping/adjacent ranges
@@ -278,20 +277,20 @@ export function DictionaryView(): JSX.Element {
     let curr = 0;
     merged.forEach((range, idx) => {
       if (range.start > curr) {
-        nodes.push(<span key={`t-${String(curr)}`}>{sample.slice(curr, range.start)}</span>);
+        nodes.push(<span key={`t-${String(curr)}`}>{activeSample.slice(curr, range.start)}</span>);
       }
       nodes.push(
         <mark
           key={`m-${String(range.start)}-${String(idx)}`}
           className="rounded-sm bg-accent-soft px-0.5 text-accent-text"
         >
-          {sample.slice(range.start, range.end)}
+          {activeSample.slice(range.start, range.end)}
         </mark>
       );
       curr = range.end;
     });
-    if (curr < sample.length) {
-      nodes.push(<span key={`t-${String(curr)}`}>{sample.slice(curr)}</span>);
+    if (curr < activeSample.length) {
+      nodes.push(<span key={`t-${String(curr)}`}>{activeSample.slice(curr)}</span>);
     }
 
     return <>{nodes}</>;
@@ -309,15 +308,15 @@ export function DictionaryView(): JSX.Element {
               onClear={() => {
                 setQuery("");
               }}
-              placeholder="Search rules"
+              placeholder={t("dictionary.searchPlaceholder")}
               className="w-[240px]"
             />
             <div className="flex items-center gap-2">
               <Button variant="secondary" size="sm" onClick={() => void handleImport()}>
-                Import
+                {t("dictionary.import")}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => void handleExport()}>
-                Export
+                {t("dictionary.export")}
               </Button>
             </div>
           </div>
@@ -331,11 +330,11 @@ export function DictionaryView(): JSX.Element {
           <div className="rounded-lg border border-border bg-surface p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
-                {editingFrom !== null ? "Edit Rule" : "Add a Rule"}
+                {editingFrom !== null ? t("dictionary.editRule") : t("dictionary.addRule")}
               </h2>
               {editingFrom !== null && (
                 <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
-                  Cancel Edit
+                  {t("dictionary.cancelEdit")}
                 </Button>
               )}
             </div>
@@ -352,7 +351,7 @@ export function DictionaryView(): JSX.Element {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleAddOrUpdateRule();
                   }}
-                  placeholder="Heard as (e.g. struck)"
+                  placeholder={t("dictionary.heardAs")}
                   className="flex-1"
                 />
                 <span className="text-text-muted">→</span>
@@ -364,7 +363,7 @@ export function DictionaryView(): JSX.Element {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleAddOrUpdateRule();
                   }}
-                  placeholder="Should be (e.g. Struq)"
+                  placeholder={t("dictionary.shouldBe")}
                   className="flex-1"
                 />
               </div>
@@ -375,7 +374,7 @@ export function DictionaryView(): JSX.Element {
                   onClick={() => {
                     setDraft((curr) => ({ ...curr, matchCase: !curr.matchCase }));
                   }}
-                  title="Match capitalisation"
+                  title={t("dictionary.matchCase")}
                   className="cursor-pointer"
                 >
                   <Badge tone={draft.matchCase ? "accent" : "neutral"}>
@@ -388,7 +387,7 @@ export function DictionaryView(): JSX.Element {
                   onClick={() => {
                     setDraft((curr) => ({ ...curr, wholeWord: !curr.wholeWord }));
                   }}
-                  title="Whole words only"
+                  title={t("dictionary.wholeWord")}
                   className="cursor-pointer"
                 >
                   <Badge tone={draft.wholeWord ? "accent" : "neutral"}>
@@ -399,7 +398,7 @@ export function DictionaryView(): JSX.Element {
               </div>
 
               <Button variant="primary" size="sm" onClick={handleAddOrUpdateRule}>
-                {editingFrom !== null ? "Save Rule" : "Add Rule"}
+                {editingFrom !== null ? t("dictionary.saveRule") : t("dictionary.addRule")}
               </Button>
             </div>
             {error && <InlineError className="mt-2">{error}</InlineError>}
@@ -409,10 +408,10 @@ export function DictionaryView(): JSX.Element {
           <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-surface p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
-                Try It
+                {t("dictionary.tryIt")}
               </h2>
               <span className="text-2xs text-text-muted" data-numeric>
-                {String(firingCount)} of {String(dictionary.length)} rules firing
+                {t("dictionary.firingCount", { firing: firingCount, total: dictionary.length })}
               </span>
             </div>
             <textarea
@@ -421,19 +420,19 @@ export function DictionaryView(): JSX.Element {
               onChange={(e) => {
                 setSample(e.target.value);
               }}
-              placeholder="Type a sentence here to test your rules..."
+              placeholder={t("dictionary.typeSample")}
               className="w-full rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-accent"
               data-selectable
             />
             <div className="min-h-[42px] rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text">
               <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-text-muted">
-                Matches in sample:
+                {t("dictionary.matchesSample")}
               </div>
               <div className="leading-snug">{renderHighlightedSample()}</div>
             </div>
             <div className="min-h-[42px] rounded-md border border-border bg-bg-sunken px-3 py-2 text-sm text-text">
               <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-text-muted">
-                Result after replacements:
+                {t("dictionary.resultSample")}
               </div>
               <div className="leading-snug">{preview}</div>
             </div>
@@ -443,7 +442,7 @@ export function DictionaryView(): JSX.Element {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium uppercase tracking-wide text-text-muted">
-                {String(dictionary.length)} Rule{dictionary.length === 1 ? "" : "s"}
+                {t("dictionary.rulesCount", { count: dictionary.length })}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -453,8 +452,8 @@ export function DictionaryView(): JSX.Element {
                   setSort(e.target.value as "recent" | "alphabetical");
                 }}
               >
-                <option value="recent">Recent first</option>
-                <option value="alphabetical">Alphabetical</option>
+                <option value="recent">{t("dictionary.sort.recent")}</option>
+                <option value="alphabetical">{t("dictionary.sort.alphabetical")}</option>
               </Select>
               {dictionary.length > 0 && (
                 <Button
@@ -464,7 +463,7 @@ export function DictionaryView(): JSX.Element {
                     setConfirmClear(true);
                   }}
                 >
-                  Clear all
+                  {t("dictionary.clearAll")}
                 </Button>
               )}
             </div>
@@ -475,11 +474,11 @@ export function DictionaryView(): JSX.Element {
             <div className="flex flex-col gap-4">
               <EmptyState
                 icon="ph:book-open-text"
-                title="No rules yet"
-                body="Add a word Struq Voice keeps getting wrong. Company names, people's names, and technical terms are the usual suspects."
+                title={t("dictionary.empty.title")}
+                body={t("dictionary.empty.body")}
               />
               <div className="flex flex-col items-center gap-2">
-                <span className="text-xs text-text-muted">Starter suggestions:</span>
+                <span className="text-xs text-text-muted">{t("dictionary.starterSuggestions")}</span>
                 <div className="flex flex-wrap justify-center gap-2">
                   {STARTER_SUGGESTIONS.map((sugg) => (
                     <button
@@ -535,7 +534,7 @@ export function DictionaryView(): JSX.Element {
                       {rule.wholeWord && <Badge tone="neutral">ab|</Badge>}
                       <IconButton
                         icon="ph:pencil-simple"
-                        label="Edit rule"
+                        label={t("dictionary.editRuleLabel")}
                         size="sm"
                         onClick={() => {
                           handleStartEdit(rule);
@@ -552,12 +551,12 @@ export function DictionaryView(): JSX.Element {
                           }}
                           className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-danger bg-danger px-2 text-2xs font-semibold uppercase tracking-wide text-text-inverse"
                         >
-                          Delete?
+                          {t("dictionary.deletePrompt")}
                         </button>
                       ) : (
                         <IconButton
                           icon="ph:trash"
-                          label="Delete rule"
+                          label={t("dictionary.deleteRuleLabel")}
                           size="sm"
                           variant="danger"
                           onClick={() => {
@@ -577,10 +576,8 @@ export function DictionaryView(): JSX.Element {
       <Dialog
         open={confirmClear}
         onOpenChange={setConfirmClear}
-        title="Clear the dictionary?"
-        description={`This will permanently remove all ${String(dictionary.length)} rule${
-          dictionary.length === 1 ? "" : "s"
-        }. This action cannot be undone.`}
+        title={t("dictionary.confirmClear.title")}
+        description={t("dictionary.confirmClear.description", { count: dictionary.length })}
         footer={
           <>
             <Button
@@ -590,10 +587,10 @@ export function DictionaryView(): JSX.Element {
                 setConfirmClear(false);
               }}
             >
-              Cancel
+              {t("dictionary.confirmClear.cancel")}
             </Button>
             <Button variant="danger" size="sm" onClick={handleClearAll}>
-              Clear dictionary
+              {t("dictionary.confirmClear.confirm")}
             </Button>
           </>
         }

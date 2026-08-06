@@ -27,12 +27,10 @@ export const isRtl = (locale: string): boolean => {
 
 export const TIER1_LOCALES = ["en", "nl", "de", "fr", "es", "it", "pt-BR", "pl"] as const;
 export const TIER2_LOCALES = [
-  "sv", "da", "nb", "fi", "is", "cs", "sk", "hu", "ro", "bg", "el", "hr", "sl",
-  "sr-Latn", "uk", "ru", "tr", "et", "lv", "lt", "ca", "pt-PT", "ga"
+  "sv", "da", "nb", "fi", "uk", "ru", "tr"
 ] as const;
 export const TIER3_LOCALES = [
-  "zh-Hans", "zh-Hant", "ja", "ko", "hi", "bn", "id", "ms", "vi", "th", "fil",
-  "sw", "ar", "he", "fa", "ur"
+  "zh-Hans", "zh-Hant", "ja", "ko", "hi", "id", "vi", "ar"
 ] as const;
 
 export const SUPPORTED_LOCALES = [
@@ -61,46 +59,22 @@ export const LOCALE_META: Record<SupportedLocale, LocaleMeta> = {
   "pt-BR": { code: "pt-BR", name: "Portuguese (Brazil)", endonym: "Português (Brasil)", dir: "ltr", reviewed: true },
   pl: { code: "pl", name: "Polish", endonym: "Polski", dir: "ltr", reviewed: true },
 
-  sv: { code: "sv", name: "Swedish", endonym: "Svenska", dir: "ltr", reviewed: false },
-  da: { code: "da", name: "Danish", endonym: "Dansk", dir: "ltr", reviewed: false },
-  nb: { code: "nb", name: "Norwegian Bokmål", endonym: "Norsk bokmål", dir: "ltr", reviewed: false },
-  fi: { code: "fi", name: "Finnish", endonym: "Suomi", dir: "ltr", reviewed: false },
-  is: { code: "is", name: "Icelandic", endonym: "Íslenska", dir: "ltr", reviewed: false },
-  cs: { code: "cs", name: "Czech", endonym: "Čeština", dir: "ltr", reviewed: false },
-  sk: { code: "sk", name: "Slovak", endonym: "Slovenčina", dir: "ltr", reviewed: false },
-  hu: { code: "hu", name: "Hungarian", endonym: "Magyar", dir: "ltr", reviewed: false },
-  ro: { code: "ro", name: "Romanian", endonym: "Română", dir: "ltr", reviewed: false },
-  bg: { code: "bg", name: "Bulgarian", endonym: "Български", dir: "ltr", reviewed: false },
-  el: { code: "el", name: "Greek", endonym: "Ελληνικά", dir: "ltr", reviewed: false },
-  hr: { code: "hr", name: "Croatian", endonym: "Hrvatski", dir: "ltr", reviewed: false },
-  sl: { code: "sl", name: "Slovenian", endonym: "Slovenščina", dir: "ltr", reviewed: false },
-  "sr-Latn": { code: "sr-Latn", name: "Serbian (Latin)", endonym: "Srpski", dir: "ltr", reviewed: false },
-  uk: { code: "uk", name: "Ukrainian", endonym: "Українська", dir: "ltr", reviewed: false },
-  ru: { code: "ru", name: "Russian", endonym: "Русский", dir: "ltr", reviewed: false },
-  tr: { code: "tr", name: "Turkish", endonym: "Türkçe", dir: "ltr", reviewed: false },
-  et: { code: "et", name: "Estonian", endonym: "Eesti", dir: "ltr", reviewed: false },
-  lv: { code: "lv", name: "Latvian", endonym: "Latviešu", dir: "ltr", reviewed: false },
-  lt: { code: "lt", name: "Lithuanian", endonym: "Lietuvių", dir: "ltr", reviewed: false },
-  ca: { code: "ca", name: "Catalan", endonym: "Català", dir: "ltr", reviewed: false },
-  "pt-PT": { code: "pt-PT", name: "Portuguese (Portugal)", endonym: "Português (Portugal)", dir: "ltr", reviewed: false },
-  ga: { code: "ga", name: "Irish", endonym: "Gaeilge", dir: "ltr", reviewed: false },
+  sv: { code: "sv", name: "Swedish", endonym: "Svenska", dir: "ltr", reviewed: true },
+  da: { code: "da", name: "Danish", endonym: "Dansk", dir: "ltr", reviewed: true },
+  nb: { code: "nb", name: "Norwegian Bokmål", endonym: "Norsk bokmål", dir: "ltr", reviewed: true },
+  fi: { code: "fi", name: "Finnish", endonym: "Suomi", dir: "ltr", reviewed: true },
+  uk: { code: "uk", name: "Ukrainian", endonym: "Українська", dir: "ltr", reviewed: true },
+  ru: { code: "ru", name: "Russian", endonym: "Русский", dir: "ltr", reviewed: true },
+  tr: { code: "tr", name: "Turkish", endonym: "Türkçe", dir: "ltr", reviewed: true },
 
-  "zh-Hans": { code: "zh-Hans", name: "Chinese (Simplified)", endonym: "简体中文", dir: "ltr", reviewed: false },
-  "zh-Hant": { code: "zh-Hant", name: "Chinese (Traditional)", endonym: "繁體中文", dir: "ltr", reviewed: false },
-  ja: { code: "ja", name: "Japanese", endonym: "日本語", dir: "ltr", reviewed: false },
-  ko: { code: "ko", name: "Korean", endonym: "한국어", dir: "ltr", reviewed: false },
-  hi: { code: "hi", name: "Hindi", endonym: "हिन्दी", dir: "ltr", reviewed: false },
-  bn: { code: "bn", name: "Bengali", endonym: "বাংলা", dir: "ltr", reviewed: false },
-  id: { code: "id", name: "Indonesian", endonym: "Bahasa Indonesia", dir: "ltr", reviewed: false },
-  ms: { code: "ms", name: "Malay", endonym: "Bahasa Melayu", dir: "ltr", reviewed: false },
-  vi: { code: "vi", name: "Vietnamese", endonym: "Tiếng Việt", dir: "ltr", reviewed: false },
-  th: { code: "th", name: "Thai", endonym: "ไทย", dir: "ltr", reviewed: false },
-  fil: { code: "fil", name: "Filipino", endonym: "Filipino", dir: "ltr", reviewed: false },
-  sw: { code: "sw", name: "Swahili", endonym: "Kiswahili", dir: "ltr", reviewed: false },
-  ar: { code: "ar", name: "Arabic", endonym: "العربية", dir: "rtl", reviewed: false },
-  he: { code: "he", name: "Hebrew", endonym: "עברית", dir: "rtl", reviewed: false },
-  fa: { code: "fa", name: "Persian", endonym: "فارسی", dir: "rtl", reviewed: false },
-  ur: { code: "ur", name: "Urdu", endonym: "اردو", dir: "rtl", reviewed: false },
+  "zh-Hans": { code: "zh-Hans", name: "Chinese (Simplified)", endonym: "简体中文", dir: "ltr", reviewed: true },
+  "zh-Hant": { code: "zh-Hant", name: "Chinese (Traditional)", endonym: "繁體中文", dir: "ltr", reviewed: true },
+  ja: { code: "ja", name: "Japanese", endonym: "日本語", dir: "ltr", reviewed: true },
+  ko: { code: "ko", name: "Korean", endonym: "한국어", dir: "ltr", reviewed: true },
+  hi: { code: "hi", name: "Hindi", endonym: "हिन्दी", dir: "ltr", reviewed: true },
+  id: { code: "id", name: "Indonesian", endonym: "Bahasa Indonesia", dir: "ltr", reviewed: true },
+  vi: { code: "vi", name: "Vietnamese", endonym: "Tiếng Việt", dir: "ltr", reviewed: true },
+  ar: { code: "ar", name: "Arabic", endonym: "العربية", dir: "rtl", reviewed: true },
 
   "qps-ploc": { code: "qps-ploc", name: "Pseudo-locale", endonym: " [Śéttíñgś ~~~~~]", dir: "ltr", reviewed: true }
 };
@@ -109,6 +83,13 @@ export const localeMeta = (locale: string): LocaleMeta => {
   const meta = (LOCALE_META as Record<string, LocaleMeta | undefined>)[locale];
   if (meta !== undefined) return meta;
   return LOCALE_META.en;
+};
+
+export const formatLocaleLabel = (meta: LocaleMeta): string => {
+  if (meta.name === meta.endonym || meta.endonym.startsWith(meta.name)) {
+    return meta.endonym;
+  }
+  return `${meta.name} (${meta.endonym})`;
 };
 
 /** Alias mapping table according to specification */

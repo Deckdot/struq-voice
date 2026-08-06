@@ -14,6 +14,8 @@ import { DeliveryTab } from "./settings/DeliveryTab";
 import { TextTab } from "./settings/TextTab";
 import { AppearanceTab } from "./settings/AppearanceTab";
 
+import { useTranslation } from "../lib/useTranslation";
+
 /**
  * The Settings shell. Six categories, each in its own file under
  * ./settings/. The active category is driven by a `category` field in the
@@ -29,19 +31,11 @@ interface CategoryMeta {
   readonly icon: string;
 }
 
-const CATEGORIES: readonly CategoryMeta[] = [
-  { id: "general", label: "General", icon: "ph:sliders-horizontal" },
-  { id: "capture", label: "Capture", icon: "ph:microphone" },
-  { id: "transcription", label: "Transcription", icon: "ph:wave-sine" },
-  { id: "delivery", label: "Delivery", icon: "ph:clipboard-text" },
-  { id: "text", label: "Text", icon: "ph:text-t" },
-  { id: "appearance", label: "Appearance", icon: "ph:circle-half" }
-];
-
 const isCategory = (value: string): value is Category =>
   value === "general" || value === "capture" || value === "transcription" || value === "delivery" || value === "text" || value === "appearance";
 
 export function SettingsView(): JSX.Element {
+  const { t } = useTranslation();
   const api = window.struqVoice as MainWindowApi;
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [category, setCategory] = useState<Category>("general");
@@ -49,6 +43,15 @@ export function SettingsView(): JSX.Element {
   const [currentVersion, setCurrentVersion] = useState("");
   const [devices, setDevices] = useState<readonly RecorderDevice[]>([]);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
+
+  const categories: readonly CategoryMeta[] = [
+    { id: "general", label: t("settings.category.general"), icon: "ph:sliders-horizontal" },
+    { id: "capture", label: t("settings.category.capture"), icon: "ph:microphone" },
+    { id: "transcription", label: t("settings.category.transcription"), icon: "ph:wave-sine" },
+    { id: "delivery", label: t("settings.category.delivery"), icon: "ph:clipboard-text" },
+    { id: "text", label: t("settings.category.text"), icon: "ph:text-t" },
+    { id: "appearance", label: t("settings.category.appearance"), icon: "ph:circle-half" }
+  ];
 
   useEffect(() => {
     void api.settings.get().then(({ settings: loaded }) => {
@@ -97,7 +100,7 @@ export function SettingsView(): JSX.Element {
     <div className="h-full overflow-y-auto bg-bg [scrollbar-gutter:stable]" data-selectable>
       <div className="mx-auto w-full max-w-[920px] px-6 py-4">
         <Tabs
-          items={CATEGORIES}
+          items={categories}
           active={category}
           onSelect={(next) => {
             if (isCategory(next)) setCategory(next);

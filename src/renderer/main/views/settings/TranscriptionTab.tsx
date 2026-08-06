@@ -11,15 +11,6 @@ import type { RadioOption } from "../../components/ui";
 
 const WHISPER_MODELS = MODEL_CATALOG.filter((model) => model.engine === "whisper-cpp");
 
-const engineToOption = (option: EngineOption): RadioOption<string> => ({
-  value: option.id,
-  label: option.displayName,
-  description: option.hint,
-  badge: option.kind === "cloud" ? "Cloud" : option.kind === "test" ? "Practice" : "Local",
-  tone: option.kind === "cloud" ? "warning" : "neutral",
-  icon: option.kind === "cloud" ? "ph:cloud" : option.kind === "test" ? "ph:flask" : "ph:desktop-tower"
-});
-
 /**
  * The Transcription settings tab: which voice service is on, what runs
  * when the main one cannot, the cloud key, the Whisper model picker.
@@ -80,6 +71,15 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
     });
   };
 
+  const engineToOption = (option: EngineOption): RadioOption<string> => ({
+    value: option.id,
+    label: option.displayName,
+    description: option.hint,
+    badge: option.kind === "cloud" ? t("settings.transcription.badge.cloud") : option.kind === "test" ? t("settings.transcription.badge.practice") : t("settings.transcription.badge.local"),
+    tone: option.kind === "cloud" ? "warning" : "neutral",
+    icon: option.kind === "cloud" ? "ph:cloud" : option.kind === "test" ? "ph:flask" : "ph:desktop-tower"
+  });
+
   const options = ENGINE_OPTIONS.map(engineToOption);
   const cloudEngines = ENGINE_OPTIONS.filter((option) => option.kind === "cloud");
   const localEngines = ENGINE_OPTIONS.filter((option) => option.kind === "local");
@@ -88,8 +88,8 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
   return (
     <div className="flex flex-col gap-6">
       <SettingsGroup
-        title="Main voice service"
-        description="Local services keep audio on this computer."
+        title={t("settings.transcription.service.title")}
+        description={t("settings.transcription.service.subtitle")}
       >
         <RadioGroup
           value={settings.engine.primary}
@@ -105,20 +105,18 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
           <div className="flex items-center gap-3">
             <Icon icon="ph:warning-circle" className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
             <div>
-              <p className="text-sm font-medium text-text">Your audio leaves this computer.</p>
+              <p className="text-sm font-medium text-text">{t("settings.transcription.cloudWarning.title")}</p>
               <p className="mt-1 text-sm text-text-muted">
-                OpenRouter processes your recording on its servers. Use a local service if you would
-                rather keep recordings here.
+                {t("settings.transcription.cloudWarning")}
               </p>
             </div>
           </div>
         </Card>
       )}
 
-      <SettingsGroup title="Backup service">
+      <SettingsGroup title={t("settings.transcription.fallback.title")}>
         <SettingsRow
-          label="If the main service fails"
-          hint="Tried only when the main service cannot help."
+          label={t("settings.transcription.fallback.label")}
           control={
             <div className="w-56">
               <Select
@@ -128,15 +126,15 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
                   update({ engine: { ...settings.engine, fallback: value } });
                 }}
               >
-                <option value="none">No backup</option>
-                <optgroup label="Local services">
+                <option value="none">{t("settings.transcription.none")}</option>
+                <optgroup label={t("settings.transcription.fallback.localGroup")}>
                   {localEngines.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.displayName}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Online services">
+                <optgroup label={t("settings.transcription.fallback.onlineGroup")}>
                   {cloudEngines.map((option) => (
                     <option key={option.id} value={option.id}>
                       {option.displayName}
@@ -151,12 +149,11 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
 
       {settings.engine.primary === "whisper-cpp" && (
         <SettingsGroup
-          title="Whisper model"
-          description="Bigger models are slower but handle accents better."
+          title={t("settings.transcription.whisperModel.title")}
+          description={t("settings.transcription.whisperModel.subtitle")}
         >
           <SettingsRow
-            label="Active model"
-            hint="Only installed models are available here."
+            label={t("settings.transcription.whisperModel.label")}
             control={
               <div className="w-72">
                 <Select
@@ -179,12 +176,12 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
       )}
 
       <SettingsGroup
-        title="OpenRouter API key"
-        description="Stored encrypted on this computer."
+        title={t("settings.transcription.openrouter.title")}
+        description={t("settings.transcription.openrouter.subtitle")}
       >
         {keyEditing ? (
           <div className="px-4 py-3">
-            <Field label="Paste your key" hint="Begins with sk-or-v1-.">
+            <Field label={t("settings.transcription.openrouter.pasteLabel")} hint={t("settings.transcription.openrouter.pasteHint")}>
               <div className="flex items-center gap-2">
                 <TextInput
                   type="password"
@@ -203,7 +200,7 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
                   disabled={keyInput.trim().length === 0 || savePending}
                 >
                   <Icon icon="ph:check" className="h-3.5 w-3.5" aria-hidden="true" />
-                  Save
+                  {t("settings.transcription.openrouter.saveBtn")}
                 </Button>
                 <Button
                   variant="secondary"
@@ -215,20 +212,20 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
                   }}
                 >
                   <Icon icon="ph:x" className="h-3.5 w-3.5" aria-hidden="true" />
-                  Cancel
+                  {t("settings.transcription.openrouter.cancelBtn")}
                 </Button>
               </div>
             </Field>
           </div>
         ) : (
           <SettingsRow
-            label="Stored key"
+            label={t("settings.transcription.openrouter.keyLabel")}
             hint={
               keyConfigured
                 ? keyStored
-                  ? "An API key is stored on this computer."
-                  : "Configured through the OPENROUTER_API_KEY environment variable."
-                : "No key is configured yet."
+                  ? t("settings.transcription.openrouter.storedHint")
+                  : t("settings.transcription.openrouter.envHint")
+                : t("settings.transcription.openrouter.notConfigured")
             }
             control={
               <div className="flex gap-2">
@@ -240,11 +237,11 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
                     setKeyMessage(null);
                   }}
                 >
-                  {keyStored ? "Replace key" : "Add key"}
+                  {keyStored ? t("settings.transcription.openrouter.replaceBtn") : t("settings.transcription.openrouter.addBtn")}
                 </Button>
                 {keyStored && (
                   <Button variant="ghost" size="sm" onClick={clearKey}>
-                    Remove
+                    {t("settings.transcription.openrouter.removeBtn")}
                   </Button>
                 )}
               </div>
@@ -258,13 +255,13 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
 
       <SettingsGroup
         title={t("settings.transcription.speechLanguage.title")}
-        description="Select the target language for speech decoding. Separate from the interface language."
+        description={t("settings.transcription.speechLanguage.subtitle")}
       >
         <SettingsRow
           label={t("settings.transcription.speechLanguage.label")}
-          hint="Forcing the language improves accuracy and speed."
+          hint={t("settings.transcription.speechLanguage.hint")}
           control={
-            <div className="w-56">
+            <div className="w-72">
               <Select
                 value={settings.speechLanguage}
                 onChange={(event) => {

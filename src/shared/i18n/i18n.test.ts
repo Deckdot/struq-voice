@@ -8,7 +8,7 @@ describe("i18n module", () => {
     expect(resolveLocale(["nl-NL", "en-GB"])).toBe("nl");
     expect(resolveLocale(["zh-TW"])).toBe("zh-Hant");
     expect(resolveLocale(["zh-CN"])).toBe("zh-Hans");
-    expect(resolveLocale(["iw-IL"])).toBe("he");
+    expect(resolveLocale(["iw-IL"])).toBe("en");
     expect(resolveLocale(["pt-BR"])).toBe("pt-BR");
     expect(resolveLocale(["xx-YY"])).toBe("en");
     expect(resolveLocale([])).toBe("en");
@@ -56,6 +56,18 @@ describe("i18n module", () => {
       const catalog = getLoadedCatalog(loc);
       for (const key of Object.keys(catalog)) {
         expect(enKeys.has(key), `Key "${key}" in locale "${loc}" is missing from English catalog`).toBe(true);
+      }
+    }
+  });
+
+  it("verifies 100% key coverage for all loaded locales (no key in English is missing in any supported locale)", () => {
+    const enKeys = Object.keys(en);
+    const localesToTest = ["nl", "de", "fr", "es", "it", "pt-BR", "pl"];
+
+    for (const loc of localesToTest) {
+      const catalog = getLoadedCatalog(loc);
+      for (const key of enKeys) {
+        expect(catalog[key], `Key "${key}" is missing in locale "${loc}"`).toBeDefined();
       }
     }
   });

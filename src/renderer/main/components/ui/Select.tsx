@@ -46,7 +46,7 @@ const parseChildren = (children: ReactNode): ParsedItem[] => {
     if (!isValidElement(child)) return;
     if (child.type === "option") {
       const props = child.props as { value?: string; children?: ReactNode; disabled?: boolean };
-      const val = String(props.value ?? props.children ?? "");
+      const val = props.value !== undefined ? props.value : (typeof props.children === "string" || typeof props.children === "number" ? String(props.children) : "");
       const lbl =
         typeof props.children === "string" || typeof props.children === "number"
           ? String(props.children)
@@ -63,7 +63,7 @@ const parseChildren = (children: ReactNode): ParsedItem[] => {
         if (!isValidElement(gChild)) return;
         if (gChild.type === "option") {
           const gProps = gChild.props as { value?: string; children?: ReactNode; disabled?: boolean };
-          const val = String(gProps.value ?? gProps.children ?? "");
+          const val = gProps.value !== undefined ? gProps.value : (typeof gProps.children === "string" || typeof gProps.children === "number" ? String(gProps.children) : "");
           const lbl =
             typeof gProps.children === "string" || typeof gProps.children === "number"
               ? String(gProps.children)
@@ -114,7 +114,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   );
 
   const currentValueStr = value !== undefined ? String(value) : "";
-  const selectedOption = allOptions.find((opt) => String(opt.value) === currentValueStr) ?? allOptions[0];
+  const selectedOption = allOptions.find((opt) => opt.value === currentValueStr) ?? allOptions[0];
   const currentDisplayLabel = selectedOption?.label ?? currentValueStr;
 
   const handleSelect = (optionValue: string): void => {
@@ -178,7 +178,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           >
             {items.map((item, idx) => {
               if (item.type === "option") {
-                const isSelected = String(item.data.value) === currentValueStr;
+                const isSelected = item.data.value === currentValueStr;
                 return (
                   <button
                     key={`${item.data.value}-${String(idx)}`}
@@ -208,7 +208,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
                     {item.data.groupLabel}
                   </div>
                   {item.data.options.map((gOpt, gIdx) => {
-                    const isSelected = String(gOpt.value) === currentValueStr;
+                    const isSelected = gOpt.value === currentValueStr;
                     return (
                       <button
                         key={`${gOpt.value}-${String(gIdx)}`}

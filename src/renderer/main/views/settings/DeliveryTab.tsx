@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { Settings } from "../../../../shared/settings";
 import { Disclosure, NumberInput, SettingsGroup, SettingsNote, SettingsRow, Switch } from "../../components/ui";
+import { useTranslation } from "../../lib/useTranslation";
 
 /**
  * The Delivery settings tab: how the transcript reaches the window the
@@ -12,12 +13,14 @@ export interface DeliveryTabProps {
 }
 
 export function DeliveryTab({ settings, update }: DeliveryTabProps): JSX.Element {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col gap-6">
-      <SettingsGroup title="Clipboard">
+      <SettingsGroup title={t("settings.delivery.clipboard.title")}>
         <SettingsRow
-          label="Restore previous clipboard"
-          hint="Puts back what you had copied before the paste."
+          label={t("settings.delivery.restore.label")}
+          hint={t("settings.delivery.restore.hint")}
           control={
             <Switch
               checked={settings.restoreClipboard}
@@ -28,10 +31,10 @@ export function DeliveryTab({ settings, update }: DeliveryTabProps): JSX.Element
           }
         />
         <div className="px-4 py-3">
-          <Disclosure label="Advanced">
+          <Disclosure label={t("settings.delivery.advanced")}>
             <SettingsRow
-              label="Restore delay"
-              hint="Increase if a slow app is still reading the clipboard."
+              label={t("settings.delivery.delay.label")}
+              hint={t("settings.delivery.delay.hint")}
               control={
                 <div className="w-32">
                   <NumberInput
@@ -50,7 +53,7 @@ export function DeliveryTab({ settings, update }: DeliveryTabProps): JSX.Element
           </Disclosure>
         </div>
         <SettingsNote icon="ph:info">
-          If a paste ever fails, the text is still on your clipboard. Press Ctrl+V yourself.
+          {t("settings.delivery.pasteFallback")}
         </SettingsNote>
       </SettingsGroup>
     </div>

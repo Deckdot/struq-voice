@@ -18,6 +18,7 @@ import {
 } from "../components/ui";
 import type { SpeedLabel } from "../components/ui";
 import { ProviderMark } from "../components/ProviderMark";
+import { useTranslation } from "../lib/useTranslation";
 
 const TIER_LABEL: Record<WhisperTier, string> = {
   tiny: "Tiny",
@@ -53,12 +54,6 @@ const PICK_LABELS: Record<MachineTier, readonly [string, string, string]> = {
   light: ["Best fit", "Fastest", "More detail"],
   balanced: ["Best overall", "Fast and precise", "More accuracy"],
   performance: ["Best overall", "Fast large model", "Maximum accuracy"]
-};
-
-const TIER_NAME: Record<MachineTier, string> = {
-  light: "Lightweight",
-  balanced: "Balanced",
-  performance: "High Performance"
 };
 
 const largeRank = [
@@ -136,6 +131,7 @@ function RecommendationCard({
   onRetry,
   onSelect
 }: RecommendationCardProps): JSX.Element {
+  const { t } = useTranslation();
   const progress = progressFor(status);
   const downloading = status.download.state === "downloading";
   const verifying = status.download.state === "verifying";
@@ -158,25 +154,25 @@ function RecommendationCard({
         </p>
       </div>
       {downloading && progress !== null && (
-        <ProgressBar value={progress} tone="accent" label="Downloading model" />
+        <ProgressBar value={progress} tone="accent" label={t("models.card.downloading")} />
       )}
       <div className="flex min-h-8 items-center justify-end gap-2">
         {downloading || verifying ? (
           <Button variant="secondary" size="sm" onClick={onCancel} disabled={verifying}>
-            {verifying ? "Verifying" : "Cancel"}
+            {verifying ? t("models.card.verifying") : t("models.card.cancel")}
           </Button>
         ) : errored ? (
-          <Button variant="primary" size="sm" onClick={onRetry}>Retry</Button>
+          <Button variant="primary" size="sm" onClick={onRetry}>{t("models.card.retry")}</Button>
         ) : status.installed ? (
           active ? (
-            <Button variant="ghost" size="sm" disabled>Active</Button>
+            <Button variant="ghost" size="sm" disabled>{t("models.card.active")}</Button>
           ) : (
-            <Button variant="primary" size="sm" onClick={onSelect}>Use model</Button>
+            <Button variant="primary" size="sm" onClick={onSelect}>{t("models.card.useModel")}</Button>
           )
         ) : (
           <Button variant="primary" size="sm" onClick={onDownload}>
             <Icon icon="ph:download-simple" className="h-3.5 w-3.5" aria-hidden="true" />
-            Download
+            {t("models.card.download")}
           </Button>
         )}
       </div>
@@ -337,6 +333,14 @@ export function ModelsView(): JSX.Element {
       ? Math.min(1, Math.max(0, (runtime.receivedBytes ?? 0) / runtime.totalBytes))
       : null;
 
+  const { t } = useTranslation();
+
+  const tierName: Record<MachineTier, string> = {
+    light: t("models.tierName.light"),
+    balanced: t("models.tierName.balanced"),
+    performance: t("models.tierName.performance")
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-bg" data-selectable>
       <div className="mx-auto flex w-full max-w-[960px] flex-col gap-6 px-6 py-5">
@@ -346,9 +350,9 @@ export function ModelsView(): JSX.Element {
             <div className="flex items-start gap-3">
               <Icon icon="ph:warning-circle" className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
               <div>
-                <p className="text-sm font-normal text-text">Local transcription may feel slow on this PC</p>
+                <p className="text-sm font-normal text-text">{t("models.lightPcWarning.title")}</p>
                 <p className="mt-1 text-xs text-text-muted">
-                  This machine is best suited for the Tiny or Base models. For faster results without a long wait, OpenRouter (cloud) processes audio on a server and returns a transcript quickly.
+                  {t("models.lightPcWarning.body")}
                 </p>
               </div>
             </div>
@@ -357,16 +361,16 @@ export function ModelsView(): JSX.Element {
 
         <section>
           <div className="mb-2 flex items-center justify-between gap-4">
-            <h2 className="font-display text-lg font-normal text-text">Active model</h2>
+            <h2 className="font-display text-lg font-normal text-text">{t("models.activeModel.title")}</h2>
           </div>
           <Card>
             {currentStatus === undefined ? (
               <div className="flex items-center gap-3">
                 <Icon icon="ph:cloud" className="h-6 w-6 text-text-muted" aria-hidden="true" />
                 <div>
-                  <p className="text-sm font-normal text-text">No local model selected</p>
+                  <p className="text-sm font-normal text-text">{t("models.activeModel.noneTitle")}</p>
                   <p className="mt-0.5 text-xs text-text-muted">
-                    Choose an installed model below to run transcription on this computer.
+                    {t("models.activeModel.noneBody")}
                   </p>
                 </div>
               </div>
@@ -378,7 +382,7 @@ export function ModelsView(): JSX.Element {
                     <p className="truncate text-base font-normal text-text">
                       {humanModelName(currentStatus)}
                     </p>
-                    <Badge tone="accent">Active</Badge>
+                    <Badge tone="accent">{t("models.activeModel.badge")}</Badge>
                   </div>
                   <p className="mt-1 truncate text-xs text-text-muted" data-numeric>
                     {currentStatus.model.languages} · {formatBytes(currentStatus.model.bytes)}
@@ -393,18 +397,18 @@ export function ModelsView(): JSX.Element {
           <div className="mb-3 flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-display text-lg font-normal text-text">Recommended for this PC</h2>
-                <Badge tone="neutral">{TIER_NAME[machineTier]}</Badge>
+                <h2 className="font-display text-lg font-normal text-text">{t("models.recommended.title")}</h2>
+                <Badge tone="neutral">{tierName[machineTier]}</Badge>
               </div>
               <p className="mt-1 text-xs text-text-muted">
                 {hardware !== null
                   ? recommendModel(hardware).reason
-                  : (recommendation?.reason ?? "Reading your processor, memory, and graphics hardware.")}
+                  : (recommendation?.reason ?? t("models.recommended.reading"))}
               </p>
             </div>
             <Button variant="secondary" size="sm" className="shrink-0" onClick={() => { setSpecsOpen(true); }}>
               <Icon icon="ph:desktop-tower" className="h-3.5 w-3.5" aria-hidden="true" />
-              PC specs
+              {t("models.recommended.specsBtn")}
             </Button>
           </div>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -435,7 +439,7 @@ export function ModelsView(): JSX.Element {
         <section>
           <div className="mb-3 flex items-center justify-between gap-4">
             <div>
-              <h2 className="font-display text-lg font-normal text-text">Whisper models</h2>
+              <h2 className="font-display text-lg font-normal text-text">{t("models.whisper.title")}</h2>
               <p className="mt-0.5 text-xs text-text-muted">
                 {TIER_GUIDANCE[tier]}
               </p>
@@ -456,7 +460,7 @@ export function ModelsView(): JSX.Element {
           <div className="flex flex-col gap-2">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-2xs font-semibold uppercase tracking-wider text-text-muted">
-                Lightest downloads
+                {t("models.whisper.lightest")}
               </span>
             </div>
             {lightestTierModels.map(row)}
@@ -470,13 +474,13 @@ export function ModelsView(): JSX.Element {
                     className="self-center text-xs text-text-muted hover:text-text"
                     onClick={() => { setShowAllTier(true); }}
                   >
-                    + Show all {tierModels.length} {TIER_LABEL[tier].toLowerCase()} variants
+                    {t("models.whisper.showAll", { count: tierModels.length, tier: TIER_LABEL[tier].toLowerCase() })}
                   </Button>
                 ) : (
                   <>
                     <div className="mb-1 flex items-center justify-between pt-2">
                       <span className="text-2xs font-semibold uppercase tracking-wider text-text-muted">
-                        All {TIER_LABEL[tier].toLowerCase()} variants
+                        {t("models.whisper.allVariants", { tier: TIER_LABEL[tier].toLowerCase() })}
                       </span>
                     </div>
                     {tierModels.map(row)}
@@ -492,8 +496,8 @@ export function ModelsView(): JSX.Element {
           <div className="mb-3 flex items-center gap-2">
             <ProviderMark engine="parakeet" className="h-5 w-5" />
             <div>
-              <h2 className="font-display text-lg font-normal text-text">Parakeet by NVIDIA</h2>
-              <p className="mt-0.5 text-xs text-text-muted">Fast multilingual models tuned for local dictation.</p>
+              <h2 className="font-display text-lg font-normal text-text">{t("models.parakeet.title")}</h2>
+              <p className="mt-0.5 text-xs text-text-muted">{t("models.parakeet.subtitle")}</p>
             </div>
           </div>
           <div className="flex flex-col gap-2">{parakeetModels.map(row)}</div>
@@ -503,8 +507,8 @@ export function ModelsView(): JSX.Element {
           <section>
             <div className="mb-2 flex items-center justify-between gap-4">
               <div>
-                <h2 className="font-display text-lg font-normal text-text">Whisper helper</h2>
-                <p className="mt-0.5 text-xs text-text-muted">Required once for every Whisper model.</p>
+                <h2 className="font-display text-lg font-normal text-text">{t("models.helper.title")}</h2>
+                <p className="mt-0.5 text-xs text-text-muted">{t("models.helper.subtitle")}</p>
               </div>
             </div>
             <Card>
@@ -512,13 +516,13 @@ export function ModelsView(): JSX.Element {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-normal text-text">
                     {runtimeDownloading
-                      ? "Installing the local Whisper helper"
+                      ? t("models.helper.installing")
                       : runtime.state === "error"
-                        ? (runtime.message ?? "The helper install failed")
-                        : "Not installed yet"}
+                        ? (runtime.message ?? t("models.helper.failed"))
+                        : t("models.helper.notInstalled")}
                   </p>
                   {runtimeDownloading && runtimeProgress !== null && (
-                    <ProgressBar value={runtimeProgress} tone="accent" className="mt-2" label="Installing helper" />
+                    <ProgressBar value={runtimeProgress} tone="accent" className="mt-2" label={t("models.helper.installing")} />
                   )}
                 </div>
                 <Button
@@ -532,7 +536,7 @@ export function ModelsView(): JSX.Element {
                     className={`h-3.5 w-3.5 ${runtimeDownloading ? "motion-safe:animate-spin" : ""}`}
                     aria-hidden="true"
                   />
-                  {runtimeDownloading ? "Installing" : "Install helper"}
+                  {runtimeDownloading ? t("models.helper.installingBtn") : t("models.helper.installBtn")}
                 </Button>
               </div>
             </Card>
@@ -541,26 +545,26 @@ export function ModelsView(): JSX.Element {
 
         <p className="flex items-center gap-1.5 text-xs text-text-muted" data-numeric>
           <Icon icon="ph:hard-drive" className="h-4 w-4" aria-hidden="true" />
-          {formatBytes(diskUsed)} used by local models
+          {t("models.diskUsed", { size: formatBytes(diskUsed) })}
         </p>
       </div>
 
       <Dialog
         open={specsOpen}
         onOpenChange={setSpecsOpen}
-        title="Hardware & System Profile"
-        description="Specifications detected to optimize local AI dictation models."
+        title={t("models.specsDialog.title")}
+        description={t("models.specsDialog.description")}
         size="lg"
         footer={
           <Button variant="secondary" size="md" onClick={() => { setSpecsOpen(false); }}>
-            Done
+            {t("models.specsDialog.done")}
           </Button>
         }
       >
         {hardware === null ? (
           <div className="flex items-center gap-3 rounded-lg border border-border bg-bg-sunken p-4">
             <Icon icon="ph:circle-notch" className="h-5 w-5 motion-safe:animate-spin text-accent" aria-hidden="true" />
-            <p className="text-sm text-text-secondary">Reading hardware details...</p>
+            <p className="text-sm text-text-secondary">{t("models.specsDialog.reading")}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -573,12 +577,12 @@ export function ModelsView(): JSX.Element {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-text">
-                      {cleanCpuModel(hardware.cpuModel) || "System Hardware"}
+                      {cleanCpuModel(hardware.cpuModel) || t("models.specsDialog.systemHardware")}
                     </p>
-                    <Badge tone="accent">{TIER_NAME[machineTier]}</Badge>
+                    <Badge tone="accent">{tierName[machineTier]}</Badge>
                   </div>
                   <p className="mt-0.5 text-xs text-text-muted" data-numeric>
-                    {hardware.gpuName ?? "Discrete GPU"} · {String(hardware.cpuCores)} cores · {String(normalizeMemGb(hardware.totalMemGb))} GB RAM
+                    {hardware.gpuName ?? t("models.specsDialog.gpuDefault")} · {String(hardware.cpuCores)} cores · {String(normalizeMemGb(hardware.totalMemGb))} GB RAM
                   </p>
                 </div>
               </div>
@@ -588,12 +592,12 @@ export function ModelsView(): JSX.Element {
               <Card className="flex items-start gap-3">
                 <Icon icon="ph:cpu" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">Processor (CPU)</p>
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">{t("models.specsDialog.cpu")}</p>
                   <p className="mt-1 text-sm font-medium leading-snug text-text">
                     {cleanCpuModel(hardware.cpuModel) || hardware.cpuModel}
                   </p>
                   <p className="mt-1 text-xs text-text-secondary" data-numeric>
-                    {String(hardware.cpuCores)} logical processing cores
+                    {t("models.specsDialog.cpuCores", { cores: hardware.cpuCores })}
                   </p>
                 </div>
               </Card>
@@ -601,12 +605,12 @@ export function ModelsView(): JSX.Element {
               <Card className="flex items-start gap-3">
                 <Icon icon="ph:graphics-card" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">Graphics Card (GPU)</p>
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">{t("models.specsDialog.gpu")}</p>
                   <p className="mt-1 text-sm font-medium leading-snug text-text">
                     {hardware.gpuName ?? (hardware.gpuVendor !== "unknown" ? `${hardware.gpuVendor.toUpperCase()} graphics` : "Standard GPU")}
                   </p>
                   <p className="mt-1 text-xs text-text-secondary">
-                    {hardware.cudaRuntime ? "CUDA GPU acceleration active" : "CPU inference path active"}
+                    {hardware.cudaRuntime ? t("models.specsDialog.gpuCuda") : t("models.specsDialog.gpuCpuPath")}
                   </p>
                 </div>
               </Card>
@@ -614,12 +618,12 @@ export function ModelsView(): JSX.Element {
               <Card className="flex items-start gap-3">
                 <Icon icon="ph:memory" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">System Memory (RAM)</p>
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">{t("models.specsDialog.ram")}</p>
                   <p className="mt-1 text-base font-medium text-text" data-numeric>
                     {String(normalizeMemGb(hardware.totalMemGb))} GB RAM
                   </p>
                   <p className="mt-1 text-xs text-text-secondary">
-                    Allocated for high-speed AI model weights
+                    {t("models.specsDialog.ramAllocated")}
                   </p>
                 </div>
               </Card>
@@ -627,12 +631,12 @@ export function ModelsView(): JSX.Element {
               <Card className="flex items-start gap-3 border-accent/40 bg-accent-soft/10">
                 <Icon icon="ph:gauge" className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">Dictation Profile</p>
+                  <p className="text-2xs font-semibold uppercase tracking-wider text-text-muted">{t("models.specsDialog.profile")}</p>
                   <p className="mt-1 text-base font-medium text-text">
-                    {TIER_NAME[machineTier]}
+                    {tierName[machineTier]}
                   </p>
                   <p className="mt-1 text-xs text-text-secondary">
-                    Ranks Parakeet and Whisper variants automatically
+                    {t("models.specsDialog.profileRank")}
                   </p>
                 </div>
               </Card>

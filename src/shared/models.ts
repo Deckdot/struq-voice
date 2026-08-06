@@ -25,12 +25,33 @@ export interface ModelInfo {
   files: readonly ModelFile[];
 }
 
+/**
+ * Why a download failed. Machine readable so the renderer can translate a
+ * specific, actionable message instead of showing a raw English Error string.
+ * The downloader maps every failure class onto one of these.
+ */
+export type ModelDownloadErrorCode =
+  /** A non-retryable HTTP status: 403, 404, 407, 401 and friends. */
+  | "http"
+  /** DNS, connection refused, TLS failure, or a generic fetch failure. */
+  | "network"
+  /** The server accepted the connection but sent nothing for too long. */
+  | "timeout"
+  /** Not enough free space, or the drive reported ENOSPC mid-stream. */
+  | "disk"
+  /** The filesystem refused the write: EACCES, EPERM, EBUSY. */
+  | "permission"
+  /** The bytes did not match the catalog sha256. */
+  | "checksum"
+  /** Anything that does not fit a known class. */
+  | "unknown";
+
 export type ModelDownloadState =
   | { state: "idle" }
   | { state: "downloading"; receivedBytes: number; totalBytes: number }
   | { state: "verifying" }
   | { state: "done" }
-  | { state: "error"; message: string };
+  | { state: "error"; code: ModelDownloadErrorCode; message: string };
 
 export interface ModelStatus {
   model: ModelInfo;
@@ -199,6 +220,14 @@ export const WHISPER_TIER_ORDER: readonly WhisperTier[] = [
  * the safest thing to hand someone before they have picked a size.
  */
 export const DEFAULT_WHISPER_MODEL_ID = "whisper-base-q5_1";
+
+/**
+ * The parakeet catalog id a fresh profile loads. The engine reads the
+ * selected parakeet model from settings; this is what a new profile lands on
+ * and what bootstrap promotion checks. Kept here so the renderer can gate the
+ * active badge on the same id the engine will actually load.
+ */
+export const PARAKEET_DEFAULT_MODEL_ID = "parakeet-tdt-0.6b-v3-int8";
 
 export const MODEL_CATALOG: readonly ModelInfo[] = [
   {

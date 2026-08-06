@@ -6,6 +6,10 @@
  * The catalog downloader handles model files; the runtime is a separate,
  * one-file concept so it lives here. The CPU build is the default: it works
  * on any Windows machine and the engine reports CPU fallback clearly.
+ *
+ * The download runs under a hard total timeout (the zip is 8MB, so a slow
+ * proxy is a failure, not a lifestyle), and the final rename retries the
+ * EPERM a scanner can throw on a freshly written exe.
  */
 
 import { createHash } from "node:crypto";
@@ -23,6 +27,10 @@ const RUNTIME_URL =
   "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip";
 const RUNTIME_SHA256 =
   "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a";
+/** The whole runtime install must finish within this; it is 8MB. */
+const RUNTIME_TIMEOUT_MS = 120_000;
+const RENAME_ATTEMPTS = 5;
+const RENAME_RETRY_DELAY_MS = 200;
 
 export interface RuntimeDeps {
   readonly fetch: typeof fetch;
@@ -52,6 +60,30 @@ export const createRuntimeDownloader = (
     }
   };
 
+  const sleep = (ms: number): Promise<void> =>
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
+  /** Scanner-held exe files fail the one-shot rename; retry before giving up. */
+  const renameWithRetry = async (from: string, to: string): Promise<void> => {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await rename(from, to);
+        return;
+      } catch (error) {
+        const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+        if (
+          (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY") ||
+          attempt >= RENAME_ATTEMPTS
+        ) {
+          throw error;
+        }
+        await sleep(RENAME_RETRY_DELAY_MS * attempt);
+      }
+    }
+  };
+
   return {
     isInstalled: () => existsSync(cliPath),
     bytesTotal: () => 8194445,
@@ -67,7 +99,9 @@ export const createRuntimeDownloader = (
       await rm(extractDir, { recursive: true, force: true });
       await mkdir(extractDir, { recursive: true });
 
-      const response = await deps.fetch(RUNTIME_URL);
+      const response = await deps.fetch(RUNTIME_URL, {
+        signal: AbortSignal.timeout(RUNTIME_TIMEOUT_MS)
+      });
       if (!response.ok || response.body === null) {
         throw new Error(`whisper runtime download failed: HTTP ${String(response.status)}`);
       }
@@ -158,7 +192,7 @@ export const createRuntimeDownloader = (
       });
 
       // Move whisper-cli.exe into place and clean up.
-      await rename(extracted, cliPath);
+      await renameWithRetry(extracted, cliPath);
       await rm(zipPath, { force: true });
       await rm(extractDir, { recursive: true, force: true });
       emit(1, 1);

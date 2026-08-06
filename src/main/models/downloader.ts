@@ -6,13 +6,25 @@
  * resumed with HTTP range requests, downloads are capped at three concurrent
  * file transfers across all models, and progress is emitted per model on a
  * 250ms throttle with a single final emit on done or error.
+ *
+ * Hardening for hostile networks: every attempt runs under a stall watchdog
+ * (no bytes for 30s aborts), transient failures (network drop, 5xx, 429,
+ * timeout, AV file locks) retry with linear backoff up to three attempts,
+ * the final sha256-verified rename retries EPERM/EACCES from scanners, and
+ * every failure is classified into a machine-readable code the renderer can
+ * translate instead of a raw Error string.
  */
 
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { ModelDownloadState, ModelFile, ModelInfo } from "../../shared/models";
+import type {
+  ModelDownloadErrorCode,
+  ModelDownloadState,
+  ModelFile,
+  ModelInfo
+} from "../../shared/models";
 
 const ZERO_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
 /**
@@ -23,6 +35,69 @@ const ZERO_HASH = "0000000000000000000000000000000000000000000000000000000000000
  */
 export const MAX_CONCURRENT_FILES = 6;
 const PROGRESS_INTERVAL_MS = 250;
+/** No bytes for this long aborts the attempt; a proxy that accepts and then
+ * stalls must not leave the UI on "downloading" forever. */
+const STALL_TIMEOUT_MS = 30_000;
+/** Transient failures retry this many times total (first try plus retries). */
+const MAX_ATTEMPTS = 3;
+/** Backoff between attempts: delay * attemptNumber. */
+const RETRY_DELAY_MS = 1_000;
+/** A scanner holding a freshly written file fails rename; retry before giving up. */
+const RENAME_ATTEMPTS = 5;
+const RENAME_RETRY_DELAY_MS = 200;
+/** Statuses a busy server or a flaky proxy can return that a retry may fix. */
+const RETRYABLE_HTTP = new Set([429, 500, 502, 503, 504]);
+
+class HttpStatusError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "HttpStatusError";
+    this.status = status;
+  }
+}
+
+class ChecksumError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChecksumError";
+  }
+}
+
+class StallTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StallTimeoutError";
+  }
+}
+
+/**
+ * Maps any thrown failure onto a machine-readable code and whether another
+ * attempt has a chance of succeeding. Codes travel over IPC to the renderer,
+ * which translates them; the retryable flag decides the retry loop.
+ */
+export const classifyDownloadError = (error: unknown): {
+  readonly code: ModelDownloadErrorCode;
+  readonly retryable: boolean;
+} => {
+  if (error instanceof ChecksumError) {
+    return { code: "checksum", retryable: false };
+  }
+  if (error instanceof StallTimeoutError) {
+    return { code: "timeout", retryable: true };
+  }
+  if (error instanceof HttpStatusError) {
+    return { code: "http", retryable: RETRYABLE_HTTP.has(error.status) };
+  }
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  if (code === "ENOSPC") {
+    return { code: "disk", retryable: false };
+  }
+  if (code === "EACCES" || code === "EPERM" || code === "EBUSY") {
+    return { code: "permission", retryable: true };
+  }
+  return { code: "network", retryable: true };
+};
 
 export interface DownloadDeps {
   readonly fetch: typeof fetch;
@@ -31,6 +106,10 @@ export interface DownloadDeps {
     receivedBytes: number;
     totalBytes: number;
   }) => void;
+  /** Tuning knobs for tests; production runs on the defaults above. */
+  readonly stallTimeoutMs?: number;
+  readonly maxAttempts?: number;
+  readonly retryDelayMs?: number;
 }
 
 export interface DownloadHandle {
@@ -63,11 +142,22 @@ interface Run {
   handle?: DownloadHandle;
 }
 
-export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downloader => {
+export const createDownloader = (
+  modelsRoot: string,
+  deps: DownloadDeps
+): Downloader => {
+  const stallTimeoutMs = deps.stallTimeoutMs ?? STALL_TIMEOUT_MS;
+  const maxAttempts = deps.maxAttempts ?? MAX_ATTEMPTS;
+  const retryDelayMs = deps.retryDelayMs ?? RETRY_DELAY_MS;
   const states = new Map<string, ModelDownloadState>();
   const runs = new Map<string, Run>();
   const queue: Array<() => void> = [];
   let activeDownloads = 0;
+
+  const sleep = (ms: number): Promise<void> =>
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
 
   const acquireSlot = async (): Promise<void> => {
     if (activeDownloads < MAX_CONCURRENT_FILES) {
@@ -92,6 +182,45 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
     error instanceof Error ? error.message : String(error);
 
   const isCancelled = (run: Run): boolean => run.cancelled;
+
+  /**
+   * Windows scanners (Defender, corporate EDR) hold freshly written files for
+   * inspection. The one-shot rename then throws EPERM even though the bytes
+   * are good; a few short retries turn a false failure into a clean install.
+   */
+  const renameWithRetry = async (from: string, to: string): Promise<void> => {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await rename(from, to);
+        return;
+      } catch (error) {
+        const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+        if (
+          (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY") ||
+          attempt >= RENAME_ATTEMPTS
+        ) {
+          throw error;
+        }
+        await sleep(RENAME_RETRY_DELAY_MS * attempt);
+      }
+    }
+  };
+
+  /** Persist the real on-disk byte count so a later resume range matches. */
+  const persistPartMeta = async (
+    model: ModelInfo,
+    file: ModelFile,
+    metaPath: string,
+    partPath: string
+  ): Promise<void> => {
+    const size = (await stat(partPath).catch(() => null))?.size ?? 0;
+    const safeMeta: PartMeta = {
+      url: file.url,
+      expectedSha256: file.sha256,
+      receivedBytes: size
+    };
+    await writeFile(metaPath, JSON.stringify(safeMeta), "utf8").catch(() => {});
+  };
 
   const hashFile = async (filePath: string): Promise<string> => {
     const hash = createHash("sha256");
@@ -182,7 +311,8 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
     resumeFrom: number,
     model: ModelInfo,
     run: Run,
-    progress: FileProgress
+    progress: FileProgress,
+    onActivity: () => void
   ): Promise<number> => {
     const body = response.body;
     if (body === null) {
@@ -212,6 +342,7 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
         received += read.value.byteLength;
         const canContinue = stream.write(read.value);
         progress.current = received;
+        onActivity();
         emitThrottled(model, run);
         if (!canContinue) {
           // Both listeners must come off whichever way this settles. Leaving
@@ -280,80 +411,162 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
       resumeFrom = Math.min(meta.receivedBytes, file.bytes);
     }
 
-    const controller = new AbortController();
-    run.controllers.add(controller);
     const progress: FileProgress = { installed: false, current: resumeFrom };
     run.progress.set(file.path, progress);
 
-    try {
-      await acquireSlot();
-      let received = resumeFrom;
+    /**
+     * One full fetch-verify-rename pass. Each attempt gets its own abort
+     * controller (cancel and the stall watchdog share it), and the stall
+     * timer is re-armed on every received chunk, so "no bytes for 30s"
+     * aborts without ever timing out a slow-but-alive transfer.
+     */
+    const attempt = async (): Promise<void> => {
+      const attemptController = new AbortController();
+      run.controllers.add(attemptController);
+      let stalled = false;
+      // Read through a getter: TypeScript's closure analysis keeps the
+      // boolean at its initializer inside the catch below, which would make
+      // the lint rule claim the flag is always false.
+      const wasStalled = (): boolean => stalled;
+      let stallTimer: NodeJS.Timeout | undefined;
+      const armStall = (): void => {
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(() => {
+          stalled = true;
+          attemptController.abort();
+        }, stallTimeoutMs);
+      };
+      const disarmStall = (): void => {
+        clearTimeout(stallTimer);
+      };
       try {
-        const options: RequestInit = { signal: controller.signal };
-        if (resumeFrom > 0) {
-          options.headers = { Range: `bytes=${String(resumeFrom)}-` };
+        await acquireSlot();
+        let received = resumeFrom;
+        try {
+          armStall();
+          const options: RequestInit = { signal: attemptController.signal };
+          if (resumeFrom > 0) {
+            options.headers = { Range: `bytes=${String(resumeFrom)}-` };
+          }
+          const response = await deps.fetch(file.url, options);
+          if (response.status !== 200 && response.status !== 206 && response.status !== 416) {
+            throw new HttpStatusError(
+              response.status,
+              `HTTP ${String(response.status)} while downloading ${file.path}.`
+            );
+          }
+          if (response.status === 416) {
+            progress.current = resumeFrom;
+          } else if (response.status === 206) {
+            received = await streamBody(
+              response,
+              partPath,
+              "append",
+              resumeFrom,
+              model,
+              run,
+              progress,
+              armStall
+            );
+          } else {
+            received = await streamBody(
+              response,
+              partPath,
+              "truncate",
+              0,
+              model,
+              run,
+              progress,
+              armStall
+            );
+          }
+          disarmStall();
+          progress.current = received;
+          const nextMeta: PartMeta = {
+            url: file.url,
+            expectedSha256: file.sha256,
+            receivedBytes: received
+          };
+          await writeFile(metaPath, JSON.stringify(nextMeta), "utf8");
+        } finally {
+          releaseSlot();
+          disarmStall();
         }
-        const response = await deps.fetch(file.url, options);
-        if (response.status !== 200 && response.status !== 206 && response.status !== 416) {
-          throw new Error(`HTTP ${String(response.status)} while downloading ${file.path}.`);
+
+        if (file.sha256 !== ZERO_HASH) {
+          states.set(model.id, { state: "verifying" });
+          const hash = await hashFile(partPath);
+          if (hash !== file.sha256) {
+            await rm(partPath, { force: true });
+            await rm(metaPath, { force: true });
+            throw new ChecksumError(
+              `Hash mismatch for ${file.path}. The download is corrupt; retry.`
+            );
+          }
         }
-        if (response.status === 416) {
-          progress.current = resumeFrom;
-        } else if (response.status === 206) {
-          received = await streamBody(
-            response,
-            partPath,
-            "append",
-            resumeFrom,
-            model,
-            run,
-            progress
+
+        const finalPath = join(modelsRoot, model.id, file.path);
+        await mkdir(dirname(finalPath), { recursive: true });
+        await renameWithRetry(partPath, finalPath);
+        await rm(metaPath, { force: true });
+        progress.installed = true;
+        progress.current = file.bytes;
+      } catch (error) {
+        disarmStall();
+        if (wasStalled()) {
+          throw new StallTimeoutError(
+            `Download stalled while fetching ${file.path}. No data received for a while; retrying.`
           );
-        } else {
-          received = await streamBody(response, partPath, "truncate", 0, model, run, progress);
         }
-        progress.current = received;
-        const nextMeta: PartMeta = {
-          url: file.url,
-          expectedSha256: file.sha256,
-          receivedBytes: received
-        };
-        await writeFile(metaPath, JSON.stringify(nextMeta), "utf8");
+        throw error;
       } finally {
-        releaseSlot();
+        run.controllers.delete(attemptController);
       }
+    };
 
-      if (file.sha256 !== ZERO_HASH) {
-        states.set(model.id, { state: "verifying" });
-        const hash = await hashFile(partPath);
-        if (hash !== file.sha256) {
-          await rm(partPath, { force: true });
-          await rm(metaPath, { force: true });
-          throw new Error(`Hash mismatch for ${file.path}. The download is corrupt; retry.`);
+    try {
+      let lastError: Error | null = null;
+      for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber += 1) {
+        if (isCancelled(run)) {
+          break;
+        }
+        try {
+          await attempt();
+          return "ok";
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          if (isCancelled(run)) {
+            break;
+          }
+          const classified = classifyDownloadError(error);
+          if (attemptNumber === maxAttempts || !classified.retryable) {
+            break;
+          }
+          // Keep the bytes so the next attempt (and a manual retry) resumes
+          // with a range request instead of starting over.
+          await persistPartMeta(model, file, metaPath, partPath);
+          await sleep(retryDelayMs * attemptNumber);
         }
       }
-
-      const finalPath = join(modelsRoot, model.id, file.path);
-      await mkdir(dirname(finalPath), { recursive: true });
-      await rename(partPath, finalPath);
-      await rm(metaPath, { force: true });
-      progress.installed = true;
-      progress.current = file.bytes;
-      return "ok";
+      if (lastError !== null) {
+        throw lastError;
+      }
+      throw new Error("The download was cancelled before it started.");
     } catch (error) {
       if (isCancelled(run)) {
-        const safeMeta: PartMeta = {
-          url: file.url,
-          expectedSha256: file.sha256,
-          receivedBytes: progress.current
-        };
-        await writeFile(metaPath, JSON.stringify(safeMeta), "utf8").catch(() => {});
+        await persistPartMeta(model, file, metaPath, partPath);
         return "aborted";
       }
-      states.set(model.id, { state: "error", message: messageOf(error) });
+      // Keep whatever made it to disk: a manual Retry or the next start
+      // resumes from the real byte count instead of re-downloading.
+      await persistPartMeta(model, file, metaPath, partPath);
+      const classified = classifyDownloadError(error);
+      states.set(model.id, {
+        state: "error",
+        code: classified.code,
+        message: messageOf(error)
+      });
       return "failed";
-    } finally {
-      run.controllers.delete(controller);
     }
   };
 
@@ -388,6 +601,35 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
         // link, so running the files in parallel is several times faster than
         // awaiting them one at a time.
         setDownloading(model, run);
+        // Pre-flight free-space check: a multi-GB model failing halfway with
+        // ENOSPC is minutes wasted; refusing up front with a clear reason is
+        // better. A statfs that fails (odd filesystems) is skipped and the
+        // stream reports ENOSPC if it happens anyway.
+        const needed = model.files.reduce((sum, file) => {
+          if (run.progress.get(file.path)?.installed === true) {
+            return sum;
+          }
+          return sum + file.bytes;
+        }, 0);
+        if (needed > 0) {
+          try {
+            const fsStats = await statfs(modelsRoot);
+            if (fsStats.bavail * fsStats.bsize < needed) {
+              states.set(model.id, {
+                state: "error",
+                code: "disk",
+                message: `Not enough free disk space for ${model.name} (${String(Math.ceil(needed / 1_048_576))} MB needed).`
+              });
+              for (const controller of run.controllers) {
+                controller.abort();
+              }
+              emitFinal(model, run);
+              return;
+            }
+          } catch {
+            // statfs unavailable; let the stream report ENOSPC if it bites.
+          }
+        }
         const outcomes = await Promise.all(
           model.files.map(async (file) => {
             if (isCancelled(run)) return "aborted" as const;
@@ -410,7 +652,12 @@ export const createDownloader = (modelsRoot: string, deps: DownloadDeps): Downlo
           emitFinal(model, run);
         }
       } catch (error) {
-        states.set(model.id, { state: "error", message: messageOf(error) });
+        const classified = classifyDownloadError(error);
+        states.set(model.id, {
+          state: "error",
+          code: classified.code,
+          message: messageOf(error)
+        });
         emitFinal(model, run);
       } finally {
         runs.delete(model.id);

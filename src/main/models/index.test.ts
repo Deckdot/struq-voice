@@ -119,6 +119,27 @@ describe("model service", () => {
       expect(outcome.ok).toBe(false);
     });
   });
+
+  it("does not reject deleteModel while a download is in flight", async () => {
+    await withRoot(async (root) => {
+      const service = createModelsService(root, join(root, "..", "runtimes"), {
+        fetch: (_input: string | URL | Request, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new Error("aborted"));
+            });
+          })
+      });
+      const target = MODEL_CATALOG[0]!;
+
+      expect(service.startDownload(target.id)).toBe(true);
+      const deleted = await service.deleteModel(target.id);
+
+      expect(deleted).toBe(true);
+      expect(service.list().items.find((s) => s.model.id === target.id)?.installed).toBe(false);
+      service.dispose();
+    });
+  });
 });
 
 /**
@@ -183,6 +204,34 @@ describe("ensureWhisperRuntime", () => {
       await service.installWhisperRuntime();
       const state = service.list().whisperRuntime;
       expect(state.state).toBe("error");
+      service.dispose();
+    });
+  });
+
+  it("joins an in-flight runtime install instead of starting a second one", async () => {
+    await withRoot(async (root) => {
+      const runtimeRoot = join(root, "runtimes");
+      let fetches = 0;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const service = createModelsService(root, runtimeRoot, {
+        fetch: (async () => {
+          fetches += 1;
+          await gate;
+          throw new Error("offline");
+        }) as unknown as typeof fetch
+      });
+
+      const first = service.installWhisperRuntime();
+      const second = service.installWhisperRuntime();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(fetches).toBe(1);
+
+      release();
+      await Promise.all([first, second]);
+      expect(service.list().whisperRuntime.state).toBe("error");
       service.dispose();
     });
   });

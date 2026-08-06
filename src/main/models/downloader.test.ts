@@ -304,6 +304,7 @@ describe("model downloader", () => {
       const state = downloader.state(model.id);
       expect(state.state).toBe("error");
       if (state.state === "error") {
+        expect(state.code).toBe("checksum");
         expect(state.message).toContain("Hash mismatch");
       }
       await expect(stat(join(root, model.id, file.path))).rejects.toThrow();
@@ -460,6 +461,184 @@ describe("model downloader", () => {
       const downloader = createDownloader(root, { fetch, emitProgress: () => {} });
 
       expect(downloader.state("missing-model")).toEqual({ state: "idle" });
+    });
+  });
+
+  it("retries a dropped connection and resumes the partial", async () => {
+    await withRoot(async (root) => {
+      const content = "resumable-content";
+      const { model } = modelFromEntries([{ path: "model.bin", content }]);
+      let calls = 0;
+      // The first attempt dies mid-stream after one chunk. Whatever the OS
+      // flushed lands in the .part, and the retry must resume from the real
+      // byte count, so the response is computed from the Range header.
+      const { fetch } = makeFetch((_url, init) => {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            status: 200,
+            headers: { get: () => null },
+            body: new ReadableStream<Uint8Array>({
+              pull(controller) {
+                controller.enqueue(Buffer.from("resum"));
+                controller.error(new Error("socket hang up"));
+              }
+            })
+          };
+        }
+        const range = new Headers(init?.headers).get("range");
+        if (range === null) {
+          return response(200, [content]);
+        }
+        const start = Number(range.slice("bytes=".length, -1));
+        return response(206, [content.slice(start)]);
+      });
+      const downloader = createDownloader(root, {
+        fetch,
+        emitProgress: () => {},
+        retryDelayMs: 1
+      });
+
+      await downloader.start(model).done;
+
+      expect(calls).toBe(2);
+      expect(downloader.state(model.id)).toEqual({ state: "done" });
+      const written = await readFile(join(root, model.id, "model.bin"), "utf8");
+      expect(written).toBe(content);
+    });
+  });
+
+  it("times out a stalled download and reports a timeout code", async () => {
+    await withRoot(async (root) => {
+      const file = makeFile("model.bin", "never-arrives");
+      const model = makeModel([file]);
+      const { fetch } = makeFetch((_url, init) => hangingResponse(init));
+      const downloader = createDownloader(root, {
+        fetch,
+        emitProgress: () => {},
+        stallTimeoutMs: 30,
+        maxAttempts: 1
+      });
+
+      await downloader.start(model).done;
+
+      const state = downloader.state(model.id);
+      expect(state.state).toBe("error");
+      if (state.state === "error") {
+        expect(state.code).toBe("timeout");
+      }
+    });
+  });
+
+  it("classifies a 403 as a non-retryable http error", async () => {
+    await withRoot(async (root) => {
+      const file = makeFile("model.bin", "content");
+      const model = makeModel([file]);
+      const { fetch, calls } = makeFetch(() => response(403));
+      const downloader = createDownloader(root, {
+        fetch,
+        emitProgress: () => {},
+        retryDelayMs: 1
+      });
+
+      await downloader.start(model).done;
+
+      expect(calls).toHaveLength(1);
+      const state = downloader.state(model.id);
+      expect(state.state).toBe("error");
+      if (state.state === "error") {
+        expect(state.code).toBe("http");
+        expect(state.message).toContain("HTTP 403");
+      }
+    });
+  });
+
+  it("retries a 503 up to the attempt limit then reports http", async () => {
+    await withRoot(async (root) => {
+      const file = makeFile("model.bin", "content");
+      const model = makeModel([file]);
+      const { fetch, calls } = makeFetch(() => response(503));
+      const downloader = createDownloader(root, {
+        fetch,
+        emitProgress: () => {},
+        retryDelayMs: 1
+      });
+
+      await downloader.start(model).done;
+
+      expect(calls).toHaveLength(3);
+      const state = downloader.state(model.id);
+      expect(state.state).toBe("error");
+      if (state.state === "error") {
+        expect(state.code).toBe("http");
+      }
+    });
+  });
+
+  it("keeps the partial for a manual retry after a transient failure", async () => {
+    await withRoot(async (root) => {
+      const content = "partial-kept-content";
+      const { model } = modelFromEntries([{ path: "model.bin", content }]);
+      const file = model.files[0]!;
+      const partPath = join(root, model.id, ".partial", `${file.path}.part`);
+      const metaPath = `${partPath}.json`;
+      let calls = 0;
+      const { fetch } = makeFetch((_url, init) => {
+        calls += 1;
+        if (calls === 1) {
+          // One chunk, then the connection dies. The delay lets the chunk
+          // flush to disk, so the retry exercises the resume path.
+          let pulled = 0;
+          return {
+            status: 200,
+            headers: { get: () => null },
+            body: new ReadableStream<Uint8Array>({
+              pull(controller) {
+                pulled += 1;
+                if (pulled === 1) {
+                  controller.enqueue(Buffer.from("partial-kept"));
+                  return;
+                }
+                setTimeout(() => {
+                  controller.error(new Error("connection reset"));
+                }, 25);
+              }
+            })
+          };
+        }
+        const range = new Headers(init?.headers).get("range");
+        if (range === null) {
+          return response(200, [content]);
+        }
+        const start = Number(range.slice("bytes=".length, -1));
+        return response(206, [content.slice(start)]);
+      });
+      const downloader = createDownloader(root, {
+        fetch,
+        emitProgress: () => {},
+        maxAttempts: 1
+      });
+
+      await downloader.start(model).done;
+      const failed = downloader.state(model.id);
+      expect(failed.state).toBe("error");
+      if (failed.state === "error") {
+        expect(failed.code).toBe("network");
+      }
+
+      // The meta must carry the real on-disk size so a manual retry resumes
+      // with a range request instead of starting over.
+      const meta = JSON.parse(await readFile(metaPath, "utf8")) as {
+        receivedBytes: number;
+      };
+      const size = (await stat(partPath)).size;
+      expect(meta.receivedBytes).toBe(size);
+      expect(size).toBeGreaterThan(0);
+
+      await downloader.start(model).done;
+      expect(downloader.state(model.id)).toEqual({ state: "done" });
+      const written = await readFile(join(root, model.id, file.path), "utf8");
+      expect(written).toBe(content);
     });
   });
 });

@@ -202,6 +202,7 @@ export function ModelsView(): JSX.Element {
   const [activeSelection, setActiveSelection] = useState<{
     primary: string;
     whisperModelId: string;
+    parakeetModelId: string;
   } | null>(null);
   const [specsOpen, setSpecsOpen] = useState(false);
 
@@ -235,13 +236,15 @@ export function ModelsView(): JSX.Element {
     void api.settings.get().then(({ settings }) => {
       setActiveSelection({
         primary: settings.engine.primary,
-        whisperModelId: settings.whisperModelId
+        whisperModelId: settings.whisperModelId,
+        parakeetModelId: settings.parakeetModelId
       });
     });
     return api.settings.onChange((settings) => {
       setActiveSelection({
         primary: settings.engine.primary,
-        whisperModelId: settings.whisperModelId
+        whisperModelId: settings.whisperModelId,
+        parakeetModelId: settings.parakeetModelId
       });
     });
   }, [api]);
@@ -251,10 +254,27 @@ export function ModelsView(): JSX.Element {
     return api.models.onDownloadProgress(refresh);
   }, [api]);
 
-  const isModelActive = (status: ModelStatus): boolean => {
+  /**
+   * The accent "Active" badge is reserved for the model actually running:
+   * selected AND installed. A selection without files on disk must never
+   * claim to be active, or a failed download would contradict its own page.
+   */
+  const isModelActive = (status: ModelStatus): boolean =>
+    status.installed && isModelSelected(status);
+
+  /**
+   * Matches the settings selection, whether or not the files exist. Used for
+   * the "selected but not downloaded" card, which owns the warning instead of
+   * a fake Active badge. Parakeet rows match on the exact catalog id the
+   * engine loads, so v2 and v3 cannot both claim the selection.
+   */
+  const isModelSelected = (status: ModelStatus): boolean => {
     if (activeSelection === null) return false;
     if (status.model.engine === "parakeet") {
-      return activeSelection.primary === "parakeet";
+      return (
+        activeSelection.primary === "parakeet" &&
+        status.model.id === activeSelection.parakeetModelId
+      );
     }
     return (
       activeSelection.primary === "whisper-cpp" &&
@@ -266,7 +286,8 @@ export function ModelsView(): JSX.Element {
     if (status.model.engine === "parakeet") {
       void api.settings.update({
         engine: { primary: "parakeet", fallback: null },
-        whisperModelId: ""
+        whisperModelId: "",
+        parakeetModelId: status.model.id
       });
       return;
     }
@@ -310,6 +331,9 @@ export function ModelsView(): JSX.Element {
   };
 
   const currentStatus = statuses.find(isModelActive);
+  // A selection whose files are missing renders as "selected, not
+  // downloaded" with a download path, never as Active.
+  const selectedStatus = currentStatus ?? statuses.find(isModelSelected);
   const machineTier = recommendation?.tier ?? "balanced";
   const recommendationIds = recommendation === null
     ? []
@@ -364,7 +388,7 @@ export function ModelsView(): JSX.Element {
             <h2 className="font-display text-lg font-normal text-text">{t("models.activeModel.title")}</h2>
           </div>
           <Card>
-            {currentStatus === undefined ? (
+            {selectedStatus === undefined ? (
               <div className="flex items-center gap-3">
                 <Icon icon="ph:cloud" className="h-6 w-6 text-text-muted" aria-hidden="true" />
                 <div>
@@ -374,7 +398,7 @@ export function ModelsView(): JSX.Element {
                   </p>
                 </div>
               </div>
-            ) : (
+            ) : currentStatus !== undefined ? (
               <div className="flex items-center gap-4">
                 <ProviderMark engine={currentStatus.model.engine} className="h-8 w-8" />
                 <div className="min-w-0 flex-1">
@@ -388,6 +412,53 @@ export function ModelsView(): JSX.Element {
                     {currentStatus.model.languages} · {formatBytes(currentStatus.model.bytes)}
                   </p>
                 </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <ProviderMark engine={selectedStatus.model.engine} className="h-8 w-8" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-base font-normal text-text">
+                      {humanModelName(selectedStatus)}
+                    </p>
+                    <Badge tone="warning">{t("models.activeModel.selectedBadge")}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted">
+                    {t("models.activeModel.notDownloaded")}
+                  </p>
+                </div>
+                {selectedStatus.download.state === "downloading" ||
+                selectedStatus.download.state === "verifying" ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      void api.models.cancel({ modelId: selectedStatus.model.id }).then(refresh);
+                    }}
+                  >
+                    {t("models.card.cancel")}
+                  </Button>
+                ) : selectedStatus.download.state === "error" ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      void api.models.download({ modelId: selectedStatus.model.id }).then(refresh);
+                    }}
+                  >
+                    {t("models.card.retry")}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      void api.models.download({ modelId: selectedStatus.model.id }).then(refresh);
+                    }}
+                  >
+                    {t("models.card.download")}
+                  </Button>
+                )}
               </div>
             )}
           </Card>

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { hardwareProfileSchema } from "./hardware";
 import { DEFAULT_ENGINE_ID } from "./engines";
 import { DEFAULT_PTT_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
-import { DEFAULT_WHISPER_MODEL_ID } from "./models";
+import { DEFAULT_WHISPER_MODEL_ID, PARAKEET_DEFAULT_MODEL_ID } from "./models";
 
 export const dictionaryEntrySchema = z.object({
   from: z.string().min(1),
@@ -89,6 +89,8 @@ export const settingsSchema = z.object({
     .default({ primary: DEFAULT_ENGINE_ID, fallback: null }),
   /** Catalog id of the whisper.cpp model the engine loads. */
   whisperModelId: z.string().min(1).default(DEFAULT_WHISPER_MODEL_ID),
+  /** Catalog id of the parakeet model the engine loads. */
+  parakeetModelId: z.string().min(1).default(PARAKEET_DEFAULT_MODEL_ID),
   /** Play a short sound when a capture starts and when it ends. */
   captureSounds: z.boolean().default(true),
   /** Capture sound volume, 0 to 1. */

@@ -24,7 +24,7 @@
  * is gone: if a capture is active, the panel is on screen.
  */
 
-import { BrowserWindow, Notification, screen } from "electron";
+import { BrowserWindow, Notification, nativeTheme, screen } from "electron";
 import { join } from "node:path";
 import type { CaptureState } from "../../shared/capture";
 import { isActiveCapture } from "../../shared/capture";
@@ -44,14 +44,22 @@ import {
  * lines. Reserving transcript space that stays empty just puts a large blank
  * well over the user's work.
  */
-export const OVERLAY_WIDTH = 260;
-export const OVERLAY_HEIGHT_COMPACT = 44;
-export const OVERLAY_HEIGHT_TRANSCRIPT = 132;
+export const OVERLAY_WIDTH = 280;
+export const OVERLAY_HEIGHT_COMPACT = 48;
+export const OVERLAY_HEIGHT_TRANSCRIPT = 150;
 
 export const overlayHeight = (liveTranscription: boolean): number =>
   liveTranscription ? OVERLAY_HEIGHT_TRANSCRIPT : OVERLAY_HEIGHT_COMPACT;
 
 const channelsArg = `--struq-channels=${JSON.stringify(PRELOAD_CHANNELS)}`;
+
+// nativeTheme is present in the real main process, but test harnesses stub the
+// electron module and may omit it; treat it as optional.
+const themeArg = (): string =>
+  (nativeTheme as { readonly shouldUseDarkColors: boolean } | undefined)
+    ?.shouldUseDarkColors === true
+    ? "--struq-theme=dark"
+    : "--struq-theme=light";
 
 export interface OverlayWindowOptions {
   /** Deterministic tests skip timing-sensitive behaviour. */
@@ -137,9 +145,9 @@ const createOverlayWindow = (height: number): BrowserWindow => {
       nodeIntegration: false,
       sandbox: true,
       preload: join(__dirname, "../preload/overlay.cjs"),
-      // The sandboxed preload reads channel names from argv; they are
-      // declared in src/shared/ipc.ts and nowhere else.
-      additionalArguments: [channelsArg]
+      // The sandboxed preload reads channel names and the theme from argv;
+      // they are declared in src/shared/ipc.ts and nowhere else.
+      additionalArguments: [channelsArg, themeArg()]
     }
   });
 

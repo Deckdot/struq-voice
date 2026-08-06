@@ -7,6 +7,7 @@ import { ONBOARDING_VERSION, migrateSettings } from "../shared/settings";
 import type { HardwareProfile, ModelRecommendation } from "../shared/hardware";
 import { UNKNOWN_HARDWARE, recommendModel } from "../shared/hardware";
 import type {
+  AppReadiness,
   DevicesListResult,
   HistoryDeleteRequest,
   HistoryListRequest,
@@ -23,6 +24,7 @@ import type {
   UpdatesStateResult
 } from "../shared/ipc";
 import {
+  appGetReadinessChannel,
   appGetVersionChannel,
   onboardingCompleteChannel,
   onboardingProfileChannel,
@@ -76,6 +78,16 @@ export interface OverlayDeps {
   readonly moveTo: (x: number, y: number) => void;
 }
 
+/** The readiness snapshot the UI can poll or subscribe to. */
+export interface ReadinessDeps {
+  readonly getReadiness: () => AppReadiness;
+}
+
+const SAFE_EMPTY_READINESS: AppReadiness = {
+  microphone: { live: false },
+  hotkeysActive: false
+};
+
 export const registerIpcHandlers = (
   history: HistoryStore | null,
   models: ModelsService | null,
@@ -83,7 +95,8 @@ export const registerIpcHandlers = (
   secrets: SecretsStore | null,
   updater: UpdaterController | null = null,
   onboarding: OnboardingDeps | null = null,
-  overlay: OverlayDeps | null = null
+  overlay: OverlayDeps | null = null,
+  readiness: ReadinessDeps | null = null
 ): void => {
   const currentVersion = app.getVersion();
 
@@ -168,6 +181,11 @@ export const registerIpcHandlers = (
   );
 
   ipcMain.handle(appGetVersionChannel, () => app.getVersion());
+
+  ipcMain.handle(
+    appGetReadinessChannel,
+    (): AppReadiness => readiness?.getReadiness() ?? SAFE_EMPTY_READINESS
+  );
 
   ipcMain.handle(openRouterKeyStatusChannel, async () => {
     if (secrets === null) return { configured: false, stored: false };

@@ -5,7 +5,7 @@
  */
 
 import type { CaptureState } from "./capture";
-import type { TranscriptRecord } from "./ipc";
+import type { AppReadiness, TranscriptRecord } from "./ipc";
 import type { ModelsListResult, ModelsModelResult } from "./ipc";
 import type { OnboardingProfileResult, OnboardingStartRecommendedResult } from "./ipc";
 import type { Settings } from "./settings";
@@ -13,7 +13,10 @@ import type { UpdateState } from "./updates";
 
 export interface MainWindowApi {
   readonly windowKind: "main";
+  readonly initialTheme: "light" | "dark";
   readonly getAppVersion: () => Promise<string>;
+  readonly getReadiness: () => Promise<AppReadiness>;
+  readonly onReadinessChanged: (listener: (state: AppReadiness) => void) => () => void;
   readonly window: {
     minimize: () => void;
     toggleMaximize: () => void;
@@ -89,6 +92,7 @@ export interface MainWindowApi {
 
 export interface OverlayWindowApi {
   readonly windowKind: "overlay";
+  readonly initialTheme: "light" | "dark";
   readonly onCaptureStateChanged: (
     listener: (state: CaptureState, liveTranscription: boolean) => void
   ) => () => void;

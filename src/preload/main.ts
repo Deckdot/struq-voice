@@ -1,6 +1,7 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, nativeTheme } from "electron";
 import type { MainWindowApi } from "../shared/api";
 import type {
+  AppReadiness,
   HistoryListRequest,
   HistorySearchRequest,
   HistoryDeleteRequest,
@@ -41,7 +42,22 @@ const channels = readChannels(process.argv);
 
 const api: MainWindowApi = {
   windowKind: "main",
+  initialTheme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
   getAppVersion: () => ipcRenderer.invoke(channels.appGetVersion),
+  getReadiness: () =>
+    ipcRenderer.invoke(channels.appReadiness.get) as Promise<AppReadiness>,
+  onReadinessChanged: (listener) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      state: AppReadiness
+    ): void => {
+      listener(state);
+    };
+    ipcRenderer.on(channels.appReadiness.changed, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.appReadiness.changed, handler);
+    };
+  },
   window: {
     minimize: () => {
       ipcRenderer.send(channels.window.minimize);

@@ -84,6 +84,16 @@ vi.mock("electron", () => {
         /* no-op */
       }
     },
+    nativeTheme: {
+      shouldUseDarkColors: false,
+      themeSource: "system",
+      on: (): void => {
+        /* no-op */
+      },
+      off: (): void => {
+        /* no-op */
+      }
+    },
     screen: {
       getCursorScreenPoint: () => ({ x: 0, y: 0 }),
       getDisplayNearestPoint: () => ({

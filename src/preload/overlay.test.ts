@@ -24,6 +24,9 @@ vi.mock("electron", () => ({
       ipcListeners.get(channel)?.delete(listener);
     },
     send: vi.fn()
+  },
+  nativeTheme: {
+    shouldUseDarkColors: false
   }
 }));
 

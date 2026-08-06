@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, nativeTheme } from "electron";
 import type { IpcRendererEvent } from "electron";
 import type { OverlayWindowApi } from "../shared/api";
 import type { CaptureState } from "../shared/capture";
@@ -18,6 +18,14 @@ const readChannels = (argv: readonly string[]): PreloadChannels => {
 };
 
 const channels = readChannels(process.argv);
+
+// nativeTheme is present in a real renderer, but test harnesses stub the
+// electron module and may omit it; treat it as optional.
+const initialTheme: "light" | "dark" =
+  (nativeTheme as { readonly shouldUseDarkColors: boolean } | undefined)
+    ?.shouldUseDarkColors === true
+    ? "dark"
+    : "light";
 
 type CaptureStateListener = (
   state: CaptureState,
@@ -42,6 +50,7 @@ ipcRenderer.on(
 
 const api: OverlayWindowApi = {
   windowKind: "overlay",
+  initialTheme,
   onCaptureStateChanged: (
     listener: CaptureStateListener
   ) => {

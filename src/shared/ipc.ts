@@ -11,6 +11,13 @@ import type { Settings } from "./settings";
 import type { UpdateState } from "./updates";
 
 export const appGetVersionChannel = "app:get-version" as const;
+export const appGetReadinessChannel = "app:get-readiness" as const;
+export const appReadinessChangedChannel = "app:readiness-changed" as const;
+
+export interface AppReadiness {
+  readonly microphone: { readonly live: boolean; readonly reason?: string };
+  readonly hotkeysActive: boolean;
+}
 
 export const windowMinimizeChannel = "window:minimize" as const;
 export const windowToggleMaximizeChannel = "window:toggle-maximize" as const;
@@ -361,6 +368,10 @@ export interface OpenRouterKeyMutationResult {
  */
 export const PRELOAD_CHANNELS = {
   appGetVersion: appGetVersionChannel,
+  appReadiness: {
+    get: appGetReadinessChannel,
+    changed: appReadinessChangedChannel
+  },
   window: {
     minimize: windowMinimizeChannel,
     toggleMaximize: windowToggleMaximizeChannel,

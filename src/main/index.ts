@@ -5,7 +5,7 @@
  */
 
 import { join } from "node:path";
-import { app, BrowserWindow, clipboard, Menu, Notification } from "electron";
+import { app, BrowserWindow, clipboard, Menu, nativeTheme, Notification } from "electron";
 import { openDatabase } from "./db/client";
 import { createEngineRouter } from "./engines/router";
 import { createMockEngine } from "./engines/mock";
@@ -23,8 +23,9 @@ import { registerIpcHandlers } from "./ipc";
 import { createModelsService } from "./models";
 import electronUpdater from "electron-updater";
 import { createUpdater, type AutoUpdaterLike } from "./updater";
-import type { CapturePartialTranscriptEvent } from "../shared/ipc";
+import type { AppReadiness, CapturePartialTranscriptEvent } from "../shared/ipc";
 import {
+  appReadinessChangedChannel,
   capturePartialTranscriptChannel,
   updatesChangedChannel
 } from "../shared/ipc";
@@ -54,6 +55,7 @@ import { createTray } from "./tray";
 import { createMainWindow } from "./windows/main-window";
 import { createOverlayWindowController } from "./windows/overlay-window";
 import { createRecorderWindow } from "./windows/recorder-window";
+import { applyThemeSource } from "./theme";
 import {
   createAutostart,
   isAutostartLaunch
@@ -144,6 +146,10 @@ if (!gotLock) {
     Menu.setApplicationMenu(null);
 
     const settingsStore = createSettingsStore(join(app.getPath("userData"), "settings.json"));
+    applyThemeSource(nativeTheme, settingsStore.get().theme);
+    settingsStore.subscribe((latest) => {
+      applyThemeSource(nativeTheme, latest.theme);
+    });
     const secrets = createSecretsStore();
     const history = openDatabase(app.getPath("userData"));
     const runtimeRoot = join(app.getPath("userData"), "runtimes");
@@ -174,6 +180,31 @@ if (!gotLock) {
     settingsStore.subscribe((settings) => {
       autostart.setEnabled(settings.autostart);
     });
+
+    // Readiness the windows can poll or subscribe to: is the microphone live
+    // and are the hotkeys armed. Broadcast on every change to either piece.
+    let streamLive = false;
+    let streamReason: string | undefined;
+    let hotkeysStarted = false;
+    let currentReadiness: AppReadiness = {
+      microphone: { live: false },
+      hotkeysActive: false
+    };
+    const broadcastReadiness = (): void => {
+      const next: AppReadiness = {
+        microphone:
+          streamReason === undefined
+            ? { live: streamLive }
+            : { live: streamLive, reason: streamReason },
+        hotkeysActive: hotkeysStarted
+      };
+      currentReadiness = next;
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(appReadinessChangedChannel, next);
+        }
+      }
+    };
 
     // The update channel. Nothing installs without passing the signature gate
     // in updater.ts, and nothing restarts without a click. Skipped under e2e so
@@ -215,7 +246,8 @@ if (!gotLock) {
         moveTo: (x, y) => {
           overlay?.moveTo(x, y);
         }
-      }
+      },
+      { getReadiness: () => currentReadiness }
     );
 
     updater?.subscribe((state) => {
@@ -533,13 +565,16 @@ if (!gotLock) {
     // the structural fix for the uiohook-napi issue where getUserMedia while
     // a window is focused kills the global hook. Fall back after 5s if the
     // stream never comes up (the app must never fail to boot over this).
-    let hotkeysStarted = false;
     const maybeStartHotkeys = (): void => {
       if (hotkeysStarted || e2e) return;
       hotkeysStarted = true;
       hotkeys?.init();
+      broadcastReadiness();
     };
     bridge.onStreamState((streamState) => {
+      streamLive = streamState.live;
+      streamReason = streamState.reason;
+      broadcastReadiness();
       if (streamState.live) {
         maybeStartHotkeys();
       }

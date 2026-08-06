@@ -78,6 +78,7 @@ export function CaptureTab({
           control={
             <div className="w-72">
               <Select
+                aria-label="Microphone device"
                 value={currentDeviceId ?? ""}
                 onChange={(event) => {
                   const deviceId = event.target.value;

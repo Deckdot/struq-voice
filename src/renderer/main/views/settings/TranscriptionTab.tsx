@@ -166,6 +166,7 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
             control={
               <div className="w-72">
                 <Select
+                  aria-label="Whisper model"
                   value={settings.whisperModelId}
                   onChange={(event) => {
                     update({ whisperModelId: event.target.value });

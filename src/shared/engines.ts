@@ -6,6 +6,14 @@
 
 export const MOCK_ENGINE_ID = "mock" as const;
 
+/**
+ * The default engine for a new profile. Declared here rather than imported
+ * from the engine implementation, because shared must not reach into main.
+ * The implementation exports the same literal and the two are pinned together
+ * by a test in engines.test.ts.
+ */
+export const DEFAULT_ENGINE_ID = "parakeet" as const;
+
 export interface EngineDescriptor {
   readonly id: string;
   readonly displayName: string;
@@ -30,8 +38,11 @@ export interface EngineOption extends EngineDescriptor {
 /**
  * Every engine the user can select, described once. Both Dictate and
  * Settings render from this, so an engine cannot be labelled two ways.
- * Ordered as a user should consider them: local first, cloud second, and the
- * test engine last because it is not a real choice.
+ * Ordered as a user should consider them: local first, cloud second.
+ *
+ * The mock is deliberately absent. It is registered by main only under the
+ * e2e flags, so listing it here would offer a choice that a packaged build
+ * cannot honour.
  */
 export const ENGINE_OPTIONS: readonly EngineOption[] = [
   {
@@ -51,12 +62,6 @@ export const ENGINE_OPTIONS: readonly EngineOption[] = [
     displayName: "OpenRouter",
     kind: "cloud",
     hint: "No download and no local load. Needs an API key, and audio leaves the machine."
-  },
-  {
-    id: MOCK_ENGINE_ID,
-    displayName: "Mock",
-    kind: "test",
-    hint: "Returns fixed text without transcribing. For development only."
   }
 ];
 

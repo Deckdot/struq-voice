@@ -7,7 +7,7 @@
  * - Left click opens the main window. Starting a capture is the hotkey's job
  *   and the menu's Start Capture item; clicking the icon must never begin
  *   recording someone who only meant to open the app.
- * - Right click menu: start/stop, recent transcripts, engine radio group,
+ * - Right click menu: start/stop, recent transcripts, the engine in use,
  *   open, settings, pause hotkeys, quit.
  * - Close hides instead of quitting; quit from the tray (or Ctrl+Q).
  */
@@ -15,7 +15,6 @@
 import { Menu, Notification, Tray, nativeImage } from "electron";
 import { join } from "node:path";
 import type { CaptureState } from "../shared/capture";
-import { MOCK_ENGINE } from "../shared/engines";
 import { t, type MessageKey } from "../shared/i18n";
 
 export interface TrayInput {
@@ -127,16 +126,12 @@ export const createTray = (input: TrayInput): TrayController => {
       { id: "recent", label: t(currentLocale, "tray.recentTranscripts"), submenu: recentSubmenu() },
       { type: "separator" },
       {
+        // Reports the engine in use rather than offering a choice. Switching
+        // engines can mean downloading a model or entering a key, which is a
+        // Settings conversation, not a tray click.
         id: "engine",
-        label: t(currentLocale, "tray.engine"),
-        submenu: [
-          {
-            id: "engineMock",
-            label: `${MOCK_ENGINE.displayName} (test)`,
-            type: "radio",
-            checked: true
-          }
-        ]
+        label: `${t(currentLocale, "tray.engine")}: ${input.engineDisplayName()}`,
+        enabled: false
       },
       { type: "separator" },
       { id: "open", label: t(currentLocale, "tray.openApp"), click: () => { input.onOpenMainWindow(); } },

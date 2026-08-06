@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
-import { MOCK_ENGINE_ID, engineOption } from "../../../shared/engines";
+import { engineOption } from "../../../shared/engines";
 import type { ModelStatus } from "../../../shared/models";
 import { useMainStore } from "../store/use-main-store";
 
@@ -70,9 +70,11 @@ export function StatusCluster(): JSX.Element | null {
     };
   }, [api, isCloud]);
 
-  const engineReady =
-    settings.engine.primary !== MOCK_ENGINE_ID &&
-    (isLocal ? modelStatus?.installed === true : isCloud ? keyConfigured : false);
+  const engineReady = isLocal
+    ? modelStatus?.installed === true
+    : isCloud
+      ? keyConfigured
+      : false;
 
   // First fault wins. Listing three simultaneous problems helps nobody: the
   // microphone is the prerequisite for the rest anyway.
@@ -92,14 +94,9 @@ export function StatusCluster(): JSX.Element | null {
         }
       : !engineReady
         ? {
-            label:
-              settings.engine.primary === MOCK_ENGINE_ID
-                ? "Practice mode"
-                : isCloud
-                  ? "API key needed"
-                  : "Model not downloaded",
+            label: isCloud ? "API key needed" : "Model not downloaded",
             open: () => {
-              if (isLocal && settings.engine.primary !== MOCK_ENGINE_ID) {
+              if (isLocal) {
                 setRoute("models");
                 return;
               }

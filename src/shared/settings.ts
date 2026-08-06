@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { hardwareProfileSchema } from "./hardware";
+import { DEFAULT_ENGINE_ID } from "./engines";
 import { DEFAULT_PTT_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
 import { DEFAULT_WHISPER_MODEL_ID } from "./models";
 
@@ -74,12 +75,18 @@ export const settingsSchema = z.object({
   pttAccelerator: z.string().min(1).default(DEFAULT_PTT_ACCELERATOR),
   /** Toggle accelerator ("CommandOrControl+Shift+Space"). */
   toggleAccelerator: z.string().min(1).default(DEFAULT_TOGGLE_ACCELERATOR),
+  /**
+   * Parakeet is the default: local, private, and needs no API key. A fresh
+   * profile lands on a real engine and shows "download the model", which is a
+   * setup step. The old default was the mock, which transcribed nothing and
+   * looked like a working app producing nonsense.
+   */
   engine: z
     .object({
-      primary: z.string().min(1).default("mock"),
+      primary: z.string().min(1).default(DEFAULT_ENGINE_ID),
       fallback: z.string().nullable().default(null)
     })
-    .default({ primary: "mock", fallback: null }),
+    .default({ primary: DEFAULT_ENGINE_ID, fallback: null }),
   /** Catalog id of the whisper.cpp model the engine loads. */
   whisperModelId: z.string().min(1).default(DEFAULT_WHISPER_MODEL_ID),
   /** Play a short sound when a capture starts and when it ends. */
@@ -135,12 +142,14 @@ export const migrateSettings = (raw: unknown): Settings => {
 };
 
 /**
- * Whether onboarding should run. An install that predates the onboarding
- * block parses with `completed: false`, so completion is also inferred: a
- * user who already picked a real engine has done the setup by hand and must
- * not be walked through it again.
+ * Whether onboarding should run.
+ *
+ * The flag is the only authority now. It used to be inferred from the engine
+ * still being the mock, which worked while the mock was the default: anyone
+ * sitting on it had not chosen. With a real engine as the default that test
+ * is always false, so a new user would never be onboarded. An install that
+ * predates the onboarding block parses with `completed: false` and gets the
+ * flow once, which is the correct outcome for it too.
  */
-export const shouldRunOnboarding = (settings: Settings, mockEngineId: string): boolean => {
-  if (settings.onboarding.completed) return false;
-  return settings.engine.primary === mockEngineId;
-};
+export const shouldRunOnboarding = (settings: Settings): boolean =>
+  !settings.onboarding.completed;

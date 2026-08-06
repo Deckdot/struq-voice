@@ -6,7 +6,7 @@ import {
   settingsSchema,
   shouldRunOnboarding
 } from "./settings";
-import { MOCK_ENGINE_ID } from "./engines";
+import { DEFAULT_ENGINE_ID, ENGINE_OPTIONS, MOCK_ENGINE_ID } from "./engines";
 
 /**
  * The migration path matters more than the schema: an existing install has a
@@ -95,21 +95,37 @@ describe("dictionaryFileSchema", () => {
 
 describe("shouldRunOnboarding", () => {
   it("runs on a fresh install", () => {
-    expect(shouldRunOnboarding(DEFAULT_SETTINGS, MOCK_ENGINE_ID)).toBe(true);
+    expect(shouldRunOnboarding(DEFAULT_SETTINGS)).toBe(true);
   });
 
   it("does not run once completed", () => {
     const settings = migrateSettings({
       onboarding: { completed: true, completedVersion: 1, hardware: null }
     });
-    expect(shouldRunOnboarding(settings, MOCK_ENGINE_ID)).toBe(false);
+    expect(shouldRunOnboarding(settings)).toBe(false);
   });
 
-  // The case that matters on upgrade: a settings.json with no onboarding
-  // block but a real engine belongs to someone who set this up by hand.
-  it("does not run for an existing install that already picked an engine", () => {
+  /**
+   * The engine is no longer part of the decision. It used to stand in for
+   * "has this person chosen anything", which only held while the mock was the
+   * default. With a real default it says nothing, so the completed flag is the
+   * only signal. A legacy profile without the flag now sees onboarding once,
+   * which is a deliberate change from the previous behaviour.
+   */
+  it("ignores the engine and reads only the completed flag", () => {
     const settings = migrateSettings(legacySettings);
     expect(settings.onboarding.completed).toBe(false);
-    expect(shouldRunOnboarding(settings, MOCK_ENGINE_ID)).toBe(false);
+    expect(shouldRunOnboarding(settings)).toBe(true);
+  });
+});
+
+describe("engine defaults", () => {
+  it("defaults a fresh profile to a real engine, never the mock", () => {
+    expect(DEFAULT_SETTINGS.engine.primary).toBe(DEFAULT_ENGINE_ID);
+    expect(DEFAULT_SETTINGS.engine.primary).not.toBe(MOCK_ENGINE_ID);
+  });
+
+  it("does not offer the mock as a selectable engine", () => {
+    expect(ENGINE_OPTIONS.map((option) => option.id)).not.toContain(MOCK_ENGINE_ID);
   });
 });

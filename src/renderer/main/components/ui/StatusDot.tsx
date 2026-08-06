@@ -29,9 +29,9 @@ export interface StatusDotProps {
 const STATE_COLOR: Record<StatusState, string> = {
   idle: "bg-text-muted",
   arming: "bg-ember",
-  listening: "bg-success",
+  listening: "bg-capture",
   transcribing: "bg-info",
-  delivering: "bg-success",
+  delivering: "bg-capture",
   error: "bg-danger",
   ready: "bg-success",
   warning: "bg-warning",

@@ -56,9 +56,10 @@
   --color-danger-soft: var(--sv-danger-soft);
   --color-info: var(--sv-info);
   --color-info-soft: var(--sv-info-soft);
-  --color-state-listening: var(--sv-success);
+  --color-capture: var(--sv-capture);
+  --color-state-listening: var(--sv-capture);
   --color-state-transcribing: var(--sv-info);
-  --color-state-delivered: var(--sv-success);
+  --color-state-delivered: var(--sv-capture);
   --color-state-error: var(--sv-danger);
   --color-state-idle: var(--sv-text-muted);
   --font-display: "Urbanist", "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", "Yu Gothic UI", "Malgun Gothic", "Nirmala UI", "Leelawadee UI", system-ui, sans-serif;
@@ -131,6 +132,12 @@
   --sv-ember-soft: oklch(0.93 0.03 42);
   --sv-success: oklch(0.5 0.09 155);
   --sv-success-soft: oklch(0.94 0.025 155);
+  /* Capture chrome: the pill, the waveform, the listening dot. Evergreen in
+     light, where green reads as "live" against a warm page. Deliberately NOT
+     --sv-success: success means a thing succeeded, capture means a thing is
+     happening, and binding them made the dark theme go green mid-dictation
+     while every other interactive surface was terracotta. */
+  --sv-capture: oklch(0.5 0.09 155);
   --sv-warning: oklch(0.55 0.11 75);
   --sv-warning-soft: oklch(0.945 0.03 75);
   --sv-danger: oklch(0.5 0.14 27);
@@ -162,6 +169,9 @@
   --sv-ember-soft: var(--sv-surface-active);
   --sv-success: oklch(0.72 0.105 175);
   --sv-success-soft: var(--sv-surface-active);
+  /* Ember in dark. Capture is the loudest moment in the product, so it wears
+     the interaction accent rather than fighting it with a second hue. */
+  --sv-capture: var(--sv-accent);
   --sv-warning: oklch(0.76 0.12 80);
   --sv-warning-soft: var(--sv-surface-active);
   --sv-danger: oklch(0.68 0.16 28);

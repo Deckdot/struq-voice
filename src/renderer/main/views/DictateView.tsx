@@ -127,17 +127,8 @@ export function DictateView(): JSX.Element {
   const modelStatus = models.find((entry) => entry.model.id === engineModelId);
   const isLocal = engine?.kind === "local";
   const isCloud = engine?.kind === "cloud";
-  const isMock = settings.engine.primary === "mock";
-
-  const blocker: Blocker | null = isMock
-    ? {
-        message: t("dictate.blocker.mock.message"),
-        action: t("dictate.blocker.mock.action"),
-        run: () => {
-          openSettingsCategory("transcription");
-        }
-      }
-    : isLocal && modelStatus?.installed !== true
+  const blocker: Blocker | null =
+    isLocal && modelStatus?.installed !== true
       ? {
           message: t("dictate.blocker.localMissing.message", {
             model: findModel(engineModelId)?.name ?? "Model"
@@ -240,7 +231,7 @@ export function DictateView(): JSX.Element {
                   phaseLabel === undefined
                     ? "h-4 w-4 shrink-0 text-text-muted"
                     : capture.phase === "listening"
-                      ? "h-4 w-4 shrink-0 text-success"
+                      ? "h-4 w-4 shrink-0 text-capture"
                       : capture.phase === "transcribing"
                         ? "h-4 w-4 shrink-0 text-info"
                         : "h-4 w-4 shrink-0 text-accent"

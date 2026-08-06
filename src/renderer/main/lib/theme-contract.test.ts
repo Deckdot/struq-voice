@@ -31,4 +31,35 @@ describe("dark theme contract", () => {
     const statusDot = readFileSync(resolve(RENDERER_ROOT, "main/components/ui/StatusDot.tsx"), "utf8");
     expect(`${overlay}\n${statusDot}`).not.toMatch(/bg-success[^"\n]*opacity|bg-success\//);
   });
+
+  /**
+   * Capture chrome wears the interaction accent in dark, so a dictation does
+   * not turn the one loud moment in the product green while every other
+   * surface is terracotta. Success stays green: a thing that succeeded is not
+   * a thing that is happening.
+   */
+  it("binds capture chrome to the accent in dark, not to success", () => {
+    expect(darkTheme()).toContain("--sv-capture: var(--sv-accent)");
+  });
+
+  it("keeps success green in dark, distinct from capture", () => {
+    const source = darkTheme();
+    expect(source).toContain("--sv-success: oklch(0.72 0.105 175)");
+    expect(source).not.toMatch(/--sv-success:\s*var\(--sv-accent\)/);
+  });
+
+  it("routes the capture state tokens through --sv-capture", () => {
+    expect(THEME_SOURCE).toContain("--color-state-listening: var(--sv-capture)");
+    expect(THEME_SOURCE).toContain("--color-state-delivered: var(--sv-capture)");
+  });
+
+  /** The overlay and its shared visuals must not hardcode the success hue. */
+  it("keeps the capture surfaces off text-success", () => {
+    const files = [
+      "overlay/overlay.tsx",
+      "shared/RecordingBall.tsx",
+      "shared/BlocksWave.tsx"
+    ].map((file) => readFileSync(resolve(RENDERER_ROOT, file), "utf8"));
+    expect(files.join("\n")).not.toMatch(/text-success|--sv-success/);
+  });
 });

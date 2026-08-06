@@ -24,7 +24,7 @@ const formatElapsed = (ms: number): string => {
 function StateDot({ state }: { readonly state: "arming" | "listening" | "transcribing" | "error" }): JSX.Element {
   const color =
     state === "listening"
-      ? "var(--sv-success)"
+      ? "var(--sv-capture)"
       : state === "transcribing"
         ? "var(--sv-info)"
         : state === "error"
@@ -167,7 +167,7 @@ function ListeningView({
   return (
     <>
       <div className="flex min-h-0 flex-1 items-center gap-2.5">
-        <RecordingBall className="h-4 w-4 shrink-0 text-success" />
+        <RecordingBall className="h-4 w-4 shrink-0 text-capture" />
         <div className="h-5 min-w-0 flex-1">
           <Waveform bands={bands ?? SILENT_BANDS} idle={!live} />
         </div>
@@ -198,7 +198,7 @@ function TranscribingView({
   return (
     <>
       <div className="flex min-h-0 flex-1 items-center justify-center gap-2.5 px-0.5">
-        <BlocksWave className="h-5 w-5 shrink-0 text-success" />
+        <BlocksWave className="h-5 w-5 shrink-0 text-capture" />
       </div>
       {liveEnabled && (
         <div className="transcript-scroll min-h-0 flex-1 overflow-y-auto rounded-sm bg-bg-sunken px-2.5 py-1.5">
@@ -223,7 +223,7 @@ function DeliveringView(): JSX.Element {
     >
       <svg
         viewBox="0 0 24 24"
-        className="h-4 w-4 shrink-0 text-success"
+        className="h-4 w-4 shrink-0 text-capture"
         aria-hidden="true"
       >
         <path

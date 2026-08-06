@@ -10,7 +10,7 @@ export function RecordingBall({ className = "h-4 w-4" }: RecordingBallProps): JS
     <svg
       viewBox="0 0 24 24"
       fill="currentColor"
-      className={`shrink-0 text-success ${className}`}
+      className={`shrink-0 text-capture ${className}`}
       aria-hidden="true"
     >
       <style>{`

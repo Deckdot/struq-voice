@@ -10,7 +10,15 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: resolve(__dirname, "src/main/index.ts"),
+        // Two entries: the main process, and the meeting transcription
+        // worker that utilityProcess.fork loads from out/main/.
+        input: {
+          index: resolve(__dirname, "src/main/index.ts"),
+          "meeting-worker": resolve(
+            __dirname,
+            "src/main/meeting/worker/index.ts"
+          ),
+        },
         // Force CJS. The main process uses `__dirname` for preload and
         // renderer paths, which does not exist in ESM. Pinning CJS keeps
         // the output format deterministic.

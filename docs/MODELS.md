@@ -95,6 +95,28 @@ engine.
   in the Models view. Files are copied and then verified against the catalog
   hashes; a mismatch is reported rather than silently accepted.
 
+## Meeting support assets
+
+Meetings need three ONNX models beyond the ASR engine: a Silero voice
+activity detector, a CAM++ speaker embedding extractor, and a pyannote
+speaker segmentation model. They are defined in
+`src/shared/meeting-assets.ts` (sizes and sha256 from the Hugging Face API)
+and install into `userData/meeting-assets/`, deliberately separate from
+`models/` so the Models view's disk total keeps meaning "transcription
+models".
+
+| Asset | File | Size | Required |
+|---|---|---|---|
+| Silero VAD | `silero_vad.onnx` | 1.8 MB | yes |
+| CAM++ embedding | `3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx` | 29.6 MB | yes |
+| Pyannote segmentation | `model.onnx` | 6.0 MB | no |
+
+They reuse the same resumable downloader the catalog models use (the
+`DownloadBundle` interface in `src/shared/models.ts` is the shared
+structural part), but never appear in `MODEL_CATALOG`, so the Models view
+stays a page about transcription quality. A first-time install of the
+required assets is about 31 MB.
+
 ## OpenRouter (cloud)
 
 `POST https://openrouter.ai/api/v1/audio/transcriptions` with

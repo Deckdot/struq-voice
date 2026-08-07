@@ -42,8 +42,12 @@ MAIN PROCESS            RECORDER (hidden)      OVERLAY (never focused)
 lifecycle · tray        warm getUserMedia       capture pill, live waveform
 hotkeys · session       AudioWorklet -> PCM
 engines · paste · db    -> main
+
+MEETING WINDOW (hidden, on demand)   MEETING WORKER (utilityProcess)
+loopback + mic worklets              VAD -> ASR -> speaker clustering
+opus archive -> main                 -> main (finished segments)
                                                        MAIN WINDOW (on demand)
-                                                       Dictate · History · Models · Settings
+                                                       Dictate · Meetings · History · Models · Settings
 ```
 
 Key files:
@@ -52,17 +56,22 @@ Key files:
 |---|---|
 | Boot, wiring, single instance | `src/main/index.ts` |
 | Capture state machine | `src/main/session/capture-session.ts` |
-| Hotkeys (PTT hook, toggle, Escape) | `src/main/hotkeys/{index,ptt-hook,toggle-shortcut}.ts` |
+| Meeting state machine | `src/main/meeting/meeting-session.ts` |
+| Hotkeys (PTT hook, toggle, meeting, Escape) | `src/main/hotkeys/{index,ptt-hook,toggle-shortcut,meeting-shortcut}.ts` |
 | Audio pipeline (recorder renderer) | `src/renderer/recorder/{recorder.ts,audio.ts,pcm-collector.worklet.js}` |
+| Meeting audio pipeline (renderer) | `src/renderer/meeting/{meeting.ts,audio.ts,meeting-collector.worklet.js}` |
+| Meeting transcription worker | `src/main/meeting/worker/` |
+| Meeting orchestration (session, assets, archive, ipc) | `src/main/meeting/` |
 | Engines: mock / parakeet / whisper / openrouter | `src/main/engines/` |
 | Model catalog + downloader + runtime | `src/main/models/` + `src/shared/models.ts` |
+| Meeting support assets (VAD, embedding, segmentation) | `src/shared/meeting-assets.ts` |
 | Paste delivery | `src/main/platform/win32/paste.ts` |
-| History (SQLite + FTS5) | `src/main/db/` |
+| History + meetings (SQLite + FTS5) | `src/main/db/` |
 | Settings + secrets | `src/main/store/` + `src/shared/settings.ts` |
 | Text post-processing | `src/main/post/text-cleanup.ts` |
 | IPC channels (SINGLE SOURCE) | `src/shared/ipc.ts` + `src/preload/*.ts` |
 | Tray | `src/main/tray.ts` |
-| Windows | `src/main/windows/{main,overlay,recorder}-window.ts` |
+| Windows | `src/main/windows/{main,overlay,recorder,meeting}-window.ts` |
 | Main window UI | `src/renderer/main/` |
 
 ## 4. Boundaries (enforced by lint, never violated)
@@ -93,6 +102,27 @@ idle ──arm──▶ arming ──ready──▶ listening ──stop──�
 - `cancel` is Escape, registered only for the duration of a capture.
 - Captures under `minCaptureMs` (350ms) are discarded silently.
 - A `maxCaptureMs` (120s) watchdog force-stops a stuck-key capture.
+
+## 5b. The meeting state machine
+
+Single authority in `meeting-session.ts`, in the same shape as the capture
+session: a factory taking injected dependencies, returning commands and a
+`subscribe`. Tray and main window render from broadcasts of it.
+
+```
+idle ──start──▶ starting ──lanes live──▶ recording ──stop──▶ finalizing ──▶ idle
+  ▲                │                        │  ▲                            │
+  │                └──fail──────────────────┴──┘pause/resume──────────────┘
+  └────────── error ◀────────────────── worker failure / 8s lane timeout ──┘
+```
+
+- Meetings are refused up front when the database, the support assets or the
+  engine are unavailable; the renderer turns each refusal into its own copy.
+- The hidden meeting window is created on start and destroyed on stop; the
+  `struq-meeting` utilityProcess is forked on start, drained on stop, killed.
+- The microphone lane is always the speaker `me`; only the system lane is
+  clustered. Dictation always wins: the capture session's state is mirrored
+  into `setDictationActive`, which yields the worker.
 
 ## 6. Engines
 
@@ -221,6 +251,7 @@ skills for this repo:
 - `ipc-architecture` - how to add an IPC channel end to end.
 - `native-modules` - native module handling and degradation paths.
 - `capture-session` - the state machine, hotkeys and audio pipeline.
+- `meeting-pipeline` - the meeting state machine, loopback capture and worker.
 
 Invoke the relevant skill when a task matches its description.
 

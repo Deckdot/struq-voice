@@ -68,8 +68,30 @@ as `pnpm test:e2e`).
 ### Post-processing
 - Trim/collapse whitespace (always on), filler removal, trailing punctuation, and a standalone Dictionary matching engine supporting case sensitivity, whole words, rule toggling, and deletion; pure functions with unit tests.
 
-### Onboarding and hardware
-- Machine profiling: cores and memory from Node `os`, GPU vendor from
+### Meetings
+- `Ctrl+Shift+M` anywhere in Windows starts and stops a meeting: system
+  audio (any app that plays sound) plus your microphone, transcribed live
+  with speaker attribution.
+- Hidden meeting window owns Windows loopback capture
+  (`getDisplayMedia` with `audio: "loopback"`, driven from main via
+  `executeJavaScript` because a hotkey has no user activation) and the opus
+  archive; created on demand, destroyed on stop.
+- ASR runs in a `utilityProcess` (`struq-meeting`), spawned per meeting and
+  killed on stop, so the synchronous sherpa decode never stalls main.
+- Silero VAD cuts utterances per lane; silence is never decoded. The mic
+  lane is always "You"; the system lane is attributed by incremental speaker
+  clustering with a CAM++ embedding model, refined per long turn by a
+  pyannote segmentation model.
+- Live transcript view (virtualized, pinned to live with jump-to-live),
+  searchable library, renameable speakers, Markdown/Text/SRT export, playable
+  recording revealed in Explorer.
+- Dictation always wins: main yields the worker while a capture is live, and
+  the worker's queue is hard-capped with honest gap markers.
+- Support models (VAD, embedding, segmentation) install once from the
+  Meetings page through the resumable downloader, kept out of the Models
+  view.
+
+### Onboarding and hardware- Machine profiling: cores and memory from Node `os`, GPU vendor from
   `app.getGPUInfo("basic")`, CUDA runtime from the whisper.cpp DLL probe.
   No subprocess calls, and every probe degrades to the unknown profile
   rather than blocking boot (`src/shared/hardware.ts`,
@@ -89,8 +111,8 @@ as `pnpm test:e2e`).
 
 ### Interface
 - Application shell: branded custom title bar, left navigation rail with
-  Dictate, History, Dictionary, and Models at the top, Settings pinned at the bottom,
-  and a flexible content region. Ctrl+1..5 jumps between
+  Dictate, Meetings, History, Dictionary, and Models at the top, Settings pinned at the bottom,
+  and a flexible content region. Ctrl+1..6 jumps between
   pages, Ctrl+K opens the command palette, Esc closes any overlay.
   First paint reveals via a two-sheet curtain with trailing soft accent band.
 - Shared component layer in `src/renderer/main/components/ui/`: the

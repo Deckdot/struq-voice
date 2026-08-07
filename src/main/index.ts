@@ -5,6 +5,7 @@
  */
 
 import { join } from "node:path";
+import { availableParallelism } from "node:os";
 import { app, BrowserWindow, clipboard, Menu, nativeTheme, net, Notification } from "electron";
 import { openDatabase } from "./db/client";
 import { createEngineRouter } from "./engines/router";
@@ -26,9 +27,11 @@ import type { AppReadiness, CapturePartialTranscriptEvent } from "../shared/ipc"
 import {
   appReadinessChangedChannel,
   capturePartialTranscriptChannel,
+  meetingStateChangedChannel,
   updatesChangedChannel
 } from "../shared/ipc";
 import { fail } from "../shared/result";
+import { isMeetingActive } from "../shared/meeting";
 
 // electron-updater ships CommonJS, so the named exports hang off the default.
 const { autoUpdater } = electronUpdater as unknown as { autoUpdater: AutoUpdaterLike };
@@ -67,6 +70,13 @@ import { createTray } from "./tray";
 import { createMainWindow } from "./windows/main-window";
 import { createOverlayWindowController } from "./windows/overlay-window";
 import { createRecorderWindow } from "./windows/recorder-window";
+import { createMeetingWindow } from "./windows/meeting-window";
+import { installLoopbackHandler } from "./meeting/loopback";
+import { createMeetingAssetService } from "./meeting/assets";
+import { createArchiveWriter } from "./meeting/archive-writer";
+import { createMeetingSession } from "./meeting/meeting-session";
+import { createMeetingWorkerClient } from "./meeting/worker-client";
+import { registerMeetingIpcHandlers } from "./meeting/ipc";
 import { applyThemeSource } from "./theme";
 import {
   createAutostart,
@@ -98,6 +108,7 @@ if (process.platform === "win32") {
 let mainWindow: BrowserWindow | null = null;
 let overlay: ReturnType<typeof createOverlayWindowController> | null = null;
 let hotkeys: ReturnType<typeof createHotkeys> | null = null;
+let meetingSession: ReturnType<typeof createMeetingSession> | null = null;
 let isQuitting = false;
 
 app.on("before-quit", () => {
@@ -175,6 +186,7 @@ if (!gotLock) {
   void app.whenReady().then(() => {
     // The app draws its own chrome, so suppress Electron's default menu.
     Menu.setApplicationMenu(null);
+    installLoopbackHandler();
 
     const settingsStore = createSettingsStore(join(app.getPath("userData"), "settings.json"));
     applyThemeSource(nativeTheme, settingsStore.get().theme);
@@ -187,6 +199,29 @@ if (!gotLock) {
     const secrets = createSecretsStore();
     const db = openDatabase(app.getPath("userData"));
     const history = db?.history ?? null;
+    const meetingStore = db?.meetings ?? null;
+
+    // A meeting row still marked recording is one the app did not survive.
+    // Its segments are already on disk; mark the meeting so the list is
+    // honest rather than showing it as live forever.
+    meetingStore?.markInterruptedOnBoot();
+
+    // Retention: delete meetings older than the cutoff, rows and recording
+    // directories. One sweep at boot, delayed so it never competes with boot.
+    const retentionDays = settingsStore.get().meeting.retentionDays;
+    if (retentionDays > 0 && meetingStore !== null) {
+      setTimeout(() => {
+        const cutoffMs = Date.now() - retentionDays * 86_400_000;
+        for (const expired of meetingStore.listExpired(cutoffMs)) {
+          meetingStore.removeMeeting(expired.id);
+          if (expired.audioPath !== null) {
+            void import("node:fs/promises").then(({ rm }) => {
+              void rm(join(expired.audioPath as string, ".."), { recursive: true, force: true });
+            });
+          }
+        }
+      }, 10_000);
+    }
     const runtimeRoot = join(app.getPath("userData"), "runtimes");
     const models = createModelsService(
       join(app.getPath("userData"), "models"),
@@ -270,6 +305,39 @@ if (!gotLock) {
       hardware = profile;
     });
 
+    const modelsRoot = join(app.getPath("userData"), "models");
+    const meetingsRoot = join(app.getPath("userData"), "meetings");
+    const meetingAssets = createMeetingAssetService(
+      join(app.getPath("userData"), "meeting-assets"),
+      { fetch: netFetch }
+    );
+    const meetings = createMeetingSession({
+      settings: () => settingsStore.get().meeting,
+      speechLanguage: () => settingsStore.get().speechLanguage,
+      store: meetingStore,
+      worker: createMeetingWorkerClient(),
+      window: {
+        create: () => Promise.resolve(createMeetingWindow()),
+        destroy: () => {
+          for (const window of BrowserWindow.getAllWindows()) {
+            if (window.webContents.getURL().includes("meeting/index.html")) {
+              window.destroy();
+            }
+          }
+        }
+      },
+      archive: createArchiveWriter(),
+      assets: meetingAssets,
+      paths: { modelsRoot, runtimeRoot, meetingsRoot },
+      resolveModelId: (engine) =>
+        engine === "parakeet"
+          ? settingsStore.get().parakeetModelId
+          : settingsStore.get().whisperModelId,
+      cores: availableParallelism()
+    });
+    meetingSession = meetings;
+    registerMeetingIpcHandlers(meetingStore, meetings, meetingAssets);
+
     // The overlay controller is built further down, so the move handler binds
     // late. It is only ever called from a drag, long after boot.
     registerIpcHandlers(
@@ -307,7 +375,6 @@ if (!gotLock) {
       ? createSimulatedAudioSource(app.getAppPath())
       : createRecorderAudioSource(recorderWindow, bridge);
 
-    const modelsRoot = join(app.getPath("userData"), "models");
     const parakeetEngine = createParakeetEngine({
       modelsRoot,
       getModelId: () => settingsStore.get().parakeetModelId
@@ -553,6 +620,13 @@ if (!gotLock) {
 
     const tray = createTray({
       onToggleCapture: toggleCapture,
+      onToggleMeeting: () => {
+        if (isMeetingActive(meetings.state)) {
+          void meetings.stop();
+        } else {
+          void meetings.start();
+        }
+      },
       onOpenMainWindow: () => { showMainWindow(settingsStore.get()); },
       onSetHotkeysPaused: (paused) => hotkeys?.setPaused(paused),
       onQuit: () => {
@@ -564,6 +638,21 @@ if (!gotLock) {
       engineDisplayName: () => engines.get(primaryEngineId)?.displayName ?? MOCK_ENGINE.displayName,
     });
     tray.setLocale(currentLocOpt.locale);
+
+    // Dictation always wins. The meeting worker finishes the utterance it is
+    // on and then holds until the capture is done.
+    session.subscribe((state) => {
+      meetings.setDictationActive(state.phase !== "idle" && state.phase !== "error");
+    });
+
+    meetings.subscribe((state) => {
+      tray.setMeetingState(state);
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) {
+          window.webContents.send(meetingStateChangedChannel, state);
+        }
+      }
+    });
 
     settingsStore.subscribe((latest) => {
       const locOpt = getLocaleOptions(latest);
@@ -587,17 +676,29 @@ if (!gotLock) {
         session.stop();
       },
       onToggle: toggleCapture,
+      onMeetingToggle: () => {
+        if (isMeetingActive(meetings.state)) {
+          void meetings.stop();
+        } else {
+          void meetings.start();
+        }
+      },
     });
 
     // Apply the configured hotkeys and re-register at runtime when the user
     // changes them in Settings. The PTT hook chord is applied immediately;
-    // the toggle accelerator re-registers via globalShortcut.
+    // the toggle and meeting accelerators re-register via globalShortcut.
     hotkeys.setHotkeys(
       settingsStore.get().pttAccelerator,
-      settingsStore.get().toggleAccelerator
+      settingsStore.get().toggleAccelerator,
+      settingsStore.get().meeting.accelerator
     );
     settingsStore.subscribe((latest) => {
-      hotkeys?.setHotkeys(latest.pttAccelerator, latest.toggleAccelerator);
+      hotkeys?.setHotkeys(
+        latest.pttAccelerator,
+        latest.toggleAccelerator,
+        latest.meeting.accelerator
+      );
     });
 
     // An install clicked mid-capture waits for this. "idle" and "error" are
@@ -709,5 +810,6 @@ if (!gotLock) {
   app.on("will-quit", () => {
     overlay?.dispose();
     hotkeys?.dispose();
+    meetingSession?.dispose();
   });
 }

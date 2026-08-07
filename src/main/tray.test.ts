@@ -10,6 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const handlers = new Map<string, () => void>();
+let menuTemplate: unknown[] = [];
 
 vi.mock("electron", () => {
   class FakeTray {
@@ -46,7 +47,10 @@ vi.mock("electron", () => {
     Tray: FakeTray,
     Notification: FakeNotification,
     Menu: {
-      buildFromTemplate: (template: unknown[]) => ({ items: template })
+      buildFromTemplate: (template: unknown[]) => {
+        menuTemplate = template;
+        return { items: template };
+      }
     },
     nativeImage: {
       createFromPath: () => ({ isEmpty: () => true })
@@ -58,12 +62,16 @@ const { createTray } = await import("./tray");
 
 const setup = (): {
   toggles: number;
+  meetingToggles: number;
   opens: number;
 } => {
-  const counts = { toggles: 0, opens: 0 };
+  const counts = { toggles: 0, meetingToggles: 0, opens: 0 };
   createTray({
     onToggleCapture: () => {
       counts.toggles += 1;
+    },
+    onToggleMeeting: () => {
+      counts.meetingToggles += 1;
     },
     onOpenMainWindow: () => {
       counts.opens += 1;
@@ -106,5 +114,38 @@ describe("tray click", () => {
     // The capability is not lost, it just moved off the icon itself.
     expect(counts.toggles).toBe(0);
     expect(typeof handlers.get("click")).toBe("function");
+  });
+
+  it("offers the meeting toggle menu item and flips its label with the state", () => {
+    const controller = createTray({
+      onToggleCapture: () => undefined,
+      onToggleMeeting: () => undefined,
+      onOpenMainWindow: () => undefined,
+      onSetHotkeysPaused: () => undefined,
+      onQuit: () => undefined,
+      onCopyTranscript: () => undefined,
+      engineDisplayName: () => "Mock"
+    });
+    const meetingItem = (): { label?: string } | undefined =>
+      menuTemplate.find((item) => (item as { id?: string }).id === "startStopMeeting") as
+        | { label?: string }
+        | undefined;
+    expect(meetingItem()).toBeDefined();
+    expect(meetingItem()?.label).toBe("Start Meeting");
+
+    controller.setMeetingState({
+      phase: "recording",
+      meetingId: 1,
+      startedAtMs: Date.now(),
+      system: { live: true },
+      microphone: { live: true },
+      backlogSeconds: 0,
+      segmentCount: 0,
+      speakerCount: 1
+    });
+    expect(meetingItem()?.label).toBe("Stop Meeting");
+
+    controller.setMeetingState({ phase: "idle" });
+    expect(meetingItem()?.label).toBe("Start Meeting");
   });
 });

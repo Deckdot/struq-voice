@@ -1,0 +1,325 @@
+import { describe, expect, it, vi } from "vitest";
+import { createMeetingSession } from "./meeting-session";
+import type { MeetingSession, MeetingSessionOptions } from "./meeting-session";
+import type { MeetingStore } from "../db/meeting-store";
+import type { MeetingWorkerClient } from "./worker-client";
+import type { ArchiveWriter } from "./archive-writer";
+import type { MeetingAssetService } from "./assets";
+import type { WorkerEvent } from "./worker/protocol";
+import type { MeetingAudioStateEvent } from "../../shared/ipc";
+import type { MeetingState } from "../../shared/meeting";
+
+interface FakeStore extends MeetingStore {
+  readonly created: { title: string; engineId: string }[];
+  readonly finalized: { id: number; state: string }[];
+  readonly segments: unknown[];
+}
+
+const makeStore = (): FakeStore => {
+  let nextId = 1;
+  const store = {
+    created: [] as { title: string; engineId: string }[],
+    finalized: [] as { id: number; state: string }[],
+    segments: [] as unknown[],
+    createMeeting: (input: { title: string; engineId: string; modelId: string; language: string | null; audioPath: string | null }) => {
+      store.created.push({ title: input.title, engineId: input.engineId });
+      return nextId++;
+    },
+    appendSegment: () => 1,
+    finalizeMeeting: (id: number, input: { state: "complete" | "interrupted" }) => {
+      store.finalized.push({ id, state: input.state });
+    },
+    setTitle: () => true,
+    setAudioPath: () => undefined,
+    setSpeakerLabel: () => undefined,
+    listMeetings: () => [],
+    countMeetings: () => 0,
+    getMeeting: () => null,
+    listSpeakers: () => [],
+    listSegments: () => [],
+    countSegments: () => 0,
+    searchSegments: () => [],
+    removeMeeting: () => true,
+    markInterruptedOnBoot: () => 0,
+    listExpired: () => []
+  };
+  return store;
+};
+
+const makeWorker = (): MeetingWorkerClient & { emit: (event: WorkerEvent) => void } => {
+  const listeners = new Set<(event: WorkerEvent) => void>();
+  return {
+    start: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+    sendFrames: vi.fn(),
+    setYielding: vi.fn(),
+    drain: vi.fn().mockResolvedValue(undefined),
+    kill: vi.fn(),
+    onEvent: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    emit: (event) => {
+      for (const listener of listeners) {
+        listener(event);
+      }
+    }
+  };
+};
+
+const makeAssets = (ready = true): MeetingAssetService => ({
+  list: () => ({ items: [], ready }),
+  isReady: () => ready,
+  installMissing: vi.fn().mockResolvedValue(undefined),
+  pathFor: (role) => (role === "segmentation" ? "/seg.onnx" : `/asset.onnx`),
+  subscribe: () => () => undefined
+});
+
+const makeArchive = (): ArchiveWriter => ({
+  open: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+  append: vi.fn(),
+  close: vi.fn().mockResolvedValue(1024),
+  isOpen: () => false
+});
+
+const makeWindow = () => {
+  const ipcCallbacks: Array<(event: unknown, channel: string) => void> = [];
+  const created = {
+    webContents: {
+      once: vi.fn((event: string, callback: (event: unknown, channel: string) => void) => {
+        if (event === "did-finish-load") {
+          setTimeout(() => {
+            callback({}, "did-finish-load");
+          }, 0);
+        } else if (event === "ipc-message") {
+          ipcCallbacks.push(callback);
+        }
+      }),
+      send: vi.fn((channel: string) => {
+        if (channel === "meeting-audio:stop") {
+          setTimeout(() => {
+            for (const callback of ipcCallbacks.splice(0)) {
+              callback({}, "meeting-audio:state");
+            }
+          }, 0);
+        }
+      }),
+      executeJavaScript: vi.fn().mockResolvedValue(undefined)
+    },
+    isDestroyed: () => false
+  };
+  return { ...created, create: vi.fn().mockResolvedValue(created), destroy: vi.fn() };
+};
+
+const makeSession = (
+  overrides: Partial<MeetingSessionOptions> = {}
+): {
+  session: MeetingSession;
+  store: FakeStore;
+  worker: ReturnType<typeof makeWorker>;
+  window: ReturnType<typeof makeWindow>;
+} => {
+  const store = makeStore();
+  const worker = makeWorker();
+  const window = makeWindow();
+  const archive = makeArchive();
+  const session = createMeetingSession({
+    settings: () => ({
+      includeMicrophone: true,
+      accelerator: "CommandOrControl+Shift+M",
+      engineId: "parakeet",
+      diarization: true,
+      diarizationRefineOverMs: 6000,
+      speakerThreshold: 0.55,
+      maxSpeakers: 0,
+      archiveAudio: true,
+      archiveBitrateKbps: 32,
+      vadMinSpeechMs: 250,
+      vadMinSilenceMs: 500,
+      vadMaxSpeechMs: 20_000,
+      autoStopSilentMinutes: 0,
+      retentionDays: 0
+    }),
+    speechLanguage: () => "en",
+    store,
+    worker,
+    window,
+    archive,
+    assets: makeAssets(),
+    paths: {
+      modelsRoot: "/models",
+      runtimeRoot: "/runtimes",
+      meetingsRoot: "/meetings"
+    },
+    resolveModelId: () => "parakeet-tdt-0.6b-v3-int8",
+    cores: 8,
+    deps: {
+      // No real filesystem under fake timers: the fs promise would never
+      // settle while the clock is frozen.
+      mkdir: () => Promise.resolve()
+    },
+    ...overrides
+  });
+  return { session, store, worker, window };
+};
+
+const liveAudioState = (): MeetingAudioStateEvent => ({
+  system: { live: true },
+  microphone: { live: true },
+  finished: false
+});
+
+describe("meeting session", () => {
+  it("refuses to start twice", async () => {
+    const { session } = makeSession();
+    const first = await session.start();
+    expect(first.ok).toBe(true);
+    const second = await session.start();
+    expect(second.ok).toBe(false);
+    expect(second.code).toBe("already-running");
+  });
+
+  it("refuses when the database is unavailable", async () => {
+    const { session } = makeSession({ store: null });
+    const outcome = await session.start();
+    expect(outcome.ok).toBe(false);
+    expect(outcome.code).toBe("database-unavailable");
+  });
+
+  it("refuses when the assets are missing", async () => {
+    const { session } = makeSession({ assets: makeAssets(false) });
+    const outcome = await session.start();
+    expect(outcome.ok).toBe(false);
+    expect(outcome.code).toBe("assets-missing");
+  });
+
+  it("moves through starting to recording when a lane goes live", async () => {
+    const { session } = makeSession();
+    const states: MeetingState[] = [];
+    session.subscribe((state) => {
+      states.push(state);
+    });
+    const outcome = await session.start();
+    expect(outcome.ok).toBe(true);
+    session.handleAudioState(liveAudioState());
+    const recording = session.state;
+    expect(recording.phase).toBe("recording");
+    if (recording.phase === "recording") {
+      expect(recording.system.live).toBe(true);
+    }
+    expect(states.some((state) => state.phase === "starting")).toBe(true);
+    expect(states.some((state) => state.phase === "recording")).toBe(true);
+  });
+
+  it("stores segments from worker events and broadcasts them", async () => {
+    const { session, store, worker } = makeSession();
+    const seen: unknown[] = [];
+    session.onSegment((event) => {
+      seen.push(event);
+    });
+    await session.start();
+    session.handleAudioState(liveAudioState());
+    worker.emit({
+      type: "segment",
+      source: "system",
+      startMs: 1000,
+      endMs: 3000,
+      speakerKey: "s1",
+      text: "hello there"
+    });
+    expect(store.segments).toHaveLength(0);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("finalizes the meeting on stop with the archive byte count", async () => {
+    const { session, store, worker } = makeSession();
+    await session.start();
+    session.handleAudioState(liveAudioState());
+    await session.stop();
+    expect(session.state.phase).toBe("idle");
+    expect(store.finalized[0]?.state).toBe("complete");
+    expect(worker.drain).toHaveBeenCalled();
+    expect(worker.kill).toHaveBeenCalled();
+  });
+
+  it("yields the worker while dictation is active", () => {
+    const { session, worker } = makeSession();
+    session.setDictationActive(true);
+    expect(worker.setYielding).toHaveBeenCalledWith(true);
+    session.setDictationActive(false);
+    expect(worker.setYielding).toHaveBeenCalledWith(false);
+  });
+
+  it("stops on a worker failure and marks the meeting interrupted", async () => {
+    const { session, store, worker } = makeSession();
+    await session.start();
+    session.handleAudioState(liveAudioState());
+    worker.emit({ type: "failure", code: "decode-failed", message: "boom" });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
+    expect(session.state.phase).toBe("error");
+    if (session.state.phase === "error") {
+      expect(session.state.code).toBe("worker-failed");
+    }
+    expect(store.finalized[0]?.state).toBe("interrupted");
+  });
+
+  it("auto-stops after the silent window", async () => {
+    vi.useFakeTimers();
+    try {
+      const { session } = makeSession({
+        settings: () => ({
+          includeMicrophone: true,
+          accelerator: "CommandOrControl+Shift+M",
+          engineId: "parakeet",
+          diarization: true,
+          diarizationRefineOverMs: 6000,
+          speakerThreshold: 0.55,
+          maxSpeakers: 0,
+          archiveAudio: true,
+          archiveBitrateKbps: 32,
+          vadMinSpeechMs: 250,
+          vadMinSilenceMs: 500,
+          vadMaxSpeechMs: 20_000,
+          autoStopSilentMinutes: 1,
+          retentionDays: 0
+        })
+      });
+      const starting = session.start();
+      // Let the start() microtask chain reach the did-finish-load timer
+      // before the clock advances past it.
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(50);
+      await starting;
+      session.handleAudioState(liveAudioState());
+      await vi.advanceTimersByTimeAsync(60_000 + 500);
+      expect(session.state.phase).toBe("idle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("forwards frames to the worker without holding them", () => {
+    const { session, worker } = makeSession();
+    const frames = {
+      type: "frames" as const,
+      source: "system" as const,
+      pcm: new ArrayBuffer(16),
+      startSample: 16000
+    };
+    session.handleFrames(frames);
+    expect(worker.sendFrames).toHaveBeenCalledWith(frames);
+  });
+
+  it("forwards archive chunks to the writer", () => {
+    const { session } = makeSession();
+    const bytes = new ArrayBuffer(8);
+    const archive = makeArchive();
+    const { session: withWriter } = makeSession({ archive });
+    withWriter.handleArchiveChunk(bytes);
+    expect(archive.append).toHaveBeenCalledWith(bytes);
+    void session;
+  });
+});

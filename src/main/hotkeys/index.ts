@@ -10,6 +10,10 @@ import {
   registerToggleShortcut,
   unregisterToggleShortcut
 } from "./toggle-shortcut";
+import {
+  registerMeetingShortcut,
+  unregisterMeetingShortcut
+} from "./meeting-shortcut";
 import { parseAccelerator } from "../../shared/hotkeys";
 
 export interface HotkeyInput {
@@ -17,6 +21,7 @@ export interface HotkeyInput {
   readonly onPttStart: () => void;
   readonly onPttStop: () => void;
   readonly onToggle: () => void;
+  readonly onMeetingToggle: () => void;
 }
 
 export interface HotkeyController {
@@ -25,8 +30,12 @@ export interface HotkeyController {
   setPaused: (paused: boolean) => void;
   registerEscape: (onEscape: () => void) => void;
   unregisterEscape: () => void;
-  /** Reconfigure PTT and toggle at runtime, without a restart. */
-  setHotkeys: (pttAccelerator: string, toggleAccelerator: string) => void;
+  /** Reconfigure PTT, toggle and meeting at runtime, without a restart. */
+  setHotkeys: (
+    pttAccelerator: string,
+    toggleAccelerator: string,
+    meetingAccelerator: string
+  ) => void;
 }
 
 export const createHotkeys = (input: HotkeyInput): HotkeyController => {
@@ -44,22 +53,29 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
     if (paused) {
       pttHook.stop();
       unregisterToggleShortcut();
+      unregisterMeetingShortcut();
       unregisterEscape();
     } else {
       if (!input.e2e) {
         pttHook.start();
         registerToggleShortcut(input.onToggle);
+        registerMeetingShortcut(input.onMeetingToggle);
       }
     }
   };
 
-  const setHotkeys = (pttAccelerator: string, toggleAccelerator: string): void => {
+  const setHotkeys = (
+    pttAccelerator: string,
+    toggleAccelerator: string,
+    meetingAccelerator: string
+  ): void => {
     const chord = parseAccelerator(pttAccelerator);
     if (chord !== null) {
       pttHook.setChord(chord);
     }
     if (!paused && !input.e2e) {
       registerToggleShortcut(input.onToggle, toggleAccelerator);
+      registerMeetingShortcut(input.onMeetingToggle, meetingAccelerator);
     }
   };
 
@@ -93,6 +109,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       if (input.e2e) return;
       pttHook.start();
       registerToggleShortcut(input.onToggle);
+      registerMeetingShortcut(input.onMeetingToggle);
       // Quit from the keyboard. The tray menu has the same action.
       const registered = globalShortcut.register("CommandOrControl+Q", () => {
         app.quit();
@@ -104,6 +121,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
     dispose: () => {
       pttHook.stop();
       unregisterToggleShortcut();
+      unregisterMeetingShortcut();
       unregisterEscape();
       globalShortcut.unregister("CommandOrControl+Q");
     },

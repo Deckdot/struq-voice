@@ -30,6 +30,7 @@ export interface MeetingStore {
     state: "complete" | "interrupted";
   }) => void;
   setTitle: (id: number, title: string) => boolean;
+  setAudioPath: (id: number, audioPath: string) => void;
   setSpeakerLabel: (id: number, speakerKey: string, label: string) => void;
   listMeetings: (limit: number, offset: number) => MeetingRecord[];
   countMeetings: () => number;
@@ -185,6 +186,12 @@ export const createMeetingStore = (db: Database.Database): MeetingStore => {
     return result.changes > 0;
   };
 
+  const setAudioPath = (id: number, audioPath: string): void => {
+    // The meeting id only exists after the row is written, so the archive
+    // path is backfilled once the directory is known.
+    db.prepare("UPDATE meetings SET audio_path = ? WHERE id = ?").run(audioPath, id);
+  };
+
   const setSpeakerLabel = (id: number, speakerKey: string, label: string): void => {
     db.prepare(
       `INSERT INTO meeting_speakers (meeting_id, speaker_key, label) VALUES (?, ?, ?)
@@ -283,6 +290,7 @@ export const createMeetingStore = (db: Database.Database): MeetingStore => {
     appendSegment,
     finalizeMeeting,
     setTitle,
+    setAudioPath,
     setSpeakerLabel,
     listMeetings,
     countMeetings,

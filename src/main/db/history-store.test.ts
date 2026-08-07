@@ -16,7 +16,11 @@ let store: HistoryStore;
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), "sv-hx-"));
-  const opened = openDatabase(root);
+  const handle = openDatabase(root);
+  if (handle === null) {
+    throw new Error("history database failed to open in test");
+  }
+  const opened = handle.history;
   if (opened === null) {
     throw new Error("history database failed to open in test");
   }
@@ -66,7 +70,9 @@ describe("history stats", () => {
   let statsStore: HistoryStore;
 
   beforeAll(() => {
-    const opened = openDatabase(mkdtempSync(join(tmpdir(), "sv-stats-")));
+    const handle = openDatabase(mkdtempSync(join(tmpdir(), "sv-stats-")));
+    if (handle === null) throw new Error("history database failed to open in test");
+    const opened = handle.history;
     if (opened === null) throw new Error("history database failed to open in test");
     statsStore = opened;
   });
@@ -124,7 +130,9 @@ describe("history stats", () => {
   });
 
   it("reports zeroes for an empty database rather than throwing", () => {
-    const empty = openDatabase(mkdtempSync(join(tmpdir(), "sv-empty-")));
+    const handle = openDatabase(mkdtempSync(join(tmpdir(), "sv-empty-")));
+    if (handle === null) throw new Error("history database failed to open in test");
+    const empty = handle.history;
     if (empty === null) throw new Error("history database failed to open in test");
     const stats = empty.stats();
     expect(stats.totalTranscripts).toBe(0);

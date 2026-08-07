@@ -185,7 +185,8 @@ if (!gotLock) {
       applyThemeSource(nativeTheme, settingsStore.get().theme);
     });
     const secrets = createSecretsStore();
-    const history = openDatabase(app.getPath("userData"));
+    const db = openDatabase(app.getPath("userData"));
+    const history = db?.history ?? null;
     const runtimeRoot = join(app.getPath("userData"), "runtimes");
     const models = createModelsService(
       join(app.getPath("userData"), "models"),

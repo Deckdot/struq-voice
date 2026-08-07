@@ -463,7 +463,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       setState(recording);
       lastUtteranceAtMs = Date.now();
       setAutoStopTimer();
-      return true;
+      return false;
     }
     return false;
   };

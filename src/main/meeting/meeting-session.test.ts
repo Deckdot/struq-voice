@@ -257,7 +257,7 @@ describe("meeting session", () => {
       expect(session.state.segmentCount).toBe(0);
     }
 
-    expect(session.togglePause()).toBe(true);
+    expect(session.togglePause()).toBe(false);
     expect(session.state.phase).toBe("recording");
   });
 

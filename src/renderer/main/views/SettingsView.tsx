@@ -13,17 +13,25 @@ import { TranscriptionTab } from "./settings/TranscriptionTab";
 import { DeliveryTab } from "./settings/DeliveryTab";
 import { TextTab } from "./settings/TextTab";
 import { AppearanceTab } from "./settings/AppearanceTab";
+import { MeetingsTab } from "./settings/MeetingsTab";
 
 import { useTranslation } from "../lib/useTranslation";
 
 /**
- * The Settings shell. Six categories, each in its own file under
+ * The Settings shell. Seven categories, each in its own file under
  * ./settings/. The active category is driven by a `category` field in the
  * route-aware state: the StatusCluster and the command palette both emit
  * a `struq:open-settings-category` event that lands here.
  */
 
-type Category = "general" | "capture" | "transcription" | "delivery" | "text" | "appearance";
+type Category =
+  | "general"
+  | "capture"
+  | "transcription"
+  | "delivery"
+  | "text"
+  | "appearance"
+  | "meetings";
 
 interface CategoryMeta {
   readonly id: Category;
@@ -32,7 +40,13 @@ interface CategoryMeta {
 }
 
 const isCategory = (value: string): value is Category =>
-  value === "general" || value === "capture" || value === "transcription" || value === "delivery" || value === "text" || value === "appearance";
+  value === "general" ||
+  value === "capture" ||
+  value === "transcription" ||
+  value === "delivery" ||
+  value === "text" ||
+  value === "appearance" ||
+  value === "meetings";
 
 export function SettingsView(): JSX.Element {
   const { t } = useTranslation();
@@ -50,7 +64,8 @@ export function SettingsView(): JSX.Element {
     { id: "transcription", label: t("settings.category.transcription"), icon: "ph:wave-sine" },
     { id: "delivery", label: t("settings.category.delivery"), icon: "ph:clipboard-text" },
     { id: "text", label: t("settings.category.text"), icon: "ph:text-t" },
-    { id: "appearance", label: t("settings.category.appearance"), icon: "ph:circle-half" }
+    { id: "appearance", label: t("settings.category.appearance"), icon: "ph:circle-half" },
+    { id: "meetings", label: t("settings.category.meetings"), icon: "ph:users-three" }
   ];
 
   useEffect(() => {
@@ -133,6 +148,7 @@ export function SettingsView(): JSX.Element {
             {category === "delivery" && <DeliveryTab settings={settings} update={update} />}
             {category === "text" && <TextTab api={api} settings={settings} update={update} />}
             {category === "appearance" && <AppearanceTab api={api} settings={settings} update={update} />}
+            {category === "meetings" && <MeetingsTab settings={settings} update={update} />}
         </div>
       </div>
     </div>

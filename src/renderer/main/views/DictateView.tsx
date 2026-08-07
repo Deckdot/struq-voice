@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import { useMainStore } from "../store/use-main-store";
 import { PageBody } from "../components/PageHeader";
 import { MicrophoneMeter } from "../components/MicrophoneMeter";
-import { Button, IconButton, Kbd, SettingsGroup, Skeleton, StatTile } from "../components/ui";
+import { Button, IconButton, Kbd, SettingsGroup, Skeleton, StatTile, StatusDot } from "../components/ui";
 import { HistoryChart } from "../components/HistoryChart";
 import type { MainWindowApi } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
@@ -13,6 +13,8 @@ import type { ModelStatus } from "../../../shared/models";
 import { findModel } from "../../../shared/models";
 import { ENGINE_OPTIONS } from "../../../shared/engines";
 import type { HistoryStatsResult, TranscriptRecord } from "../../../shared/ipc";
+import type { MeetingState } from "../../../shared/meeting";
+import { isMeetingActive } from "../../../shared/meeting";
 import { formatRelativeTime } from "../lib/format";
 
 /**
@@ -52,12 +54,65 @@ interface Blocker {
 
 import { useTranslation } from "../lib/useTranslation";
 
+/**
+ * The compact recording bar on the Dictate view while a meeting runs. It must
+ * be impossible to forget that the machine is recording, and this is where a
+ * user looking at the home view will see it.
+ */
+function MeetingBar({
+  meeting,
+  onOpen,
+  onStop
+}: {
+  readonly meeting: MeetingState;
+  readonly onOpen: () => void;
+  readonly onStop: () => void;
+}): JSX.Element {
+  const { t } = useTranslation();
+  const [elapsed, setElapsed] = useState(0);
+  const startedAtMs = meeting.phase === "recording" || meeting.phase === "paused" ? meeting.startedAtMs : Date.now();
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsed(Date.now() - startedAtMs);
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [startedAtMs]);
+
+  const totalSeconds = Math.max(0, Math.floor(elapsed / 1000));
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const clock = `${pad(Math.floor(totalSeconds / 60))}:${pad(totalSeconds % 60)}`;
+
+  return (
+    <div className="flex items-center gap-3 border-b border-border bg-surface px-5 py-2">
+      <StatusDot state="listening" />
+      <span className="text-sm font-medium tabular-nums text-text">{clock}</span>
+      <button
+        type="button"
+        className="text-sm text-accent hover:underline"
+        onClick={onOpen}
+      >
+        {t("meetings.bar.open")}
+      </button>
+      <div className="ms-auto">
+        <Button variant="danger" size="sm" onClick={onStop}>
+          {t("meetings.bar.stop")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function DictateView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const { t } = useTranslation();
   const capture = useMainStore((state) => state.capture);
   const shellRevealed = useMainStore((state) => state.shellRevealed);
   const setRoute = useMainStore((state) => state.setRoute);
+  const meeting = useMainStore((state) => state.meeting);
+  const meetingActive = isMeetingActive(meeting);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [models, setModels] = useState<readonly ModelStatus[]>([]);
   const [recent, setRecent] = useState<readonly TranscriptRecord[]>([]);
@@ -159,6 +214,17 @@ export function DictateView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col bg-bg">
+      {meetingActive && (
+        <MeetingBar
+          meeting={meeting}
+          onOpen={() => {
+            setRoute("meetings");
+          }}
+          onStop={() => {
+            void api.meetings.stop();
+          }}
+        />
+      )}
       <PageBody>
         {blocker !== null && (
           <div className="flex items-center gap-3 rounded-lg border border-warning bg-warning-soft px-4 py-3">

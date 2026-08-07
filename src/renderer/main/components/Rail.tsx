@@ -3,13 +3,16 @@ import { Icon } from "@iconify/react";
 import { motion } from "motion/react";
 import type { Route } from "../store/use-main-store";
 import { ROUTE_ORDER, useMainStore } from "../store/use-main-store";
+import { isMeetingActive } from "../../../shared/meeting";
 import { StatusCluster } from "./StatusCluster";
+import { StatusDot } from "./ui";
 import { cn } from "../lib/cn";
 import { useTranslation } from "../lib/useTranslation";
 import type { MessageKey } from "../../../shared/i18n";
 
 const ROUTE_ICONS: Record<Route, string> = {
   dictate: "ph:microphone",
+  meetings: "ph:users-three",
   history: "ph:clock-counter-clockwise",
   dictionary: "ph:book-open-text",
   models: "ph:cube",
@@ -18,6 +21,7 @@ const ROUTE_ICONS: Record<Route, string> = {
 
 const ROUTE_KEYS: Record<Route, MessageKey> = {
   dictate: "nav.dictate",
+  meetings: "nav.meetings",
   history: "nav.history",
   dictionary: "nav.dictionary",
   models: "nav.models",
@@ -32,6 +36,7 @@ const ROUTE_KEYS: Record<Route, MessageKey> = {
 export function Rail(): JSX.Element {
   const route = useMainStore((state) => state.route);
   const setRoute = useMainStore((state) => state.setRoute);
+  const meetingActive = useMainStore((state) => isMeetingActive(state.meeting));
   const { t } = useTranslation();
 
   return (
@@ -73,6 +78,12 @@ export function Rail(): JSX.Element {
                 aria-hidden="true"
               />
               <span className="relative z-10">{t(ROUTE_KEYS[item])}</span>
+              {item === "meetings" && meetingActive && (
+                // A live meeting is the one thing worth interrupting the
+                // label for: the rail is where a user looks to know that
+                // something is running.
+                <StatusDot state="listening" className="relative z-10 ms-auto" />
+              )}
             </button>
           );
         })}

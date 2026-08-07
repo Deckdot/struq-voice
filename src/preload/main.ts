@@ -10,6 +10,25 @@ import type {
   HistoryDeleteResult,
   HistoryClearResult,
   HistoryStatsResult,
+  MeetingAssetsResult,
+  MeetingAssetProgressEvent,
+  MeetingExportRequest,
+  MeetingExportResult,
+  MeetingGetRequest,
+  MeetingGetResult,
+  MeetingLevelsEvent,
+  MeetingListRequest,
+  MeetingListResult,
+  MeetingPauseResult,
+  MeetingRenameRequest,
+  MeetingRenameSpeakerRequest,
+  MeetingSearchRequest,
+  MeetingSearchResult,
+  MeetingSegmentAppendedEvent,
+  MeetingSegmentsRequest,
+  MeetingSegmentsResult,
+  MeetingSimpleResult,
+  MeetingStartResult,
   ModelsModelRequest,
   ModelsListResult,
   ModelsModelResult,
@@ -25,6 +44,7 @@ import type {
   UpdatesStateResult
 } from "../shared/ipc";
 import type { PreloadChannels } from "../shared/ipc";
+import type { MeetingState } from "../shared/meeting";
 import type { Settings } from "../shared/settings";
 import type { UpdateState } from "../shared/updates";
 
@@ -243,6 +263,90 @@ const api: MainWindowApi = {
       ) as Promise<OnboardingStartRecommendedResult>,
     complete: () =>
       ipcRenderer.invoke(channels.onboarding.complete) as Promise<SettingsGetResult>
+  },
+  meetings: {
+    start: () =>
+      ipcRenderer.invoke(channels.meeting.start) as Promise<MeetingStartResult>,
+    stop: () =>
+      ipcRenderer.invoke(channels.meeting.stop) as Promise<MeetingSimpleResult>,
+    pause: () =>
+      ipcRenderer.invoke(channels.meeting.pause) as Promise<MeetingPauseResult>,
+    list: (request: MeetingListRequest) =>
+      ipcRenderer.invoke(channels.meeting.list, request) as Promise<MeetingListResult>,
+    get: (request: MeetingGetRequest) =>
+      ipcRenderer.invoke(channels.meeting.get, request) as Promise<MeetingGetResult>,
+    segments: (request: MeetingSegmentsRequest) =>
+      ipcRenderer.invoke(channels.meeting.segments, request) as Promise<MeetingSegmentsResult>,
+    search: (request: MeetingSearchRequest) =>
+      ipcRenderer.invoke(channels.meeting.search, request) as Promise<MeetingSearchResult>,
+    remove: (request: MeetingGetRequest) =>
+      ipcRenderer.invoke(channels.meeting.delete, request) as Promise<MeetingSimpleResult>,
+    rename: (request: MeetingRenameRequest) =>
+      ipcRenderer.invoke(channels.meeting.rename, request) as Promise<MeetingSimpleResult>,
+    renameSpeaker: (request: MeetingRenameSpeakerRequest) =>
+      ipcRenderer.invoke(
+        channels.meeting.renameSpeaker,
+        request
+      ) as Promise<MeetingSimpleResult>,
+    export: (request: MeetingExportRequest) =>
+      ipcRenderer.invoke(channels.meeting.export, request) as Promise<MeetingExportResult>,
+    revealRecording: (request: MeetingGetRequest) =>
+      ipcRenderer.invoke(
+        channels.meeting.revealRecording,
+        request
+      ) as Promise<MeetingSimpleResult>,
+    assets: () =>
+      ipcRenderer.invoke(channels.meeting.assets) as Promise<MeetingAssetsResult>,
+    installAssets: () =>
+      ipcRenderer.invoke(channels.meeting.installAssets) as Promise<MeetingSimpleResult>,
+    onStateChanged: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        state: MeetingState
+      ): void => {
+        listener(state);
+      };
+      ipcRenderer.on(channels.meeting.stateChanged, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.meeting.stateChanged, handler);
+      };
+    },
+    onSegmentAppended: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: MeetingSegmentAppendedEvent
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(channels.meeting.segmentAppended, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.meeting.segmentAppended, handler);
+      };
+    },
+    onLevels: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: MeetingLevelsEvent
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(channels.meeting.levels, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.meeting.levels, handler);
+      };
+    },
+    onAssetProgress: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: MeetingAssetProgressEvent
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(channels.meeting.assetProgress, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.meeting.assetProgress, handler);
+      };
+    }
   }
 };
 

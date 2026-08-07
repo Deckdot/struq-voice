@@ -7,7 +7,7 @@
 import { z } from "zod";
 import { hardwareProfileSchema } from "./hardware";
 import { DEFAULT_ENGINE_ID } from "./engines";
-import { DEFAULT_PTT_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
+import { DEFAULT_PTT_ACCELERATOR, DEFAULT_MEETING_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
 import { DEFAULT_WHISPER_MODEL_ID, PARAKEET_DEFAULT_MODEL_ID } from "./models";
 
 export const dictionaryEntrySchema = z.object({
@@ -46,6 +46,47 @@ export const onboardingSchema = z.object({
 
 /** Bump to replay onboarding after a change that needs the user to see it. */
 export const ONBOARDING_VERSION = 1;
+
+export const meetingSettingsSchema = z.object({
+  /** Mix your own microphone into the recording and transcribe it as "You". */
+  includeMicrophone: z.boolean().default(true),
+  /** Toggle accelerator for starting and stopping a meeting. */
+  accelerator: z.string().min(1).default(DEFAULT_MEETING_ACCELERATOR),
+  /**
+   * Which engine transcribes meetings. Local only: a meeting is hours of
+   * audio and sending it to a cloud engine is both a bill and a disclosure
+   * nobody agreed to. The router is not involved and there is no fallback.
+   */
+  engineId: z.enum(["parakeet", "whisper-cpp"]).default("parakeet"),
+  /** Label speakers on the system lane. Off makes every remote line "Speaker". */
+  diarization: z.boolean().default(true),
+  /**
+   * Utterances longer than this are re-segmented before embedding, so a turn
+   * where two people overlap is not collapsed onto one speaker. 0 disables
+   * the refinement stage and skips the segmentation model entirely.
+   */
+  diarizationRefineOverMs: z.number().int().min(0).max(60_000).default(6000),
+  /**
+   * Cosine similarity above which a voice is judged to be a speaker already
+   * heard. Higher splits one person into several; lower merges two people.
+   */
+  speakerThreshold: z.number().min(0.2).max(0.95).default(0.55),
+  /** Hard cap on distinct speakers. 0 lets the clustering decide. */
+  maxSpeakers: z.number().int().min(0).max(32).default(0),
+  /** Keep the mixed opus recording beside the transcript. */
+  archiveAudio: z.boolean().default(true),
+  archiveBitrateKbps: z.number().int().min(16).max(128).default(32),
+  /** Silero: speech shorter than this is not an utterance (ms). */
+  vadMinSpeechMs: z.number().int().min(100).max(2000).default(250),
+  /** Silero: silence this long closes an utterance (ms). */
+  vadMinSilenceMs: z.number().int().min(200).max(3000).default(500),
+  /** Silero: force a boundary in a monologue (ms). */
+  vadMaxSpeechMs: z.number().int().min(5000).max(60_000).default(20_000),
+  /** Stop a meeting nobody is in. 0 never auto-stops. Minutes. */
+  autoStopSilentMinutes: z.number().int().min(0).max(120).default(0),
+  /** Delete meetings older than this. 0 keeps them forever. Days. */
+  retentionDays: z.number().int().min(0).max(3650).default(0)
+});
 
 export const settingsSchema = z.object({
   version: z.literal(1).default(1),
@@ -124,10 +165,27 @@ export const settingsSchema = z.object({
     completed: false,
     completedVersion: 0,
     hardware: null
+  }),
+  meeting: meetingSettingsSchema.default({
+    includeMicrophone: true,
+    accelerator: DEFAULT_MEETING_ACCELERATOR,
+    engineId: "parakeet",
+    diarization: true,
+    diarizationRefineOverMs: 6000,
+    speakerThreshold: 0.55,
+    maxSpeakers: 0,
+    archiveAudio: true,
+    archiveBitrateKbps: 32,
+    vadMinSpeechMs: 250,
+    vadMinSilenceMs: 500,
+    vadMaxSpeechMs: 20_000,
+    autoStopSilentMinutes: 0,
+    retentionDays: 0
   })
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
+export type MeetingSettings = z.infer<typeof meetingSettingsSchema>;
 export type DictionaryEntry = z.infer<typeof dictionaryEntrySchema>;
 export type OnboardingState = z.infer<typeof onboardingSchema>;
 

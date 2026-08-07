@@ -84,7 +84,6 @@ export const createMeetingWorkerClient = (): MeetingWorkerClient => {
         emit(workerEvent);
       });
       child.on("exit", onExit);
-      child.on("exit", onExit);
 
       return new Promise<Result<void>>((resolve) => {
         startResolve = resolve;

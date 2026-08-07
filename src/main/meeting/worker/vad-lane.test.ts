@@ -118,7 +118,7 @@ describe("vad lane", () => {
     expect(utterances).toHaveLength(0);
   });
 
-  it("flushes the carry as a final partial window", () => {
+  it("pads the carry to a full window on flush", () => {
     const windowSize = 512;
     const vad = makeFakeVad(windowSize, 2);
     const accepted: Float32Array[] = [];
@@ -136,6 +136,10 @@ describe("vad lane", () => {
     expect(accepted).toHaveLength(1);
     lane.flush();
     expect(accepted).toHaveLength(2);
-    expect(accepted[1]?.length).toBe(88);
+    // The detector only ever sees exact windows: the 88-sample carry is
+    // zero-padded to a full window, not fed short.
+    expect(accepted[1]?.length).toBe(512);
+    expect(accepted[1]?.[0]).toBe(0);
+    expect(accepted[1]?.[88]).toBe(0);
   });
 });

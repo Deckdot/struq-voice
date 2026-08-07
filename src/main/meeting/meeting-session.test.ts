@@ -85,6 +85,7 @@ const makeArchive = (): ArchiveWriter => ({
 
 const makeWindow = () => {
   const ipcCallbacks: Array<(event: unknown, channel: string) => void> = [];
+  const sent: string[] = [];
   const created = {
     webContents: {
       once: vi.fn((event: string, callback: (event: unknown, channel: string) => void) => {
@@ -97,6 +98,7 @@ const makeWindow = () => {
         }
       }),
       send: vi.fn((channel: string) => {
+        sent.push(channel);
         if (channel === "meeting-audio:stop") {
           setTimeout(() => {
             for (const callback of ipcCallbacks.splice(0)) {
@@ -107,7 +109,8 @@ const makeWindow = () => {
       }),
       executeJavaScript: vi.fn().mockResolvedValue(undefined)
     },
-    isDestroyed: () => false
+    isDestroyed: () => false,
+    sent
   };
   return { ...created, create: vi.fn().mockResolvedValue(created), destroy: vi.fn() };
 };
@@ -241,6 +244,78 @@ describe("meeting session", () => {
     expect(store.finalized[0]?.state).toBe("complete");
     expect(worker.drain).toHaveBeenCalled();
     expect(worker.kill).toHaveBeenCalled();
+  });
+
+  it("pauses from recording and resumes back to recording", async () => {
+    const { session } = makeSession();
+    await session.start();
+    session.handleAudioState(liveAudioState());
+
+    expect(session.togglePause()).toBe(true);
+    expect(session.state.phase).toBe("paused");
+    if (session.state.phase === "paused") {
+      expect(session.state.segmentCount).toBe(0);
+    }
+
+    expect(session.togglePause()).toBe(true);
+    expect(session.state.phase).toBe("recording");
+  });
+
+  it("refuses to pause outside recording", () => {
+    const { session } = makeSession();
+    expect(session.togglePause()).toBe(false);
+    expect(session.state.phase).toBe("idle");
+  });
+
+  it("tells the window to pause the archive while paused", async () => {
+    const { session, window } = makeSession();
+    await session.start();
+    session.handleAudioState(liveAudioState());
+
+    session.togglePause();
+    session.togglePause();
+    session.togglePause();
+
+    expect(window.sent.filter((channel) => channel === "meeting-audio:pause")).toHaveLength(3);
+    expect(session.state.phase).toBe("paused");
+  });
+
+  it("stops forwarding frames to the worker while paused", async () => {
+    const { session, worker } = makeSession();
+    await session.start();
+    session.handleAudioState(liveAudioState());
+    const frames = {
+      type: "frames" as const,
+      source: "system" as const,
+      pcm: new ArrayBuffer(16),
+      startSample: 16000
+    };
+
+    session.handleFrames(frames);
+    expect(worker.sendFrames).toHaveBeenCalledTimes(1);
+
+    session.togglePause();
+    session.handleFrames(frames);
+    expect(worker.sendFrames).toHaveBeenCalledTimes(1);
+
+    session.togglePause();
+    session.handleFrames(frames);
+    expect(worker.sendFrames).toHaveBeenCalledTimes(2);
+  });
+
+  it("resumes forwarding frames with a fresh lane health state", async () => {
+    const { session } = makeSession();
+    await session.start();
+    session.handleAudioState(liveAudioState());
+    session.togglePause();
+    session.togglePause();
+
+    const recording = session.state;
+    expect(recording.phase).toBe("recording");
+    if (recording.phase === "recording") {
+      expect(recording.system.live).toBe(true);
+      expect(recording.microphone.live).toBe(true);
+    }
   });
 
   it("yields the worker while dictation is active", () => {

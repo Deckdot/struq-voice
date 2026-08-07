@@ -285,9 +285,9 @@ function LiveMeeting({
   const [segments, setSegments] = useState<readonly MeetingSegment[]>([]);
   const [levels, setLevels] = useState<MeetingLevelsEvent>({ system: 0, microphone: 0 });
   const [speakers, setSpeakers] = useState<readonly MeetingSpeaker[]>([]);
-  const [paused, setPaused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pinnedToLive, setPinnedToLive] = useState(true);
+  const paused = meeting.phase === "paused";
   const activeMeetingId = meeting.phase === "recording" || meeting.phase === "paused" ? meeting.meetingId : null;
   const startedAtMs = meeting.phase === "recording" || meeting.phase === "paused" ? meeting.startedAtMs : Date.now();
 
@@ -343,9 +343,7 @@ function LiveMeeting({
   };
 
   const togglePause = (): void => {
-    void api.meetings.pause().then((result) => {
-      setPaused(result.paused);
-    });
+    void api.meetings.pause();
   };
 
   const backlog = meeting.phase === "recording" ? meeting.backlogSeconds : 0;

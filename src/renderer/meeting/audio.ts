@@ -40,6 +40,7 @@ let stopping = false;
 let stopResolve: (() => void) | null = null;
 let stopTimer: ReturnType<typeof setTimeout> | null = null;
 let api: MeetingWindowApi | null = null;
+let paused = false;
 
 declare global {
   interface Window {
@@ -58,6 +59,23 @@ export const initMeetingAudio = (windowApi: MeetingWindowApi): void => {
   windowApi.onStop(() => {
     stopAll();
   });
+  windowApi.onPause((value) => {
+    setPaused(value);
+  });
+};
+
+const setPaused = (value: boolean): void => {
+  paused = value;
+  if (paused) {
+    // Stop the archive without tearing anything down. The lanes, worklets and
+    // level meters keep running: main gates the transcript, and the archive
+    // recorder simply stops collecting until resumed.
+    if (archiveRecorder !== null && archiveRecorder.state === "recording") {
+      archiveRecorder.pause();
+    }
+  } else if (archiveRecorder !== null && archiveRecorder.state === "paused") {
+    archiveRecorder.resume();
+  }
 };
 
 const laneHealth = (lane: Lane): { live: boolean; code?: string } =>
@@ -146,6 +164,7 @@ const attachLane = (lane: Lane, stream: MediaStream): void => {
     };
     if (message.type === "batch" && message.pcm !== undefined) {
       lastPeak[lane] = message.peak ?? 0;
+      if (paused) return;
       const frames: MeetingAudioFrames = {
         source: lane,
         pcm: message.pcm,

@@ -588,6 +588,9 @@ export interface MeetingAudioBeginRequest {
 /** Main to meeting window: stop both lanes and flush the archive. */
 export const meetingAudioStopChannel = "meeting-audio:stop" as const;
 
+/** Main to meeting window: pause or resume the archive recorder. */
+export const meetingAudioPauseChannel = "meeting-audio:pause" as const;
+
 /**
  * Meeting window to main: one second of 16 kHz mono Int16 for one lane.
  * `startSample` is the index of the first sample since capture began, which
@@ -751,6 +754,7 @@ export const PRELOAD_CHANNELS = {
   meetingAudio: {
     begin: meetingAudioBeginChannel,
     stop: meetingAudioStopChannel,
+    pause: meetingAudioPauseChannel,
     frames: meetingAudioFramesChannel,
     archive: meetingAudioArchiveChannel,
     state: meetingAudioStateChannel,

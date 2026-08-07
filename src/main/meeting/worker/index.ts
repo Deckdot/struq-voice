@@ -25,6 +25,7 @@ import type {
 } from "./protocol";
 import { createSpeakerClusterer, type SpeakerClusterer } from "./speaker-clusterer";
 import { createVadLane, type VadLane } from "./vad-lane";
+import { refineLongTurn } from "./refine-long-turn";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -163,7 +164,7 @@ const transcribeUtterance = async (utterance: QueuedUtterance): Promise<void> =>
   if (utterance.source === "system") {
     if (clusterer !== null && diarizationRefineOverMs > 0) {
       if (durationMs > diarizationRefineOverMs && diarizer !== null) {
-        segmentsToTranscribe = refineLongTurn(utterance.startSample, samples);
+        segmentsToTranscribe = refineSystemLongTurn(utterance.startSample, samples);
       } else {
         const key = clusterer.assign(embed(samples));
         segmentsToTranscribe = [{ startSample: utterance.startSample, samples, key }];
@@ -213,46 +214,22 @@ const transcribeUtterance = async (utterance: QueuedUtterance): Promise<void> =>
 
 /**
  * A VAD utterance longer than the refinement threshold is likely two people
- * talking over each other with no pause. Run offline diarization on that
- * utterance alone (bounded by vadMaxSpeechMs), embed each sub-segment, and
- * merge adjacent sub-segments that land on the same speaker so one
- * continuous turn is one line rather than three.
+ * talking over each other with no pause. Refinement lives in the pure module
+ * so its slice math and same-speaker merge are unit tested.
  */
-const refineLongTurn = (
+const refineSystemLongTurn = (
   utteranceStartSample: number,
   samples: Float32Array
-): { startSample: number; samples: Float32Array; key: string }[] => {
-  if (diarizer === null || clusterer === null) {
-    const key = clusterer?.assign(embed(samples)) ?? "s1";
-    return [{ startSample: utteranceStartSample, samples, key }];
-  }
-  const subSegments = diarizer.process(samples);
-  const merged: { startSample: number; samples: Float32Array; key: string }[] = [];
-  let current: { startSample: number; samples: Float32Array; key: string } | null = null;
-
-  for (const sub of subSegments) {
-    if (sub.end - sub.start < 0.4) continue;
-    const startSample = utteranceStartSample + Math.round(sub.start * SAMPLE_RATE);
-    const endSample = Math.round(sub.end * SAMPLE_RATE);
-    const slice = samples.subarray(startSample - utteranceStartSample, endSample);
-    const key = clusterer.assign(embed(slice));
-    if (current !== null && current.key === key) {
-      const combined: Float32Array = new Float32Array(current.samples.length + slice.length);
-      combined.set(current.samples);
-      combined.set(slice, current.samples.length);
-      current = { startSample: current.startSample, samples: combined, key };
-    } else {
-      current = { startSample, samples: slice, key };
-      merged.push(current);
-    }
-  }
-
-  if (merged.length === 0) {
-    const key = clusterer.assign(embed(samples));
-    return [{ startSample: utteranceStartSample, samples, key }];
-  }
-  return merged;
-};
+): { startSample: number; samples: Float32Array; key: string }[] =>
+  refineLongTurn({
+    utteranceStartSample,
+    samples,
+    sampleRate: SAMPLE_RATE,
+    minSubSegmentSeconds: 0.4,
+    diarizer,
+    clusterer,
+    embed
+  });
 
 const enqueue = (utterance: QueuedUtterance): void => {
   if (queuedSamples + utterance.samples.length > MAX_BACKLOG_SAMPLES) {

@@ -71,12 +71,19 @@ export const createVadLane = (options: VadLaneOptions): VadLane => {
       pushFloat32(converted);
     },
     flush: (): void => {
-      // A final partial window is fine at flush time: the detector's own
-      // flush handles whatever is still in its buffer.
+      // The detector is fed exact windows; the carry is always a partial one,
+      // so pad it out to windowSize with silence. The detector's own flush
+      // still surfaces whatever speech it has buffered internally.
       if (carry.length > 0) {
         const remainder = Float32Array.from(carry);
         carry.length = 0;
-        options.acceptWindow(remainder);
+        if (remainder.length < options.windowSize) {
+          const padded = new Float32Array(options.windowSize);
+          padded.set(remainder);
+          options.acceptWindow(padded);
+        } else {
+          options.acceptWindow(remainder);
+        }
       }
       drain();
     }

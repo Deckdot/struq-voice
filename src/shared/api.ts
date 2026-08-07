@@ -219,6 +219,7 @@ export interface MeetingWindowApi {
     callback: (request: MeetingAudioBeginRequest) => void
   ) => () => void;
   readonly onStop: (callback: () => void) => () => void;
+  readonly onPause: (callback: (paused: boolean) => void) => () => void;
   readonly sendFrames: (data: MeetingAudioFrames) => void;
   readonly sendArchiveChunk: (data: MeetingAudioArchiveChunk) => void;
   readonly sendState: (data: MeetingAudioStateEvent) => void;

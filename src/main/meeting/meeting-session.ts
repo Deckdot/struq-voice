@@ -104,6 +104,10 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   let backlogSeconds = 0;
   let meetingFailed = false;
   let disposed = false;
+  let lastLaneHealth: { system: MeetingLaneHealth; microphone: MeetingLaneHealth } = {
+    system: { live: false },
+    microphone: { live: false }
+  };
 
   const setState = (next: MeetingState): void => {
     state = next;
@@ -429,15 +433,46 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   };
 
   const togglePause = (): boolean => {
-    if (state.phase !== "recording") return false;
-    setState({
-      phase: "paused",
-      meetingId: state.meetingId,
-      startedAtMs: state.startedAtMs,
-      pausedAtMs: Date.now(),
-      segmentCount
-    });
-    return true;
+    if (state.phase === "recording") {
+      if (autoStopTimer !== null) {
+        clearTimeout(autoStopTimer);
+        autoStopTimer = null;
+      }
+      signalWindowPause(true);
+      setState({
+        phase: "paused",
+        meetingId: state.meetingId,
+        startedAtMs: state.startedAtMs,
+        pausedAtMs: Date.now(),
+        segmentCount
+      });
+      return true;
+    }
+    if (state.phase === "paused") {
+      signalWindowPause(false);
+      const recording: MeetingState = {
+        phase: "recording",
+        meetingId: state.meetingId,
+        startedAtMs: state.startedAtMs,
+        system: lastLaneHealth.system,
+        microphone: lastLaneHealth.microphone,
+        backlogSeconds,
+        segmentCount,
+        speakerCount
+      };
+      setState(recording);
+      lastUtteranceAtMs = Date.now();
+      setAutoStopTimer();
+      return true;
+    }
+    return false;
+  };
+
+  const signalWindowPause = (paused: boolean): void => {
+    const window = meetingWindow;
+    if (window !== null && !window.isDestroyed()) {
+      window.webContents.send("meeting-audio:pause", paused);
+    }
   };
 
   const setDictationActive = (active: boolean): void => {
@@ -445,6 +480,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   };
 
   const handleFrames = (frames: WorkerFrames): void => {
+    if (state.phase === "paused") return;
     options.worker.sendFrames(frames);
   };
 
@@ -465,12 +501,16 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         lane.code === undefined
           ? { live: lane.live }
           : { live: lane.live, code: lane.code as MeetingLaneErrorCode };
+      lastLaneHealth = {
+        system: laneHealth(event.system),
+        microphone: laneHealth(event.microphone)
+      };
       const recording: MeetingState = {
         phase: "recording",
         meetingId: activeMeetingId ?? 0,
         startedAtMs: startedAtMs ?? Date.now(),
-        system: laneHealth(event.system),
-        microphone: laneHealth(event.microphone),
+        system: lastLaneHealth.system,
+        microphone: lastLaneHealth.microphone,
         backlogSeconds,
         segmentCount,
         speakerCount

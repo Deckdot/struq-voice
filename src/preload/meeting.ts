@@ -40,6 +40,15 @@ const api: MeetingWindowApi = {
       ipcRenderer.removeListener(channels.meetingAudio.stop, wrapped);
     };
   },
+  onPause: (callback) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, paused: boolean): void => {
+      callback(paused);
+    };
+    ipcRenderer.on(channels.meetingAudio.pause, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.meetingAudio.pause, wrapped);
+    };
+  },
   sendFrames: (data) => {
     ipcRenderer.send(channels.meetingAudio.frames, data, [data.pcm]);
   },

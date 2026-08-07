@@ -5,12 +5,16 @@
  * empty results, never a rejected invoke.
  */
 
-import { BrowserWindow, ipcMain, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { writeFile } from "node:fs/promises";
 import type { MeetingStore } from "../db/meeting-store";
 import type { MeetingAssetService } from "./assets";
+import { exportMeeting } from "./export";
 import type { MeetingSession } from "./meeting-session";
 import type {
   MeetingAudioStateEvent,
+  MeetingExportRequest,
+  MeetingExportResult,
   MeetingGetRequest,
   MeetingGetResult,
   MeetingListRequest,
@@ -32,6 +36,7 @@ import {
   meetingAudioLevelsChannel,
   meetingAudioStateChannel,
   meetingDeleteChannel,
+  meetingExportChannel,
   meetingGetChannel,
   meetingInstallAssetsChannel,
   meetingLevelsChannel,
@@ -150,7 +155,42 @@ export const registerMeetingIpcHandlers = (
     }
   );
 
-  // WS7 adds the meetingExportChannel handler on top of this module.
+  // WS7: the export handler, added after the format module landed.
+  ipcMain.handle(
+    meetingExportChannel,
+    async (_event, request: MeetingExportRequest): Promise<MeetingExportResult> => {
+      if (store === null) return { ok: false, code: "database-unavailable" };
+      const meeting = store.getMeeting(request.meetingId);
+      if (meeting === null) return { ok: false, code: "not-found" };
+      const segments = store.listSegments(request.meetingId, 1_000_000, 0);
+      const speakers = store.listSpeakers(request.meetingId);
+      const content = exportMeeting({
+        meeting,
+        segments,
+        speakers,
+        format: request.format
+      });
+      const extension =
+        request.format === "srt" ? "srt" : request.format === "text" ? "txt" : "md";
+      const picked = await dialog.showSaveDialog({
+        title: "Export meeting",
+        defaultPath: `${meeting.title}.${extension}`,
+        filters: [{ name: "Export", extensions: [extension] }]
+      });
+      if (picked.canceled || picked.filePath.length === 0) {
+        return { ok: false, code: "cancelled" };
+      }
+      try {
+        await writeFile(picked.filePath, content, "utf8");
+        return { ok: true, path: picked.filePath };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        void message;
+        return { ok: false, code: "write-failed" };
+      }
+    }
+  );
+
   ipcMain.handle(
     meetingRevealRecordingChannel,
     (_event, request: MeetingGetRequest): MeetingSimpleResult => {

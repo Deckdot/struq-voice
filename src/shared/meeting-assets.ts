@@ -16,9 +16,11 @@ export type MeetingAssetId =
   | "meeting-embedding-campplus-en"
   | "meeting-segmentation-pyannote";
 
+export type MeetingAssetRole = "vad" | "embedding" | "segmentation";
+
 export interface MeetingAsset extends DownloadBundle {
   readonly id: MeetingAssetId;
-  readonly role: "vad" | "embedding" | "segmentation";
+  readonly role: MeetingAssetRole;
   /** Shown on the install card in the Meetings page. */
   readonly purpose: string;
   readonly license: string;

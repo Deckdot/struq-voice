@@ -6,7 +6,16 @@
 
 import { join } from "node:path";
 import { availableParallelism } from "node:os";
-import { app, BrowserWindow, clipboard, Menu, nativeTheme, net, Notification } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  Menu,
+  nativeTheme,
+  net,
+  Notification
+} from "electron";
 import { openDatabase } from "./db/client";
 import { createEngineRouter } from "./engines/router";
 import { createMockEngine } from "./engines/mock";
@@ -86,6 +95,7 @@ import { MOCK_ENGINE, MOCK_ENGINE_ID } from "../shared/engines";
 import { ONBOARDING_VERSION } from "../shared/settings";
 import type { HardwareProfile } from "../shared/hardware";
 import { detectHardware } from "./hardware/detect";
+import { getArchitectureSupportError } from "./platform/win32/architecture";
 
 const e2e = process.env["STRUQ_VOICE_E2E"] === "1";
 // The keyboard-hook verification spec: like production, but it installs the
@@ -188,6 +198,12 @@ if (!gotLock) {
   });
 
   void app.whenReady().then(() => {
+    const architectureError = getArchitectureSupportError(process.platform, process.arch);
+    if (architectureError !== null) {
+      dialog.showErrorBox(architectureError.title, architectureError.message);
+      app.quit();
+      return;
+    }
     // The app draws its own chrome, so suppress Electron's default menu.
     Menu.setApplicationMenu(null);
     installLoopbackHandler();

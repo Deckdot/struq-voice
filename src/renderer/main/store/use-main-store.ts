@@ -3,6 +3,7 @@ import type { CaptureState } from "../../../shared/capture";
 import { INITIAL_CAPTURE_STATE } from "../../../shared/capture";
 import type { MeetingState } from "../../../shared/meeting";
 import { INITIAL_MEETING_STATE } from "../../../shared/meeting";
+import type { MainWindowApi } from "../../../shared/api";
 
 /**
  * Main window state: the active route, the latest capture state pushed from
@@ -48,6 +49,13 @@ export interface MainWindowState {
   readiness: AppReadiness;
   themeMode: "system" | "light" | "dark";
   /**
+   * The resolved UI locale and its direction. Held here rather than in each
+   * useTranslation caller: there are twenty of them, and one settings
+   * subscription for the window is enough.
+   */
+  locale: string;
+  dir: "ltr" | "rtl";
+  /**
    * True once the splash curtain has started to lift. Views that own an
    * entrance animation read it so their motion is not spent behind a cover.
    */
@@ -58,9 +66,14 @@ export interface MainWindowState {
   setMeetingDetailId: (next: number | null) => void;
   setReadiness: (next: AppReadiness) => void;
   setThemeMode: (next: "system" | "light" | "dark") => void;
+  setLocale: (locale: string, dir: "ltr" | "rtl") => void;
   setShellRevealed: (next: boolean) => void;
   getRouteDirection: () => 1 | -1;
 }
+
+// Main passes the resolved locale in additionalArguments so the first paint is
+// already in the right language. Read it once here rather than flashing English.
+const bootApi = window.struqVoice as MainWindowApi | undefined;
 
 export const useMainStore = create<MainWindowState>((set, get) => ({
   route: "dictate",
@@ -70,6 +83,8 @@ export const useMainStore = create<MainWindowState>((set, get) => ({
   meetingDetailId: null,
   readiness: { microphone: { live: false }, hotkeysActive: false },
   themeMode: "system",
+  locale: bootApi?.initialLocale ?? "en",
+  dir: bootApi?.initialDir ?? "ltr",
   shellRevealed: false,
   setRoute: (next) => {
     const prev = get().route;
@@ -91,6 +106,9 @@ export const useMainStore = create<MainWindowState>((set, get) => ({
   },
   setThemeMode: (themeMode) => {
     set({ themeMode });
+  },
+  setLocale: (locale, dir) => {
+    set({ locale, dir });
   },
   setShellRevealed: (shellRevealed) => {
     set({ shellRevealed });

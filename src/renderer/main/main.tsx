@@ -13,6 +13,8 @@ import "../styles/main.css";
 import "./lib/icons";
 import { applyInitialTheme, applyTheme } from "./lib/theme";
 import { App } from "./App";
+import { isRtl, resolveLocale } from "../../shared/i18n";
+import { clearFormatCaches } from "../../shared/i18n/format";
 import { ROUTE_ORDER, useMainStore } from "./store/use-main-store";
 import type { CaptureState } from "../../shared/capture";
 import type { MainWindowApi } from "../../shared/api";
@@ -38,14 +40,27 @@ function Bootstrap(): JSX.Element {
       useMainStore.getState().setReadiness(readiness);
     });
 
+    // The one settings subscription for this window. Theme and locale both
+    // ride it: useTranslation reads the store rather than opening its own.
+    const applyLocale = (setting: string): void => {
+      const resolved = setting === "system" ? resolveLocale(navigator.languages) : setting;
+      const nextDir = isRtl(resolved) ? "rtl" : "ltr";
+      clearFormatCaches();
+      useMainStore.getState().setLocale(resolved, nextDir);
+      document.documentElement.lang = resolved;
+      document.documentElement.dir = nextDir;
+    };
+
     void api.settings.get().then(({ settings }) => {
       if (cancelled) return;
       useMainStore.getState().setThemeMode(settings.theme);
       applyFromMode(settings.theme);
+      applyLocale(settings.locale);
     });
     const unsubscribeSettings = api.settings.onChange((settings) => {
       useMainStore.getState().setThemeMode(settings.theme);
       applyFromMode(settings.theme);
+      applyLocale(settings.locale);
     });
 
     const onKeyDown = (event: KeyboardEvent): void => {

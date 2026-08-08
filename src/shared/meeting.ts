@@ -66,7 +66,10 @@ export type MeetingState =
 export type MeetingErrorCode =
   | "assets-missing"
   | "engine-not-ready"
+  | "worker-start-failed"
   | "worker-failed"
+  | "window-load-failed"
+  | "loopback-denied"
   | "loopback-unavailable"
   | "database-unavailable"
   | "already-running";

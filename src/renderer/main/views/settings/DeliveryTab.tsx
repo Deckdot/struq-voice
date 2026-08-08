@@ -19,11 +19,24 @@ export function DeliveryTab({ settings, update }: DeliveryTabProps): JSX.Element
     <div className="flex flex-col gap-6">
       <SettingsGroup title={t("settings.delivery.clipboard.title")}>
         <SettingsRow
+          label={t("settings.delivery.automaticPaste.label")}
+          hint={t("settings.delivery.automaticPaste.hint")}
+          control={
+            <Switch
+              checked={settings.automaticPaste}
+              onChange={(automaticPaste) => {
+                update({ automaticPaste });
+              }}
+            />
+          }
+        />
+        <SettingsRow
           label={t("settings.delivery.restore.label")}
           hint={t("settings.delivery.restore.hint")}
           control={
             <Switch
               checked={settings.restoreClipboard}
+              disabled={!settings.automaticPaste}
               onChange={(restoreClipboard) => {
                 update({ restoreClipboard });
               }}
@@ -41,6 +54,7 @@ export function DeliveryTab({ settings, update }: DeliveryTabProps): JSX.Element
                 max={5000}
                 step={50}
                 unit="ms"
+                disabled={!settings.automaticPaste || !settings.restoreClipboard}
                 onChange={(value) => {
                   update({ restoreClipboardDelayMs: value });
                 }}
@@ -54,15 +68,18 @@ export function DeliveryTab({ settings, update }: DeliveryTabProps): JSX.Element
           control={
             <Switch
               checked={settings.pressEnterAfterPaste}
+              disabled={!settings.automaticPaste}
               onChange={(pressEnterAfterPaste) => {
                 update({ pressEnterAfterPaste });
               }}
             />
           }
         />
-        <SettingsNote icon="ph:info">
-          {t("settings.delivery.pasteFallback")}
-        </SettingsNote>
+        {settings.automaticPaste && (
+          <SettingsNote icon="ph:info">
+            {t("settings.delivery.pasteFallback")}
+          </SettingsNote>
+        )}
       </SettingsGroup>
     </div>
   );

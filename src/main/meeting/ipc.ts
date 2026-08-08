@@ -12,6 +12,7 @@ import type { MeetingAssetService } from "./assets";
 import { exportMeeting } from "./export";
 import type { MeetingSession } from "./meeting-session";
 import type {
+  MeetingAudioFrames,
   MeetingAudioStateEvent,
   MeetingExportRequest,
   MeetingExportResult,
@@ -50,7 +51,6 @@ import {
   meetingStartChannel,
   meetingStopChannel
 } from "../../shared/ipc";
-import type { WorkerFrames } from "./worker/protocol";
 
 const PAGE_SIZE = 50;
 
@@ -225,7 +225,7 @@ export const registerMeetingIpcHandlers = (
   });
 
   // The meeting window's own channels. Main forwards, holds nothing.
-  ipcMain.on(meetingAudioFramesChannel, (event, frames: WorkerFrames) => {
+  ipcMain.on(meetingAudioFramesChannel, (event, frames: MeetingAudioFrames) => {
     if (!isMeetingWindow(event.sender)) return;
     session.handleFrames(frames);
   });

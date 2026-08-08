@@ -104,6 +104,8 @@ export const settingsSchema = z.object({
   maxCaptureMs: z.number().int().min(5000).max(600000).default(300000),
   /** Pre-roll: audio kept from before the key was pressed (ms). */
   prerollMs: z.number().int().min(0).max(1000).default(250),
+  /** Insert completed dictation into the active application. */
+  automaticPaste: z.boolean().default(true),
   /** Restore the clipboard after a synthesized paste. */
   restoreClipboard: z.boolean().default(true),
   /** How long to wait before restoring the clipboard (ms). */

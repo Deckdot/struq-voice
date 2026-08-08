@@ -367,8 +367,13 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       // getDisplayMedia needs transient user activation and a hotkey-started
       // meeting has none. executeJavaScript with userGesture is the only
       // supported path; do not add a fallback that hopes.
+      //
+      // The optional call matters: the send above and this call are separate
+      // trips, so the renderer may not have run its begin handler yet. The
+      // bridge is defined at renderer init for exactly that reason, and the
+      // ?. keeps a first-paint race from throwing here and aborting the start.
       await meetingWindow.webContents.executeJavaScript(
-        "window.__struqBeginMeetingAudio()",
+        "window.__struqBeginMeetingAudio?.()",
         true
       );
     } catch (error) {

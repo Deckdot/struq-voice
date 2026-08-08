@@ -412,6 +412,7 @@ export const ptBR: Partial<Record<MessageKey, unknown>> = {
   "meetings.live.stop": "Encerrar",
   "meetings.live.waiting": "Aguardando as primeiras palavras...",
   "meetings.live.jumpToLive": "Ir para ao vivo",
+  "meetings.live.trimmed": "Mostrando as últimas {count} linhas. A transcrição completa está salva.",
   "meetings.row.gap": "Não transcrito ({duration})",
   "meetings.row.speakers": "{count} participantes",
   "meetings.row.words": "{count} palavras",

@@ -30,6 +30,11 @@ import { useTranslation } from "../lib/useTranslation";
 const PAGE_SIZE = 50;
 const ROW_HEIGHT = 44;
 const LIVE_POLL_MS = 1000;
+// The live transcript view only renders recent context: the full transcript
+// lives in main and history, and the finished meeting shows all of it. Cap the
+// retained tail to keep hours-long meetings from growing this array without
+// bound. At roughly one segment per utterance, this is hours of scrollback.
+const MAX_LIVE_SEGMENTS = 2000;
 
 type TFunction = ReturnType<typeof useTranslation>["t"];
 
@@ -287,6 +292,10 @@ function LiveMeeting({
   const [speakers, setSpeakers] = useState<readonly MeetingSpeaker[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pinnedToLive, setPinnedToLive] = useState(true);
+  // Every segment this meeting has produced, including ones the cap dropped.
+  // Compared against what is retained so the view can say the earlier part is
+  // in the saved transcript rather than appearing to lose it.
+  const [totalAppended, setTotalAppended] = useState(0);
   const paused = meeting.phase === "paused";
   const activeMeetingId = meeting.phase === "recording" || meeting.phase === "paused" ? meeting.meetingId : null;
   const startedAtMs = meeting.phase === "recording" || meeting.phase === "paused" ? meeting.startedAtMs : Date.now();
@@ -303,7 +312,14 @@ function LiveMeeting({
   useEffect(() => {
     return api.meetings.onSegmentAppended((event) => {
       if (event.meetingId !== activeMeetingId) return;
-      setSegments((current) => [...current, event.segment]);
+      // The live view only needs recent context; the transcript itself lives
+      // in main. Keep the tail bounded so hours-long meetings do not grow
+      // this array without limit.
+      setTotalAppended((current) => current + 1);
+      setSegments((current) => {
+        const next = [...current, event.segment];
+        return next.length > MAX_LIVE_SEGMENTS ? next.slice(-MAX_LIVE_SEGMENTS) : next;
+      });
       setSpeakers((current) => {
         const next = [...current];
         if (!next.some((speaker) => speaker.speakerKey === event.segment.speakerKey)) {
@@ -394,6 +410,11 @@ function LiveMeeting({
           </Button>
         </div>
       </div>
+      {totalAppended > segments.length && (
+        <div className="border-b border-border px-5 py-1.5 text-xs text-text-muted">
+          {t("meetings.live.trimmed", { count: MAX_LIVE_SEGMENTS })}
+        </div>
+      )}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} className="h-full overflow-y-auto px-5 py-3" onScroll={onScroll}>
           {segments.length === 0 ? (

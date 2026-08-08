@@ -421,6 +421,7 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "meetings.live.stop": "Stoppen",
   "meetings.live.waiting": "Wachten op de eerste woorden...",
   "meetings.live.jumpToLive": "Naar live",
+  "meetings.live.trimmed": "De laatste {count} regels worden getoond. Het volledige transcript is opgeslagen.",
   "meetings.row.gap": "Niet getranscribeerd ({duration})",
   "meetings.row.speakers": "{count} sprekers",
   "meetings.row.words": "{count} woorden",

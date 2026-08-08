@@ -439,6 +439,7 @@ export const en = {
   "meetings.live.stop": "Stop",
   "meetings.live.waiting": "Waiting for the first words...",
   "meetings.live.jumpToLive": "Jump to live",
+  "meetings.live.trimmed": "Showing the most recent {count} lines. The full transcript is saved.",
   "meetings.row.gap": "Not transcribed ({duration})",
   "meetings.row.speakers": "{count} speakers",
   "meetings.row.words": "{count} words",

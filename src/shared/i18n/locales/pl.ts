@@ -414,6 +414,7 @@ export const pl: Partial<Record<MessageKey, unknown>> = {
   "meetings.live.stop": "Zatrzymaj",
   "meetings.live.waiting": "Czekam na pierwsze słowa...",
   "meetings.live.jumpToLive": "Przejdź do na żywo",
+  "meetings.live.trimmed": "Wyświetlane jest ostatnie {count} wierszy. Pełna transkrypcja została zapisana.",
   "meetings.row.gap": "Nie przetranskrybowano ({duration})",
   "meetings.row.speakers": "{count} mówców",
   "meetings.row.words": "{count} słów",

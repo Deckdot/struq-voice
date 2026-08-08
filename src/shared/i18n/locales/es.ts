@@ -412,6 +412,7 @@ export const es: Partial<Record<MessageKey, unknown>> = {
   "meetings.live.stop": "Detener",
   "meetings.live.waiting": "Esperando las primeras palabras...",
   "meetings.live.jumpToLive": "Ir a lo vivo",
+  "meetings.live.trimmed": "Se muestran las últimas {count} líneas. La transcripción completa está guardada.",
   "meetings.row.gap": "No transcrito ({duration})",
   "meetings.row.speakers": "{count} intervinientes",
   "meetings.row.words": "{count} palabras",

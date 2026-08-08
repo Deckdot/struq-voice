@@ -32,10 +32,11 @@ import {
   StatusDot
 } from "../components/ui";
 import { useTranslation } from "../lib/useTranslation";
+import { meetingMeterScale } from "../lib/meeting-meter";
 
 const PAGE_SIZE = 50;
 const ROW_HEIGHT = 44;
-const LIVE_POLL_MS = 1000;
+const LIVE_POLL_MS = 250;
 // The live transcript view only renders recent context: the full transcript
 // lives in main and history, and the finished meeting shows all of it. Cap the
 // retained tail to keep hours-long meetings from growing this array without
@@ -287,7 +288,8 @@ function LiveMeeting({
   readonly meeting: MeetingState;
 }): JSX.Element {
   const { t } = useTranslation();
-  const [elapsed, setElapsed] = useState(0);
+  const startedAtMs = "startedAtMs" in meeting ? meeting.startedAtMs : Date.now();
+  const [elapsed, setElapsed] = useState(() => Date.now() - startedAtMs);
   const [segments, setSegments] = useState<readonly MeetingSegment[]>([]);
   const [levels, setLevels] = useState<MeetingLevelsEvent>({ system: 0, microphone: 0 });
   const [speakers, setSpeakers] = useState<readonly MeetingSpeaker[]>([]);
@@ -299,8 +301,6 @@ function LiveMeeting({
   const [totalAppended, setTotalAppended] = useState(0);
   const paused = meeting.phase === "paused";
   const activeMeetingId = meeting.phase === "recording" || meeting.phase === "paused" ? meeting.meetingId : null;
-  const startedAtMs = meeting.phase === "recording" || meeting.phase === "paused" ? meeting.startedAtMs : Date.now();
-
   useEffect(() => {
     const timer = setInterval(() => {
       setElapsed(Date.now() - startedAtMs);
@@ -369,18 +369,20 @@ function LiveMeeting({
     <div className="flex h-full flex-col" data-selectable>
       <div className="flex items-center gap-3 border-b border-border px-5 py-3">
         <StatusDot state="listening" />
-        <span className="text-sm font-medium text-text">{formatClock(elapsed)}</span>
+        <span className="w-16 shrink-0 text-end text-sm font-medium tabular-nums text-text">
+          {formatClock(elapsed)}
+        </span>
         <div className="mx-2 h-4 w-px bg-border" />
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2 text-xs text-text-secondary">
             <span className="w-20">{t("meetings.live.systemAudio")}</span>
             <div className="h-1 w-28 overflow-hidden rounded-full bg-surface-hover">
               <div
-                className="h-full rounded-full bg-accent transition-[width] duration-150"
-                style={{ width: `${String(Math.min(100, levels.system * 100))}%` }}
+                className="h-full w-full origin-left rounded-full bg-accent transition-transform duration-75 rtl:origin-right"
+                style={{ transform: `scaleX(${String(meetingMeterScale(levels.system))})` }}
               />
             </div>
-            {!meetingLive(meeting, "system") && (
+            {!meetingLive(meeting, "system") && meetingLaneCode(meeting, "system") !== "waiting" && (
               <span className="text-xs text-warning">{t(LANE_CODE_KEYS[meetingLaneCode(meeting, "system")] ?? "meetings.lane.waiting")}</span>
             )}
           </div>
@@ -388,11 +390,11 @@ function LiveMeeting({
             <span className="w-20">{t("meetings.live.microphone")}</span>
             <div className="h-1 w-28 overflow-hidden rounded-full bg-surface-hover">
               <div
-                className="h-full rounded-full bg-ember transition-[width] duration-150"
-                style={{ width: `${String(Math.min(100, levels.microphone * 100))}%` }}
+                className="h-full w-full origin-left rounded-full bg-ember transition-transform duration-75 rtl:origin-right"
+                style={{ transform: `scaleX(${String(meetingMeterScale(levels.microphone))})` }}
               />
             </div>
-            {!meetingLive(meeting, "microphone") && (
+            {!meetingLive(meeting, "microphone") && meetingLaneCode(meeting, "microphone") !== "waiting" && (
               <span className="text-xs text-warning">{t(LANE_CODE_KEYS[meetingLaneCode(meeting, "microphone")] ?? "meetings.lane.waiting")}</span>
             )}
           </div>
@@ -435,11 +437,13 @@ function LiveMeeting({
                 return (
                   <div
                     key={segment.id}
+                    ref={virtualizer.measureElement}
+                    data-index={virtualRow.index}
                     className="absolute left-0 top-0 w-full"
-                    style={{ height: `${String(virtualRow.size)}px`, transform: `translateY(${String(virtualRow.start)}px)` }}
+                    style={{ transform: `translateY(${String(virtualRow.start)}px)` }}
                   >
                     {segment.gap ? (
-                      <div className="flex h-full items-center gap-3 px-2">
+                      <div className="flex min-h-10 items-center gap-3 px-2 py-2">
                         <div className="h-px flex-1 bg-border" />
                         <span className="text-xs text-text-muted">
                           {t("meetings.row.gap", { duration: formatDurationLabel(segment.endMs - segment.startMs) })}
@@ -447,16 +451,16 @@ function LiveMeeting({
                         <div className="h-px flex-1 bg-border" />
                       </div>
                     ) : (
-                      <div className="flex items-baseline gap-2 px-2 py-1">
-                        <span className="w-14 shrink-0 text-xs tabular-nums text-text-muted">
+                      <div className="flex min-h-10 items-start gap-2 px-2 py-2">
+                        <span className="w-14 shrink-0 pt-0.5 text-end text-xs tabular-nums text-text-muted">
                           {formatStamp(segment.startMs)}
                         </span>
-                        {showSpeaker && (
-                          <span className={`w-24 shrink-0 truncate text-xs font-medium ${speakerColor(segment.speakerKey)}`}>
-                            {resolveSpeakerLabel(segment.speakerKey, speakers, t)}
-                          </span>
-                        )}
-                        <span className="min-w-0 flex-1 text-sm leading-snug text-text">{segment.text}</span>
+                        <span className={`w-24 shrink-0 truncate pt-0.5 text-xs font-medium ${speakerColor(segment.speakerKey)}`}>
+                          {showSpeaker ? resolveSpeakerLabel(segment.speakerKey, speakers, t) : null}
+                        </span>
+                        <span className="min-w-0 flex-1 break-words text-sm leading-5 text-text">
+                          {segment.text}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -879,11 +883,13 @@ function MeetingDetail({
                 return (
                   <div
                     key={segment.id}
+                    ref={virtualizer.measureElement}
+                    data-index={virtualRow.index}
                     className="absolute left-0 top-0 w-full"
-                    style={{ height: `${String(virtualRow.size)}px`, transform: `translateY(${String(virtualRow.start)}px)` }}
+                    style={{ transform: `translateY(${String(virtualRow.start)}px)` }}
                   >
                     {segment.gap ? (
-                      <div className="flex h-full items-center gap-3 px-2">
+                      <div className="flex min-h-10 items-center gap-3 px-2 py-2">
                         <div className="h-px flex-1 bg-border" />
                         <span className="text-xs text-text-muted">
                           {t("meetings.row.gap", { duration: formatDurationLabel(segment.endMs - segment.startMs) })}
@@ -891,16 +897,16 @@ function MeetingDetail({
                         <div className="h-px flex-1 bg-border" />
                       </div>
                     ) : (
-                      <div className="flex items-baseline gap-2 px-2 py-1">
-                        <span className="w-14 shrink-0 text-xs tabular-nums text-text-muted">
+                      <div className="flex min-h-10 items-start gap-2 px-2 py-2">
+                        <span className="w-14 shrink-0 pt-0.5 text-end text-xs tabular-nums text-text-muted">
                           {formatStamp(segment.startMs)}
                         </span>
-                        {showSpeaker && (
-                          <span className={`w-24 shrink-0 truncate text-xs font-medium ${speakerColor(segment.speakerKey)}`}>
-                            {resolveSpeakerLabel(segment.speakerKey, speakers, t)}
-                          </span>
-                        )}
-                        <span className="min-w-0 flex-1 text-sm leading-snug text-text">{segment.text}</span>
+                        <span className={`w-24 shrink-0 truncate pt-0.5 text-xs font-medium ${speakerColor(segment.speakerKey)}`}>
+                          {showSpeaker ? resolveSpeakerLabel(segment.speakerKey, speakers, t) : null}
+                        </span>
+                        <span className="min-w-0 flex-1 break-words text-sm leading-5 text-text">
+                          {segment.text}
+                        </span>
                       </div>
                     )}
                   </div>

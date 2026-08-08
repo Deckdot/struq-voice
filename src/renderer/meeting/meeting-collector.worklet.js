@@ -11,6 +11,7 @@
  */
 
 const BATCH_SAMPLES = 16000; // 1 second at 16 kHz
+const LEVEL_SAMPLES = 800; // 20 updates per second at 16 kHz
 
 class MeetingCollectorProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -19,6 +20,7 @@ class MeetingCollectorProcessor extends AudioWorkletProcessor {
     this.filled = 0;
     this.totalSamples = 0;
     this.peak = 0;
+    this.levelSamples = 0;
     this.stopped = false;
     this.port.onmessage = (event) => {
       if (event.data.type === "flush") {
@@ -43,7 +45,6 @@ class MeetingCollectorProcessor extends AudioWorkletProcessor {
       [out.buffer]
     );
     this.filled = 0;
-    this.peak = 0;
   }
 
   process(inputs, outputs) {
@@ -65,11 +66,17 @@ class MeetingCollectorProcessor extends AudioWorkletProcessor {
       const clamped = sample > 1 ? 1 : sample < -1 ? -1 : sample;
       const magnitude = clamped < 0 ? -clamped : clamped;
       if (magnitude > this.peak) this.peak = magnitude;
+      this.levelSamples += 1;
       this.buffer[this.filled] = Math.round(clamped * 32767);
       this.filled += 1;
       this.totalSamples += 1;
       if (this.filled === BATCH_SAMPLES) {
         this.flush(false);
+      }
+      if (this.levelSamples === LEVEL_SAMPLES) {
+        this.port.postMessage({ type: "level", peak: this.peak });
+        this.peak = 0;
+        this.levelSamples = 0;
       }
     }
     return true;

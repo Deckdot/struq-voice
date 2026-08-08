@@ -20,7 +20,7 @@ import { connectMeetingLaneGraph } from "./audio-graph";
 import workletUrl from "./meeting-collector.worklet.js?url";
 
 const TARGET_SAMPLE_RATE = 16_000;
-const LEVELS_INTERVAL_MS = 100; // 10 Hz, the only timer in this window
+const LEVELS_INTERVAL_MS = 50; // 20 Hz, matching the worklet's level cadence
 const REACQUIRE_GRACE_MS = 1500;
 const STOP_TIMEOUT_MS = 5000;
 
@@ -186,8 +186,11 @@ const attachLane = (lane: Lane, stream: MediaStream): void => {
       startSample?: number;
       peak?: number;
     };
-    if (message.type === "batch" && message.pcm !== undefined) {
+    if (message.type === "level") {
       lastPeak[lane] = message.peak ?? 0;
+      return;
+    }
+    if (message.type === "batch" && message.pcm !== undefined) {
       if (paused) return;
       const frames: MeetingAudioFrames = {
         source: lane,

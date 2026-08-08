@@ -213,12 +213,17 @@ describe("ensureWhisperRuntime", () => {
       const runtimeRoot = join(root, "runtimes");
       let fetches = 0;
       let release!: () => void;
+      let signalFetchStarted!: () => void;
       const gate = new Promise<void>((resolve) => {
         release = resolve;
+      });
+      const fetchStarted = new Promise<void>((resolve) => {
+        signalFetchStarted = resolve;
       });
       const service = createModelsService(root, runtimeRoot, {
         fetch: (async () => {
           fetches += 1;
+          signalFetchStarted();
           await gate;
           throw new Error("offline");
         }) as unknown as typeof fetch
@@ -226,7 +231,7 @@ describe("ensureWhisperRuntime", () => {
 
       const first = service.installWhisperRuntime();
       const second = service.installWhisperRuntime();
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await fetchStarted;
       expect(fetches).toBe(1);
 
       release();

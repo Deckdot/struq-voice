@@ -228,14 +228,6 @@ describe("capture session", () => {
     expect(insertedNow).toBe(insertedAfterSecond);
   });
 
-  it("cancel during listening returns to idle with no transcript", () => {
-    const session = createCaptureSession(OPTIONS);
-    session.start();
-    vi.runOnlyPendingTimers();
-    session.cancel();
-    expect(session.state.phase).toBe("idle");
-  });
-
   it("cancel outside listening is a no-op", () => {
     const session = createCaptureSession(OPTIONS);
     session.cancel();

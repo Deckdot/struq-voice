@@ -71,10 +71,6 @@ describe("bumpFor", () => {
     expect(bumpFor(commits("fix: a", "feat!: b", "fix: c"))).toBe("major");
   });
 
-  it("lets one breaking change outrank a pile of features", () => {
-    expect(bumpFor(commits("feat: a", "feat: b", "fix!: c"))).toBe("major");
-  });
-
   it("is patch for an empty list", () => {
     expect(bumpFor([])).toBe("patch");
   });

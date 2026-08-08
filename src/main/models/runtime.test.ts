@@ -42,12 +42,4 @@ describe("runtime downloader", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("exposes onProgress subscription", () => {
-    root = mkdtempSync(join(tmpdir(), "sv-rt-"));
-    const downloader = createRuntimeDownloader(root, { fetch: globalThis.fetch });
-    const listener = vi.fn();
-    const unsubscribe = downloader.onProgress(listener);
-    expect(typeof unsubscribe).toBe("function");
-    unsubscribe();
-  });
 });

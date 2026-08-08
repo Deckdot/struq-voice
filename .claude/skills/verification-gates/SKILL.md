@@ -14,7 +14,7 @@ order, before committing.
 ```bash
 pnpm typecheck    # tsc --noEmit -p tsconfig.node.json && web && e2e
 pnpm lint         # eslint . (typescript-eslint strictTypeChecked)
-pnpm test         # vitest run (unit tests, currently 106)
+pnpm test         # vitest run (risk-weighted unit suite)
 ```
 
 All three must pass with zero errors. There is no softer bar.

@@ -4,6 +4,7 @@ release/
 dist/
 test-results/
 playwright-report/
+coverage/
 .playwright-mcp/
 .vite/
 *.log

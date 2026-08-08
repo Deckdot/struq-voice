@@ -75,7 +75,17 @@ export function Tabs({
   }
 
   return (
-    <div role="tablist" className={cn("relative flex items-center justify-center gap-6 sm:gap-8 overflow-x-auto", className)}>
+    // Wraps rather than scrolls. A scrollbar under the tabs clipped the first
+    // tab out of view at narrow widths, and longer translations (seven tabs in
+    // Dutch or German) overflowed at any width. Tabs are navigation: they have
+    // to stay reachable without being scrolled to.
+    <div
+      role="tablist"
+      className={cn(
+        "relative flex flex-wrap items-center justify-center gap-x-1 gap-y-0",
+        className
+      )}
+    >
       {items.map((item) => {
         const isActive = item.id === active;
         return (
@@ -88,7 +98,7 @@ export function Tabs({
               onSelect(item.id);
             }}
             className={cn(
-              "relative inline-flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-t-sm px-4 text-sm font-medium",
+              "relative inline-flex h-11 cursor-pointer items-center gap-2 rounded-t-sm px-3 text-sm font-medium",
               "transition-colors duration-hover",
               isActive ? "text-text" : "text-text-secondary hover:text-text"
             )}

@@ -17,7 +17,7 @@ export function Kbd({ accelerator, size = "sm", className }: KbdProps): JSX.Elem
   return (
     <kbd
       className={cn(
-        "inline-flex select-none items-center rounded-sm border border-border bg-bg-sunken font-sans font-semibold tabular-nums text-text",
+        "inline-flex select-none items-center rounded-sm border border-border bg-bg-sunken font-sans font-medium tabular-nums text-text",
         size === "sm" ? "h-5 px-1.5 text-2xs" : "h-6 px-2 text-xs",
         className
       )}

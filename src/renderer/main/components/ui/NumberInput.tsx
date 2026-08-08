@@ -30,7 +30,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(functi
       min={min}
       max={max}
       className={cn(
-        "text-right font-semibold tabular-nums",
+        "text-right font-medium tabular-nums",
         unit !== undefined ? "pr-10" : undefined,
         className
       )}

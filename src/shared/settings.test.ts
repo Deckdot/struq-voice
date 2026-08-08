@@ -30,6 +30,7 @@ describe("settings migration", () => {
     expect(settings.onboarding.completed).toBe(false);
     expect(settings.onboarding.hardware).toBeNull();
     expect(settings.engine.primary).toBe("parakeet");
+    expect(settings.automaticPaste).toBe(true);
   });
 
   it("preserves a stored onboarding block", () => {
@@ -60,6 +61,10 @@ describe("settings migration", () => {
 
   it("defaults onboarding to incomplete on a fresh install", () => {
     expect(settingsSchema.parse({}).onboarding.completed).toBe(false);
+  });
+
+  it("preserves automatic paste when it is disabled", () => {
+    expect(migrateSettings({ ...legacySettings, automaticPaste: false }).automaticPaste).toBe(false);
   });
 
   it("parses a dictionary entry without enabled to enabled: true", () => {

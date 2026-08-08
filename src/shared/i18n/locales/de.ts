@@ -242,6 +242,8 @@ export const de: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.speechLanguage.auto": "Automatisch erkennen",
 
   "settings.delivery.clipboard.title": "Zwischenablage",
+  "settings.delivery.automaticPaste.label": "Transkripte automatisch einfügen",
+  "settings.delivery.automaticPaste.hint": "Wenn deaktiviert, werden Diktate weiterhin transkribiert und im Verlauf gespeichert.",
   "settings.delivery.restore.label": "Vorherige Zwischenablage wiederherstellen",
   "settings.delivery.restore.hint": "Stellt wieder her, was vor dem Einfügen kopiert war.",
   "settings.delivery.delay.label": "Wiederherstellungsverzögerung",

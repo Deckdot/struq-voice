@@ -3,6 +3,7 @@ import type { BrowserWindow } from "electron";
 import { insertTextIntoActiveApp, type PasteDeps, type PasteOptions } from "./paste";
 
 const OPTIONS: PasteOptions = {
+  automaticPaste: true,
   restoreClipboard: true,
   restoreClipboardDelayMs: 400,
 };
@@ -77,6 +78,21 @@ describe("paste delivery", () => {
     vi.useRealTimers();
   });
 
+  it("touches neither the clipboard nor keyboard when automatic paste is disabled", async () => {
+    const f = makeFakes();
+    const result = await insertTextIntoActiveApp(
+      "transcript",
+      { ...OPTIONS, automaticPaste: false },
+      f.deps
+    );
+
+    expect(result).toEqual({ ok: true, value: { inserted: false } });
+    expect(f.getFocusedWindow).not.toHaveBeenCalled();
+    expect(f.readText).not.toHaveBeenCalled();
+    expect(f.writeText).not.toHaveBeenCalled();
+    expect(f.keyTap).not.toHaveBeenCalled();
+  });
+
   it("reports inserted false and touches nothing when our window is focused", async () => {
     const f = makeFakes({ focused: true });
     const result = await insertTextIntoActiveApp("transcript", OPTIONS, f.deps);
@@ -108,6 +124,7 @@ describe("paste delivery", () => {
   it("does not restore the clipboard when disabled", async () => {
     const f = makeFakes({ stash: "old text" });
     const options: PasteOptions = {
+      automaticPaste: true,
       restoreClipboard: false,
       restoreClipboardDelayMs: 400,
     };

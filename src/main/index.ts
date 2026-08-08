@@ -531,6 +531,7 @@ if (!gotLock) {
         const outcome = await insertTextIntoActiveApp(text, {
           // Read at delivery time: the user may have changed the setting
           // since this capture started.
+          automaticPaste: settingsStore.get().automaticPaste,
           restoreClipboard: settingsStore.get().restoreClipboard,
           restoreClipboardDelayMs: settingsStore.get().restoreClipboardDelayMs,
           pressEnterAfterPaste: settingsStore.get().pressEnterAfterPaste,

@@ -246,6 +246,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
 
   // Delivery Tab
   "settings.delivery.clipboard.title": "Klembord",
+  "settings.delivery.automaticPaste.label": "Transcripties automatisch invoegen",
+  "settings.delivery.automaticPaste.hint": "Uitgeschakeld worden dictaten nog steeds getranscribeerd en opgeslagen in Geschiedenis.",
   "settings.delivery.restore.label": "Vorig klembord herstellen",
   "settings.delivery.restore.hint": "Zet terug wat je had gekopieerd voor het plakken.",
   "settings.delivery.delay.label": "Herstelvertraging",

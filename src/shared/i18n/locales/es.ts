@@ -242,6 +242,8 @@ export const es: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.speechLanguage.auto": "Detección automática",
 
   "settings.delivery.clipboard.title": "Portapapeles",
+  "settings.delivery.automaticPaste.label": "Pegar transcripciones automáticamente",
+  "settings.delivery.automaticPaste.hint": "Si se desactiva, los dictados se transcriben y se guardan en el historial.",
   "settings.delivery.restore.label": "Restaurar portapapeles anterior",
   "settings.delivery.restore.hint": "Restaura lo que tenías copiado antes del pegado.",
   "settings.delivery.delay.label": "Retardo de restauración",

@@ -36,6 +36,7 @@ import { fail, ok } from "../../../shared/result";
 const execFileAsync = promisify(execFile);
 
 export interface PasteOptions {
+  readonly automaticPaste: boolean;
   readonly restoreClipboard: boolean;
   readonly restoreClipboardDelayMs: number;
   readonly pressEnterAfterPaste?: boolean;
@@ -125,6 +126,10 @@ export const insertTextIntoActiveApp = async (
   options: PasteOptions,
   deps: PasteDeps = createDefaultDeps(),
 ): Promise<Result<PasteOutcome>> => {
+  if (!options.automaticPaste) {
+    return ok({ inserted: false });
+  }
+
   if (deps.getFocusedWindow() !== null) {
     return ok({ inserted: false });
   }

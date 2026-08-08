@@ -300,6 +300,8 @@ export const en = {
 
   // Delivery Tab
   "settings.delivery.clipboard.title": "Clipboard",
+  "settings.delivery.automaticPaste.label": "Paste transcripts automatically",
+  "settings.delivery.automaticPaste.hint": "When off, dictation is still transcribed and saved to History.",
   "settings.delivery.restore.label": "Restore previous clipboard",
   "settings.delivery.restore.hint": "Puts back what you had copied before the paste.",
   "settings.delivery.delay.label": "Restore delay",

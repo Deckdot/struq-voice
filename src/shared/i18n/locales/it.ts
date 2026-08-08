@@ -242,6 +242,8 @@ export const it: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.speechLanguage.auto": "Rilevamento automatico",
 
   "settings.delivery.clipboard.title": "Appunti",
+  "settings.delivery.automaticPaste.label": "Incolla automaticamente le trascrizioni",
+  "settings.delivery.automaticPaste.hint": "Se disattivato, i dettati vengono comunque trascritti e salvati nella cronologia.",
   "settings.delivery.restore.label": "Ripristina appunti precedenti",
   "settings.delivery.restore.hint": "Ripristina ciò che avevi copiato prima dell'inserimento.",
   "settings.delivery.delay.label": "Ritardo di ripristino",

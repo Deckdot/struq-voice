@@ -242,6 +242,8 @@ export const ptBR: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.speechLanguage.auto": "Detecção automática",
 
   "settings.delivery.clipboard.title": "Área de transferência",
+  "settings.delivery.automaticPaste.label": "Colar transcrições automaticamente",
+  "settings.delivery.automaticPaste.hint": "Quando desativado, o ditado ainda é transcrito e salvo no histórico.",
   "settings.delivery.restore.label": "Restaurar área de transferência anterior",
   "settings.delivery.restore.hint": "Restaura o que você tinha copiado antes de colar.",
   "settings.delivery.delay.label": "Atraso na restauração",

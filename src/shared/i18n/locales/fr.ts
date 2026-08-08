@@ -242,6 +242,8 @@ export const fr: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.speechLanguage.auto": "Détection automatique",
 
   "settings.delivery.clipboard.title": "Presse-papiers",
+  "settings.delivery.automaticPaste.label": "Coller automatiquement les transcriptions",
+  "settings.delivery.automaticPaste.hint": "Si cette option est désactivée, les dictées sont toujours transcrites et enregistrées dans l'historique.",
   "settings.delivery.restore.label": "Restaurer le presse-papiers précédent",
   "settings.delivery.restore.hint": "Remet ce qui était copié avant la dictée.",
   "settings.delivery.delay.label": "Délai de restauration",

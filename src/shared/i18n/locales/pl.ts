@@ -242,6 +242,8 @@ export const pl: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.speechLanguage.auto": "Automatyczne wykrywanie",
 
   "settings.delivery.clipboard.title": "Schowek",
+  "settings.delivery.automaticPaste.label": "Automatycznie wklejaj transkrypcje",
+  "settings.delivery.automaticPaste.hint": "Po wyłączeniu dyktowanie nadal jest transkrybowane i zapisywane w historii.",
   "settings.delivery.restore.label": "Przywróć poprzedni schowek",
   "settings.delivery.restore.hint": "Przywraca zawartość skopiowaną przed wklejeniem dyktowania.",
   "settings.delivery.delay.label": "Opóźnienie przywracania",

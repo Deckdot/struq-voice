@@ -176,6 +176,11 @@ const attachLane = (lane: Lane, stream: MediaStream): void => {
     }
     if (message.type === "flushed") {
       lanes.delete(lane);
+      // Release the dead node pair: the track has ended, so keeping the
+      // source+worklet connected only accumulates garbage on reacquire.
+      source.disconnect();
+      worklet.disconnect();
+      worklet.port.close();
       reportState();
       maybeFinishStop();
     }
@@ -194,7 +199,17 @@ const begin = async (): Promise<void> => {
   if (system === null) return;
 
   const audioContext = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
-  await audioContext.audioWorklet.addModule(workletUrl);
+  try {
+    await audioContext.audioWorklet.addModule(workletUrl);
+  } catch (error) {
+    // The system stream is live and the context is half-built: release both
+    // instead of orphaning them until GC.
+    system.getTracks().forEach((track) => {
+      track.stop();
+    });
+    void audioContext.close();
+    throw error;
+  }
   context = audioContext;
 
   const archiveSink = audioContext.createMediaStreamDestination();

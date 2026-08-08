@@ -24,6 +24,12 @@ export const useDragPanel = (move: (x: number, y: number) => void): DragPanelHan
   const grabOffset = useRef<{ x: number; y: number } | null>(null);
   const pending = useRef<{ x: number; y: number } | null>(null);
   const frame = useRef<number | null>(null);
+  // The window listeners attached for an active drag. An unmount mid-drag
+  // must tear them down or they outlive the panel until the next pointerup.
+  const dragHandlers = useRef<{
+    move: (event: PointerEvent) => void;
+    up: () => void;
+  } | null>(null);
 
   const flush = useCallback((): void => {
     frame.current = null;
@@ -41,11 +47,21 @@ export const useDragPanel = (move: (x: number, y: number) => void): DragPanelHan
     [flush]
   );
 
+  const clearDragListeners = useCallback((): void => {
+    const handlers = dragHandlers.current;
+    dragHandlers.current = null;
+    if (handlers === null) return;
+    window.removeEventListener("pointermove", handlers.move);
+    window.removeEventListener("pointerup", handlers.up);
+    window.removeEventListener("pointercancel", handlers.up);
+  }, []);
+
   useEffect(() => {
     return () => {
+      clearDragListeners();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
     };
-  }, []);
+  }, [clearDragListeners]);
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLElement>): void => {
@@ -84,16 +100,15 @@ export const useDragPanel = (move: (x: number, y: number) => void): DragPanelHan
         if (element.hasPointerCapture(event.pointerId)) {
           element.releasePointerCapture(event.pointerId);
         }
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-        window.removeEventListener("pointercancel", onPointerUp);
+        clearDragListeners();
       };
 
+      dragHandlers.current = { move: onPointerMove, up: onPointerUp };
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
       window.addEventListener("pointercancel", onPointerUp);
     },
-    [flush, queueMove]
+    [flush, queueMove, clearDragListeners]
   );
 
   return { onPointerDown };

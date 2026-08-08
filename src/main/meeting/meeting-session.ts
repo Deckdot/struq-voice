@@ -71,7 +71,8 @@ export interface MeetingSessionOptions {
   readonly cores: number;
   /** Filesystem seam for tests; production uses the real mkdir. */
   readonly deps?: {
-    readonly mkdir?: (dir: string) => Promise<void>;
+    readonly mkdir?: (dir: string, options: { readonly recursive: true }) => Promise<unknown>;
+    readonly logError?: (message: string, error: unknown) => void;
   };
 }
 
@@ -114,6 +115,11 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     system: { live: false },
     microphone: { live: false }
   };
+  const logError =
+    options.deps?.logError ??
+    ((message: string, error: unknown): void => {
+      console.error(message, error);
+    });
 
   const setState = (next: MeetingState): void => {
     state = next;
@@ -237,6 +243,16 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       }
       case "failure": {
         if (state.phase === "idle" || state.phase === "error") return;
+        if (state.phase === "starting") return;
+        const payload = event as {
+          readonly type: "failure";
+          readonly code: string;
+          readonly message: string;
+        };
+        logError(
+          `[meeting] Worker failed during ${state.phase} (${payload.code}).`,
+          new Error(payload.message)
+        );
         // A worker that died mid-meeting ends the meeting, and the row must
         // say interrupted, not complete.
         meetingFailed = true;
@@ -286,7 +302,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     }
 
     try {
-      await (options.deps?.mkdir ?? mkdir)(meetingDir);
+      await (options.deps?.mkdir ?? mkdir)(meetingDir, { recursive: true });
       if (audioPath !== null) {
         const opened = await options.archive.open(audioPath);
         if (!opened.ok) {
@@ -294,7 +310,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         }
       }
     } catch (error) {
-      await abortToError(meetingId, "database-unavailable", error);
+      await abortToError(meetingId, "database-unavailable", "meeting-storage", error);
       return { ok: false, code: "database-unavailable" };
     }
 
@@ -324,8 +340,13 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     };
     const workerStarted = await options.worker.start(init);
     if (!workerStarted.ok) {
-      await abortToError(meetingId, "engine-not-ready", new Error(workerStarted.error.message));
-      return { ok: false, code: "engine-not-ready" };
+      await abortToError(
+        meetingId,
+        "worker-start-failed",
+        "worker-start",
+        new Error(workerStarted.error.message)
+      );
+      return { ok: false, code: "worker-start-failed" };
     }
 
     try {
@@ -358,6 +379,12 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
           reject(new Error(`Meeting window failed to load (${String(code)}): ${description}`));
         });
       });
+    } catch (error) {
+      await abortToError(meetingId, "window-load-failed", "window-load", error);
+      return { ok: false, code: "window-load-failed" };
+    }
+
+    try {
       meetingWindow.webContents.send("meeting-audio:begin", {
         includeMicrophone: settings.includeMicrophone,
         archiveAudio: settings.archiveAudio,
@@ -377,7 +404,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         true
       );
     } catch (error) {
-      await abortToError(meetingId, "loopback-unavailable", error);
+      await abortToError(meetingId, "loopback-unavailable", "audio-capture", error);
       return { ok: false, code: "loopback-unavailable" };
     }
 
@@ -385,6 +412,10 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       // No lane went live: the loopback is unavailable (a locked desktop or
       // a refused capture). Stop and report honestly.
       if (state.phase === "starting" || state.phase === "recording") {
+        logError(
+          "[meeting] Start failed at lane-live-timeout.",
+          new Error("Neither meeting audio lane became live within 8000ms.")
+        );
         void stop().then(() => {
           setState({ phase: "error", code: "loopback-unavailable" });
         });
@@ -544,17 +575,27 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       setState(recording);
       setAutoStopTimer();
     } else if (event.system.code === "loopback-denied") {
+      logError(
+        "[meeting] Start failed at audio-capture.",
+        new Error("System audio capture was denied.")
+      );
       void stop().then(() => {
-        setState({ phase: "error", code: "loopback-unavailable" });
+        setState({ phase: "error", code: "loopback-denied" });
       });
     }
   };
 
   const abortToError = async (
     meetingId: number,
-    code: "database-unavailable" | "engine-not-ready" | "loopback-unavailable",
+    code:
+      | "database-unavailable"
+      | "worker-start-failed"
+      | "window-load-failed"
+      | "loopback-unavailable",
+    step: "meeting-storage" | "worker-start" | "window-load" | "audio-capture",
     error: unknown
   ): Promise<void> => {
+    logError(`[meeting] Start failed at ${step}.`, error);
     options.store?.finalizeMeeting(meetingId, {
       endedAtMs: Date.now(),
       durationMs: 0,
@@ -570,8 +611,6 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     options.worker.kill();
     activeMeetingId = null;
     startedAtMs = null;
-    const message = error instanceof Error ? error.message : String(error);
-    void message;
     setState({ phase: "error", code });
   };
 
@@ -652,4 +691,3 @@ const defaultTitle = (date: Date): string => {
  */
 const normalizeSpeechLanguage = (language: string): string | null =>
   language === "auto" ? null : language;
-

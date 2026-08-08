@@ -160,7 +160,8 @@ const makeSession = (
     deps: {
       // No real filesystem under fake timers: the fs promise would never
       // settle while the clock is frozen.
-      mkdir: () => Promise.resolve()
+      mkdir: () => Promise.resolve(),
+      logError: vi.fn()
     },
     ...overrides
   });
@@ -195,6 +196,17 @@ describe("meeting session", () => {
     const outcome = await session.start();
     expect(outcome.ok).toBe(false);
     expect(outcome.code).toBe("assets-missing");
+  });
+
+  it("creates the meeting directory with its missing parent", async () => {
+    const mkdir = vi.fn().mockResolvedValue(undefined);
+    const { session } = makeSession({ deps: { mkdir } });
+
+    await session.start();
+
+    expect(mkdir).toHaveBeenCalledWith(expect.stringMatching(/[\\/]meetings[\\/]1$/), {
+      recursive: true
+    });
   });
 
   it("moves through starting to recording when a lane goes live", async () => {
@@ -241,6 +253,41 @@ describe("meeting session", () => {
 
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.code).toBe("loopback-unavailable");
+  });
+
+  it("identifies a worker startup failure", async () => {
+    const worker = makeWorker();
+    const logError = vi.fn();
+    vi.mocked(worker.start).mockResolvedValueOnce({
+      ok: false,
+      error: { code: "UNKNOWN", message: "native worker failed" }
+    });
+    const { session } = makeSession({
+      worker,
+      deps: { mkdir: () => Promise.resolve(), logError }
+    });
+
+    const outcome = await session.start();
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.code).toBe("worker-start-failed");
+    expect(session.state).toEqual({ phase: "error", code: "worker-start-failed" });
+    expect(logError).toHaveBeenCalledWith(
+      "[meeting] Start failed at worker-start.",
+      expect.objectContaining({ message: "native worker failed" })
+    );
+  });
+
+  it("identifies a meeting window load failure", async () => {
+    const window = makeWindow();
+    window.create.mockRejectedValueOnce(new Error("window creation failed"));
+    const { session } = makeSession({ window });
+
+    const outcome = await session.start();
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.code).toBe("window-load-failed");
+    expect(session.state).toEqual({ phase: "error", code: "window-load-failed" });
   });
 
   it("stores segments from worker events and broadcasts them", async () => {

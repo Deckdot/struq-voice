@@ -9,7 +9,13 @@ import type {
   MeetingAssetsResult,
   MeetingLevelsEvent
 } from "../../../shared/ipc";
-import type { MeetingRecord, MeetingSegment, MeetingSpeaker, MeetingState } from "../../../shared/meeting";
+import type {
+  MeetingErrorCode,
+  MeetingRecord,
+  MeetingSegment,
+  MeetingSpeaker,
+  MeetingState
+} from "../../../shared/meeting";
 import { isMeetingActive } from "../../../shared/meeting";
 import { REQUIRED_ASSET_BYTES } from "../../../shared/meeting-assets";
 import { formatAccelerator, DEFAULT_MEETING_ACCELERATOR } from "../../../shared/hotkeys";
@@ -44,6 +50,18 @@ const LANE_CODE_KEYS: Record<string, MessageKey> = {
   "loopback-denied": "meetings.lane.loopback-denied",
   "microphone-unavailable": "meetings.lane.microphone-unavailable",
   "device-changed": "meetings.lane.device-changed"
+};
+
+const MEETING_ERROR_KEYS: Record<MeetingErrorCode, MessageKey> = {
+  "assets-missing": "meetings.error.assets-missing",
+  "engine-not-ready": "meetings.error.engine-not-ready",
+  "worker-start-failed": "meetings.error.worker-start-failed",
+  "worker-failed": "meetings.error.worker-failed",
+  "window-load-failed": "meetings.error.window-load-failed",
+  "loopback-denied": "meetings.error.loopback-denied",
+  "loopback-unavailable": "meetings.error.loopback-unavailable",
+  "database-unavailable": "meetings.error.database-unavailable",
+  "already-running": "meetings.error.already-running"
 };
 
 const formatClock = (ms: number): string => {
@@ -173,7 +191,7 @@ export function MeetingsView(): JSX.Element {
               meeting={meeting}
             />
           </motion.div>
-        ) : meetingDetailId !== null ? (
+        ) : meetingDetailId !== null && meeting.phase !== "error" ? (
           <motion.div
             key="detail"
             initial={{ opacity: 0, x: 12 }}
@@ -197,7 +215,10 @@ export function MeetingsView(): JSX.Element {
             exit={{ opacity: 0, x: 8 }}
             className="h-full"
           >
-            <MeetingLibrary api={api} />
+            <MeetingLibrary
+              api={api}
+              errorCode={meeting.phase === "error" ? meeting.code : null}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -470,7 +491,13 @@ const meetingLaneCode = (meeting: MeetingState, lane: "system" | "microphone"): 
   return health.code ?? "waiting";
 };
 
-function MeetingLibrary({ api }: { readonly api: MainWindowApi }): JSX.Element {
+function MeetingLibrary({
+  api,
+  errorCode
+}: {
+  readonly api: MainWindowApi;
+  readonly errorCode: MeetingErrorCode | null;
+}): JSX.Element {
   const { t } = useTranslation();
   const [meetings, setMeetings] = useState<readonly MeetingRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -522,6 +549,33 @@ function MeetingLibrary({ api }: { readonly api: MainWindowApi }): JSX.Element {
 
   return (
     <div className="flex h-full flex-col bg-bg" data-selectable>
+      {errorCode !== null && (
+        <div
+          role="alert"
+          className="mx-5 mt-3 flex items-center gap-3 rounded-lg border border-danger bg-danger-soft px-4 py-3"
+        >
+          <Icon
+            icon="ph:warning-circle"
+            className="h-5 w-5 shrink-0 text-danger"
+            aria-hidden="true"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-text">{t("meetings.error.title")}</div>
+            <div className="mt-0.5 text-xs text-text-secondary">
+              {t(MEETING_ERROR_KEYS[errorCode])}
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              void api.meetings.start();
+            }}
+          >
+            {t("meetings.error.retry")}
+          </Button>
+        </div>
+      )}
       <div className="flex items-center gap-3 border-b border-border px-5 py-3">
         <SearchInput
           value={query}

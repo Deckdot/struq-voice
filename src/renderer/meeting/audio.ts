@@ -65,13 +65,17 @@ export const initMeetingAudio = (windowApi: MeetingWindowApi): void => {
   // landed made the call throw whenever it lost the race, which aborted the
   // start as loopback-unavailable and left a 0s meeting behind.
   window.__struqBeginMeetingAudio = () => {
-    void begin();
+    void begin().catch((error: unknown) => {
+      console.error("[meeting] Audio capture startup failed.", error);
+      reportLaneFailure("system", "loopback-unavailable");
+      starting = false;
+    });
   };
   windowApi.onBegin((request) => {
     beginRequest = request;
     // The gesture call may already have run and found no request to act on.
     // Begin now if so; begin() is guarded against running twice.
-    if (gestureSeen) void begin();
+    if (gestureSeen) window.__struqBeginMeetingAudio();
   });
   windowApi.onStop(() => {
     stopAll();
@@ -134,6 +138,7 @@ const acquireSystem = async (): Promise<MediaStream | null> => {
     }
     return display;
   } catch (error) {
+    console.error("[meeting] System audio capture failed.", error);
     if (error instanceof DOMException && error.name === "NotAllowedError") {
       reportLaneFailure("system", "loopback-denied");
     } else {

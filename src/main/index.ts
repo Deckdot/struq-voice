@@ -109,6 +109,10 @@ let mainWindow: BrowserWindow | null = null;
 let overlay: ReturnType<typeof createOverlayWindowController> | null = null;
 let hotkeys: ReturnType<typeof createHotkeys> | null = null;
 let meetingSession: ReturnType<typeof createMeetingSession> | null = null;
+// Held at module scope so will-quit can release them: the sherpa session owns
+// native memory and the database owns a WAL that wants checkpointing.
+let database: ReturnType<typeof openDatabase> = null;
+let primaryLocalEngine: TranscriptionEngine | null = null;
 let isQuitting = false;
 
 app.on("before-quit", () => {
@@ -198,6 +202,7 @@ if (!gotLock) {
     });
     const secrets = createSecretsStore();
     const db = openDatabase(app.getPath("userData"));
+    database = db;
     const history = db?.history ?? null;
     const meetingStore = db?.meetings ?? null;
 
@@ -379,6 +384,7 @@ if (!gotLock) {
       modelsRoot,
       getModelId: () => settingsStore.get().parakeetModelId
     });
+    primaryLocalEngine = parakeetEngine;
     const openrouterEngine = createOpenRouterEngine({
       getApiKey: () => secrets.readOpenRouterKey()
     });
@@ -811,5 +817,16 @@ if (!gotLock) {
     overlay?.dispose();
     hotkeys?.dispose();
     meetingSession?.dispose();
+    // Release the native session and checkpoint the WAL. Both are hygiene
+    // rather than correctness (the OS reclaims either way), so neither is
+    // allowed to throw and hold up the quit.
+    try {
+      void primaryLocalEngine?.dispose();
+    } catch (error) {
+      console.warn("[quit] Engine dispose failed.", error);
+    }
+    primaryLocalEngine = null;
+    database?.close();
+    database = null;
   });
 }

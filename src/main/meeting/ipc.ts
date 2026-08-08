@@ -63,6 +63,14 @@ const sendToMainWindow = (channel: string, payload: unknown): void => {
   }
 };
 
+/**
+ * The audio data plane carries raw PCM straight into the worker, so only the
+ * hidden meeting window may speak on it. Any other renderer is refused rather
+ * than trusted by virtue of being in-process.
+ */
+const isMeetingWindow = (sender: Electron.WebContents): boolean =>
+  sender.getURL().includes("meeting/index.html");
+
 export const registerMeetingIpcHandlers = (
   store: MeetingStore | null,
   session: MeetingSession,
@@ -217,20 +225,24 @@ export const registerMeetingIpcHandlers = (
   });
 
   // The meeting window's own channels. Main forwards, holds nothing.
-  ipcMain.on(meetingAudioFramesChannel, (_event, frames: WorkerFrames) => {
+  ipcMain.on(meetingAudioFramesChannel, (event, frames: WorkerFrames) => {
+    if (!isMeetingWindow(event.sender)) return;
     session.handleFrames(frames);
   });
 
-  ipcMain.on(meetingAudioArchiveChannel, (_event, chunk: { bytes: ArrayBuffer }) => {
+  ipcMain.on(meetingAudioArchiveChannel, (event, chunk: { bytes: ArrayBuffer }) => {
+    if (!isMeetingWindow(event.sender)) return;
     session.handleArchiveChunk(chunk.bytes);
   });
 
-  ipcMain.on(meetingAudioStateChannel, (_event, event: MeetingAudioStateEvent) => {
-    session.handleAudioState(event);
+  ipcMain.on(meetingAudioStateChannel, (event, audioState: MeetingAudioStateEvent) => {
+    if (!isMeetingWindow(event.sender)) return;
+    session.handleAudioState(audioState);
   });
 
-  ipcMain.on(meetingAudioLevelsChannel, (_event, event) => {
-    sendToMainWindow(meetingLevelsChannel, event);
+  ipcMain.on(meetingAudioLevelsChannel, (event, levels) => {
+    if (!isMeetingWindow(event.sender)) return;
+    sendToMainWindow(meetingLevelsChannel, levels);
   });
 
   assets.subscribe((result) => {

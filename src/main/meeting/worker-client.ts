@@ -29,6 +29,7 @@ export const createMeetingWorkerClient = (): MeetingWorkerClient => {
   let drainResolve: (() => void) | null = null;
   let killRequested = false;
   let drainTimer: ReturnType<typeof setTimeout> | null = null;
+  let startTimer: ReturnType<typeof setTimeout> | null = null;
   const listeners = new Set<(event: WorkerEvent) => void>();
 
   const emit = (event: WorkerEvent): void => {
@@ -37,7 +38,14 @@ export const createMeetingWorkerClient = (): MeetingWorkerClient => {
     }
   };
 
+  const clearStartTimer = (): void => {
+    if (startTimer === null) return;
+    clearTimeout(startTimer);
+    startTimer = null;
+  };
+
   const onExit = (): void => {
+    clearStartTimer();
     const settle = startResolve;
     startResolve = null;
     if (settle !== null) {
@@ -65,10 +73,12 @@ export const createMeetingWorkerClient = (): MeetingWorkerClient => {
       child.on("message", (event) => {
         const workerEvent = event as WorkerEvent;
         if (workerEvent.type === "ready") {
+          clearStartTimer();
           const settle = startResolve;
           startResolve = null;
           settle?.(ok(undefined));
         } else if (workerEvent.type === "failure") {
+          clearStartTimer();
           const settle = startResolve;
           startResolve = null;
           settle?.(fail({ code: "UNKNOWN", message: workerEvent.message }));
@@ -87,13 +97,19 @@ export const createMeetingWorkerClient = (): MeetingWorkerClient => {
 
       return new Promise<Result<void>>((resolve) => {
         startResolve = resolve;
-        setTimeout(() => {
+        startTimer = setTimeout(() => {
           // A cold Parakeet warmup on a slow disk is genuinely slow.
+          startTimer = null;
           const settle = startResolve;
           startResolve = null;
-          if (settle !== null) {
-            settle(fail({ code: "UNKNOWN", message: "The meeting worker took too long to start." }));
-          }
+          if (settle === null) return;
+          // Giving up on the start must also reclaim the child: a worker
+          // that is still loading a model would otherwise hold its memory
+          // and its model handle for the life of the app.
+          killRequested = true;
+          child?.kill();
+          child = null;
+          settle(fail({ code: "UNKNOWN", message: "The meeting worker took too long to start." }));
         }, START_TIMEOUT_MS);
       });
     },
@@ -118,6 +134,7 @@ export const createMeetingWorkerClient = (): MeetingWorkerClient => {
     },
     kill: (): void => {
       killRequested = true;
+      clearStartTimer();
       if (drainTimer !== null) {
         clearTimeout(drainTimer);
         drainTimer = null;

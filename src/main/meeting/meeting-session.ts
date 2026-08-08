@@ -44,6 +44,12 @@ import type { WorkerFrames, WorkerInit } from "./worker/protocol";
 const LANE_LIVE_TIMEOUT_MS = 8000;
 const WINDOW_STOP_TIMEOUT_MS = 5000;
 const WORKER_DRAIN_TIMEOUT_MS = 30_000;
+/**
+ * A hidden window that never loads would otherwise hang start() forever with
+ * the worker, the archive and the window all held open. Local file, so this
+ * is generous: exceeding it means something is genuinely wrong.
+ */
+const WINDOW_LOAD_TIMEOUT_MS = 15_000;
 
 export interface MeetingSessionOptions {
   readonly settings: () => MeetingSettings;
@@ -330,10 +336,25 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
           reject(new Error("No meeting window."));
           return;
         }
+        // A load that neither finishes nor fails must not hang the start. The
+        // listeners are `once`, so they retire themselves; the timer is the
+        // only thing left to clear, and settled guards the losing path.
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error("Meeting window did not load in time."));
+        }, WINDOW_LOAD_TIMEOUT_MS);
         window.webContents.once("did-finish-load", () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           resolve();
         });
         window.webContents.once("did-fail-load", (_event, code, description) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           reject(new Error(`Meeting window failed to load (${String(code)}): ${description}`));
         });
       });

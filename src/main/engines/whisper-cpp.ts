@@ -223,7 +223,10 @@ export const createWhisperCppEngine = (
 
           const { stdout } = await exec(binaryPath, args, {
             timeout: EXEC_TIMEOUT_MS,
-            windowsHide: true
+            windowsHide: true,
+            // The router aborts at 20s; without this the sidecar runs on to
+            // its own 60s timeout and lingers as an orphaned GPU process.
+            signal: request.signal
           });
           const inferenceMs = Date.now() - startedAt;
           return ok({

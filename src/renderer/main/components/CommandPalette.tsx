@@ -46,7 +46,7 @@ const ITEM_CLASS =
   "flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-sm text-text data-[selected=true]:bg-surface-hover";
 
 /**
- * The Ctrl+K command palette, built on cmdk. It is the same enumeration the
+ * The Ctrl+F search palette, built on cmdk. It is the same enumeration the
  * tray menu and the rail use: the four routes, the one-shot actions, and the
  * settings tabs, so every surface ships the same commands.
  */
@@ -55,10 +55,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
   const { t } = useTranslation();
   const setRoute = useMainStore((state) => state.setRoute);
   const [copied, setCopied] = useState(false);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setCopied(false);
+    setQuery("");
   }, [open]);
 
   const close = (): void => {
@@ -115,14 +117,29 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
             >
               <div className="flex items-center gap-2.5 border-b border-border px-4">
                 <Icon
-                  icon="ph:command"
+                  icon="ph:magnifying-glass"
                   className="h-4 w-4 shrink-0 text-text-muted"
                   aria-hidden="true"
                 />
                 <Command.Input
+                  value={query}
+                  onValueChange={setQuery}
                   placeholder={t("commandPalette.searchPlaceholder")}
                   className="h-11 w-full bg-transparent text-base text-text placeholder:text-text-muted focus:outline-none"
                 />
+                {query.length > 0 && (
+                  <button
+                    type="button"
+                    aria-label={t("search.clear")}
+                    title={t("search.clear")}
+                    onClick={() => {
+                      setQuery("");
+                    }}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-hover hover:bg-surface-hover hover:text-text active:bg-surface-active"
+                  >
+                    <Icon icon="ph:x" className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                )}
               </div>
               <Command.List className="max-h-72 overflow-y-auto p-1.5">
                 <Command.Empty className="px-4 py-6 text-center text-sm text-text-muted">

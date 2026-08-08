@@ -220,6 +220,9 @@ export const historyDeleteChannel = "history:delete" as const;
 export const historyClearChannel = "history:clear" as const;
 export const historyStatsChannel = "history:stats" as const;
 
+/** Number of local calendar days shown in the Dictate activity chart. */
+export const HISTORY_ACTIVITY_DAYS = 7;
+
 /** One day of dictation, local time, for the activity sparkline. */
 export interface HistoryStatsDay {
   readonly dayStartMs: number;

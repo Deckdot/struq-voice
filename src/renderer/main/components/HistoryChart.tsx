@@ -11,6 +11,7 @@ import {
   Tooltip,
   CartesianGrid
 } from "recharts";
+import { HISTORY_ACTIVITY_DAYS } from "../../../shared/ipc";
 import type { HistoryStatsDay } from "../../../shared/ipc";
 import { useTranslation } from "../lib/useTranslation";
 
@@ -164,7 +165,7 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
 
   const chartData: ChartItem[] = useMemo(
     () =>
-      days.map((d) => {
+      days.slice(-HISTORY_ACTIVITY_DAYS).map((d) => {
         const durationSec = Math.round(d.durationMs / 1000);
         // Below a few seconds the ratio is dominated by rounding, so a
         // two-word aside would report an implausible pace. Those days read as
@@ -216,9 +217,6 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             opacity={0.4}
             vertical={false}
           />
-          {/* Thirty labels do not fit in 880px, and recharts drops them in an
-              order that reads as arbitrary. Every fifth day keeps the axis
-              legible and the spacing even. */}
           <XAxis
             dataKey="dateStr"
             stroke="var(--sv-text-muted)"
@@ -226,8 +224,8 @@ export function HistoryChart({ days, className = "" }: HistoryChartProps): JSX.E
             tickLine={false}
             axisLine={false}
             dy={4}
-            interval={4}
-            minTickGap={8}
+            interval={0}
+            minTickGap={4}
           />
           <YAxis
             yAxisId="words"

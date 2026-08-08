@@ -30,7 +30,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "tray.phase.delivering": "afleveren",
   "tray.phase.error": "fout",
   "tray.balloon.title": "Struq Voice",
-  "tray.balloon.body": "Struq Voice blijft actief in het systeemvak. Sluit af via het systeemvakmenu.",
+  "tray.balloon.body":
+    "Struq Voice blijft actief in het systeemvak. Sluit af via het systeemvakmenu.",
 
   "notification.updateReady.title": "Struq Voice update gereed",
   "notification.updateReady.body": "Versie {version} is geverifieerd en gereed om te installeren.",
@@ -43,10 +44,13 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "overlay.meetingRecording": "Vergadering wordt opgenomen",
   "overlay.meetingPaused": "Vergadering gepauzeerd",
   "overlay.meetingSaving": "Vergadering opslaan...",
+  "search.open": "Zoeken",
+  "search.clear": "Zoekopdracht wissen",
 
   "dictate.blocker.localMissing.message": "{model} staat nog niet op deze computer.",
   "dictate.blocker.localMissing.action": "Downloaden",
-  "dictate.blocker.cloudKey.message": "OpenRouter vereist een API-sleutel voordat het kan transcriberen.",
+  "dictate.blocker.cloudKey.message":
+    "OpenRouter vereist een API-sleutel voordat het kan transcriberen.",
   "dictate.blocker.cloudKey.action": "Sleutel toevoegen",
   "dictate.stats.words": "Woorden",
   "dictate.stats.spoken": "Gesproken",
@@ -56,7 +60,7 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "dictate.stats.wpmHint": "Woorden per minuut",
   "dictate.stats.day": "Dag",
   "dictate.stats.days": "Dagen",
-  "dictate.activity.title": "Decteeractiviteit",
+  "dictate.activity.title": "Dicteeractiviteit",
   "dictate.activity.summary": "{totalWords} woorden in totaal · {duration}",
   "dictate.phase.arming": "Microfoon starten",
   "dictate.phase.listening": "Luisteren",
@@ -81,25 +85,34 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "history.emptySearch.title": "Geen resultaten voor die zoekopdracht.",
   "history.emptySearch.body": "Probeer een ander woord of wis de zoekopdracht.",
   "history.empty.title": "Nog geen transcripties.",
-  "history.empty.body": "Houd je toets ingedrukt, spreek een zin in en laat los. Het verschijnt hier.",
+  "history.empty.body":
+    "Houd je toets ingedrukt, spreek een zin in en laat los. Het verschijnt hier.",
   "history.day.today": "Vandaag",
   "history.day.yesterday": "Gisteren",
   "history.row.words": { one: "{count} woord", other: "{count} woorden" },
 
   "models.lightPcWarning.title": "Lokale transcriptie kan traag aanvoelen op deze pc",
-  "models.lightPcWarning.body": "Deze computer is het meest geschikt voor Tiny- of Base-modellen. Voor snellere resultaten verwerkt OpenRouter (cloud) audio op een server en levert snel een transcriptie.",
+  "models.lightPcWarning.body":
+    "Deze computer is het meest geschikt voor Tiny- of Base-modellen. Voor snellere resultaten verwerkt OpenRouter (cloud) audio op een server en levert snel een transcriptie.",
   "models.activeModel.title": "Actief model",
   "models.activeModel.noneTitle": "Geen lokaal model geselecteerd",
-  "models.activeModel.noneBody": "Kies hieronder een geïnstalleerd model om transcriptie op deze computer uit te voeren.",
+  "models.activeModel.noneBody":
+    "Kies hieronder een geïnstalleerd model om transcriptie op deze computer uit te voeren.",
   "models.activeModel.badge": "Actief",
   "models.activeModel.selectedBadge": "Geselecteerd",
-  "models.activeModel.notDownloaded": "Geselecteerd, maar nog niet gedownload. Download het om het te gaan gebruiken.",
-  "models.error.http": "Download geblokkeerd door de server of uw netwerk. Controleer uw proxy- of firewallinstellingen.",
-  "models.error.network": "Kan de downloadserver niet bereiken. Controleer uw internetverbinding of proxy-instellingen.",
-  "models.error.timeout": "De download is vastgelopen. Controleer uw verbinding en probeer het opnieuw.",
+  "models.activeModel.notDownloaded":
+    "Geselecteerd, maar nog niet gedownload. Download het om het te gaan gebruiken.",
+  "models.error.http":
+    "Download geblokkeerd door de server of uw netwerk. Controleer uw proxy- of firewallinstellingen.",
+  "models.error.network":
+    "Kan de downloadserver niet bereiken. Controleer uw internetverbinding of proxy-instellingen.",
+  "models.error.timeout":
+    "De download is vastgelopen. Controleer uw verbinding en probeer het opnieuw.",
   "models.error.disk": "Onvoldoende vrije schijfruimte voor dit model.",
-  "models.error.permission": "Windows heeft het schrijven van het bestand geblokkeerd. Sluit andere programma's en probeer het opnieuw.",
-  "models.error.checksum": "Het gedownloade bestand was beschadigd. Probeer het opnieuw; de download gaat verder waar hij stopte.",
+  "models.error.permission":
+    "Windows heeft het schrijven van het bestand geblokkeerd. Sluit andere programma's en probeer het opnieuw.",
+  "models.error.checksum":
+    "Het gedownloade bestand was beschadigd. Probeer het opnieuw; de download gaat verder waar hij stopte.",
   "models.error.unknown": "De download is mislukt om een onverwachte reden. Probeer het opnieuw.",
   "models.recommended.title": "Aanbevolen voor deze pc",
   "models.recommended.reading": "Processor, geheugen en grafische hardware worden geanalyseerd.",
@@ -122,7 +135,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "models.helper.installingBtn": "Installeren...",
   "models.diskUsed": "{size} in gebruik door lokale modellen",
   "models.specsDialog.title": "Hardware- & systeemprofiel",
-  "models.specsDialog.description": "Gedetecteerde specificaties om lokale AI-dicteermodellen te optimaliseren.",
+  "models.specsDialog.description":
+    "Gedetecteerde specificaties om lokale AI-dicteermodellen te optimaliseren.",
   "models.specsDialog.done": "Klaar",
   "models.specsDialog.reading": "Hardwaregegevens lezen...",
   "models.specsDialog.systemHardware": "Systeemhardware",
@@ -172,17 +186,20 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.general.updates.downloading": "Update downloaden...",
   "settings.general.updates.upToDate": "Up-to-date.",
   "settings.general.updates.ready": "Een nieuwe versie is gereed om te installeren.",
-  "settings.general.updates.refused": "Update geweigerd. De download kwam niet overeen met de handtekening.",
+  "settings.general.updates.refused":
+    "Update geweigerd. De download kwam niet overeen met de handtekening.",
   "settings.general.updates.error": "Kon niet controleren op updates.",
   "settings.general.updates.installBtn": "Herstarten en installeren",
   "settings.general.updates.whyHappened": "Waarom dit gebeurde",
-  "settings.general.updates.refusedHint": "De download voldeed niet aan de handtekeningcontrole en is verworpen.",
+  "settings.general.updates.refusedHint":
+    "De download voldeed niet aan de handtekeningcontrole en is verworpen.",
 
   // Capture Tab
   "settings.capture.device.title": "Microfoon",
   "settings.capture.device.label": "Actieve microfoon",
   "settings.capture.device.default": "Standaard systeemmicrofoon",
-  "settings.capture.device.permissionHint": "Een lege lijst betekent dat Windows geen microfoontoestemming heeft verleend.",
+  "settings.capture.device.permissionHint":
+    "Een lege lijst betekent dat Windows geen microfoontoestemming heeft verleend.",
   "settings.capture.device.none": "Geen microfoons gevonden",
   "settings.capture.device.signalDetected": "Signaal gedetecteerd",
   "settings.capture.device.speakToTest": "Spreek om je microfoon te testen",
@@ -205,11 +222,13 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.capture.live.label": "Woorden tonen tijdens spreken",
   "settings.capture.live.hint": "Concurreert met de eindsessie op tragere systemen.",
   "settings.capture.live.refreshLabel": "Vernieuwingsfrequentie",
-  "settings.capture.live.refreshHint": "Lagere getallen zijn vloeiender maar gebruiken meer processorkracht.",
+  "settings.capture.live.refreshHint":
+    "Lagere getallen zijn vloeiender maar gebruiken meer processorkracht.",
   "settings.capture.preroll.title": "Pre-roll",
   "settings.capture.preroll.label": "Pre-roll",
   "settings.capture.preroll.hint": "Bewaart tot {ms}ms audio van vóór de toetsindruk.",
-  "settings.capture.preroll.hintText": "Bewaard van vóór de toetsindruk, zodat eerste woorden niet wegvallen.",
+  "settings.capture.preroll.hintText":
+    "Bewaard van vóór de toetsindruk, zodat eerste woorden niet wegvallen.",
 
   // Transcription Tab
   "settings.transcription.service.title": "Hoofdspraakdienst",
@@ -224,16 +243,20 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.badge.practice": "Oefenen",
   "settings.transcription.badge.local": "Lokaal",
   "settings.transcription.cloudWarning.title": "Je audio verlaat deze computer.",
-  "settings.transcription.cloudWarning": "OpenRouter verwerkt je opname op haar servers. Gebruik een lokale dienst als je opnames liever hier bewaart.",
+  "settings.transcription.cloudWarning":
+    "OpenRouter verwerkt je opname op haar servers. Gebruik een lokale dienst als je opnames liever hier bewaart.",
   "settings.transcription.whisperModel.title": "Whisper-model",
-  "settings.transcription.whisperModel.subtitle": "Grotere modellen zijn trager maar verwerken accenten beter.",
+  "settings.transcription.whisperModel.subtitle":
+    "Grotere modellen zijn trager maar verwerken accenten beter.",
   "settings.transcription.whisperModel.label": "Actief model",
   "settings.transcription.openrouter.title": "OpenRouter API-sleutel",
   "settings.transcription.openrouter.subtitle": "Gecodeerd opgeslagen op deze computer.",
   "settings.transcription.openrouter.configured": "API-sleutel ingesteld.",
   "settings.transcription.openrouter.notConfigured": "Nog geen API-sleutel ingesteld.",
-  "settings.transcription.openrouter.storedHint": "Er is een API-sleutel opgeslagen op deze computer.",
-  "settings.transcription.openrouter.envHint": "Ingesteld via de OPENROUTER_API_KEY omgevingsvariabele.",
+  "settings.transcription.openrouter.storedHint":
+    "Er is een API-sleutel opgeslagen op deze computer.",
+  "settings.transcription.openrouter.envHint":
+    "Ingesteld via de OPENROUTER_API_KEY omgevingsvariabele.",
   "settings.transcription.openrouter.keyLabel": "Opgeslagen sleutel",
   "settings.transcription.openrouter.pasteLabel": "Plak je sleutel",
   "settings.transcription.openrouter.pasteHint": "Begint met sk-or-v1-.",
@@ -243,41 +266,49 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.openrouter.replaceBtn": "Sleutel vervangen",
   "settings.transcription.openrouter.addBtn": "Sleutel toevoegen",
   "settings.transcription.speechLanguage.title": "Spraaktaal",
-  "settings.transcription.speechLanguage.subtitle": "Selecteer de doeltaal voor spraakherkenning. Onafhankelijk van de interfacetaal.",
+  "settings.transcription.speechLanguage.subtitle":
+    "Selecteer de doeltaal voor spraakherkenning. Onafhankelijk van de interfacetaal.",
   "settings.transcription.speechLanguage.label": "Dicteertaal",
-  "settings.transcription.speechLanguage.hint": "Het vastzetten van de taal verbetert de nauwkeurigheid en snelheid.",
+  "settings.transcription.speechLanguage.hint":
+    "Het vastzetten van de taal verbetert de nauwkeurigheid en snelheid.",
   "settings.transcription.speechLanguage.auto": "Automatisch detecteren",
 
   // Delivery Tab
   "settings.delivery.clipboard.title": "Klembord",
   "settings.delivery.automaticPaste.label": "Transcripties automatisch invoegen",
-  "settings.delivery.automaticPaste.hint": "Uitgeschakeld worden dictaten nog steeds getranscribeerd en opgeslagen in Geschiedenis.",
+  "settings.delivery.automaticPaste.hint":
+    "Uitgeschakeld worden dictaten nog steeds getranscribeerd en opgeslagen in Geschiedenis.",
   "settings.delivery.restore.label": "Vorig klembord herstellen",
   "settings.delivery.restore.hint": "Zet terug wat je had gekopieerd voor het plakken.",
   "settings.delivery.delay.label": "Herstelvertraging",
   "settings.delivery.delay.hint": "Verhoog als een trage app het klembord nog leest.",
   "settings.delivery.pressEnter.label": "Druk op Enter na plakken",
-  "settings.delivery.pressEnter.hint": "Verstuurt automatisch een Enter-toetsaanslag naar het geopende venster na het invoegen.",
-  "settings.delivery.pasteFallback": "Als plakken ooit mislukt, staat de tekst nog op je klembord. Druk zelf op Ctrl+V.",
+  "settings.delivery.pressEnter.hint":
+    "Verstuurt automatisch een Enter-toetsaanslag naar het geopende venster na het invoegen.",
+  "settings.delivery.pasteFallback":
+    "Als plakken ooit mislukt, staat de tekst nog op je klembord. Druk zelf op Ctrl+V.",
 
   // Text Tab
   "settings.text.post.title": "Opschonen",
   "settings.text.post.subtitle": "Toegepast op elke transcriptie voordat deze wordt geplaatst.",
   "settings.text.fillers.label": "Stopwoorden verwijderen",
-  "settings.text.fillers.hint": "Verwijdert \"uh\" en \"um\" geluiden die er soms tussen glippen.",
+  "settings.text.fillers.hint": 'Verwijdert "uh" en "um" geluiden die er soms tussen glippen.',
   "settings.text.punctuation.label": "Punt toevoegen aan het einde",
   "settings.text.punctuation.hint": "Voegt een punt toe wanneer deze ontbreekt.",
   "settings.text.dictionary.title": "Woordenboek",
-  "settings.text.dictionary.subtitle": "Vervang verkeerd verstane woorden of formatteer aangepaste termen automatisch.",
+  "settings.text.dictionary.subtitle":
+    "Vervang verkeerd verstane woorden of formatteer aangepaste termen automatisch.",
   "settings.text.dictionary.wordsLabel": "Woorden om te corrigeren",
-  "settings.text.dictionary.emptyHint": "Leer Struq Voice de woorden die het steeds verkeerd verstaat.",
+  "settings.text.dictionary.emptyHint":
+    "Leer Struq Voice de woorden die het steeds verkeerd verstaat.",
   "settings.text.dictionary.rulesHint": "{count} regels toegepast op elke transcriptie.",
   "settings.text.dictionary.manageBtn": "Woordenboek openen",
 
   // Appearance Tab
   "settings.appearance.theme.title": "Thema-voorkeur",
   "settings.appearance.theme.label": "Uiterlijkmodus",
-  "settings.appearance.theme.hint": "Heeft invloed op het hele venster, inclusief menu's en dialoogvensters.",
+  "settings.appearance.theme.hint":
+    "Heeft invloed op het hele venster, inclusief menu's en dialoogvensters.",
   "settings.appearance.theme.system": "Volg Windows",
   "settings.appearance.theme.light": "Licht",
   "settings.appearance.theme.dark": "Donker",
@@ -310,7 +341,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "dictionary.sort.alphabetical": "Alfabetisch",
   "dictionary.clearAll": "Alles wisssen",
   "dictionary.empty.title": "Nog geen regels",
-  "dictionary.empty.body": "Voeg regels toe om specifieke woorden of namen automatisch te corrigeren.",
+  "dictionary.empty.body":
+    "Voeg regels toe om specifieke woorden of namen automatisch te corrigeren.",
   "dictionary.starterSuggestions": "Startsuggesties:",
   "dictionary.deletePrompt": "Verwijderen?",
   "dictionary.deleteRuleLabel": "Regel verwijderen",
@@ -318,12 +350,12 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "dictionary.confirmClear.title": "Woordenboek wissen?",
   "dictionary.confirmClear.description": {
     one: "Dit verwijdert definitief 1 regel. Dit kan niet ongedaan worden gemaakt.",
-    other: "Dit verwijdert definitief alle {count} regels. Dit kan niet ongedaan worden gemaakt."
+    other: "Dit verwijdert definitief alle {count} regels. Dit kan niet ongedaan worden gemaakt.",
   },
   "dictionary.confirmClear.cancel": "Annuleren",
   "dictionary.confirmClear.confirm": "Woordenboek wissen",
   "dictionary.err.emptyFrom": "Vul het te vervangen woord of de frase in.",
-  "dictionary.err.duplicate": "Je hebt al een regel voor \"{from}\".",
+  "dictionary.err.duplicate": 'Je hebt al een regel voor "{from}".',
   "dictionary.msg.exported": "Woordenboek succesvol geëxporteerd.",
   "dictionary.msg.exportFailed": "Exporteren mislukt: {message}",
   "dictionary.msg.imported": "{added} regels toegevoegd, {skipped} dubbele overgeslagen.",
@@ -333,13 +365,16 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "onboarding.step.mic.title": "Je microfoon",
   "onboarding.step.mic.desc": "Reeds geselecteerd. Zeg iets om te controleren of de balk beweegt.",
   "onboarding.step.keys.title": "Je sneltoetsen",
-  "onboarding.step.keys.desc": "Reeds geregistreerd. Pas ze aan als ze conflicteren met andere software.",
+  "onboarding.step.keys.desc":
+    "Reeds geregistreerd. Pas ze aan als ze conflicteren met andere software.",
   "onboarding.step.model.title": "Je model",
-  "onboarding.step.model.desc": "Gekozen voor deze computer. Het wordt op de achtergrond gedownload.",
+  "onboarding.step.model.desc":
+    "Gekozen voor deze computer. Het wordt op de achtergrond gedownload.",
   "onboarding.step.try.title": "Probeer het uit",
   "onboarding.step.try.desc": "Houd je toets ingedrukt, spreek een zin in en laat los.",
   "onboarding.done.title": "Je bent er klaar voor.",
-  "onboarding.done.body": "Struq Voice blijft actief in het systeemvak. Je kunt alles aanpassen in Instellingen.",
+  "onboarding.done.body":
+    "Struq Voice blijft actief in het systeemvak. Je kunt alles aanpassen in Instellingen.",
   "onboarding.done.startBtn": "Starten met Struq Voice",
   "onboarding.skip": "Instellen overspringen",
   "onboarding.skipLast": "Overspringen",
@@ -361,7 +396,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "commandPalette.action.themeDark": "Donker thema gebruiken",
   "commandPalette.action.resetPanel": "Paneelpositie herstellen",
   "updateDialog.title": "Versie {version} is gereed om te installeren",
-  "updateDialog.description": "Struq Voice wordt op de achtergrond geïnstalleerd en herstart. Je instellingen en geschiedenis blijven behouden.",
+  "updateDialog.description":
+    "Struq Voice wordt op de achtergrond geïnstalleerd en herstart. Je instellingen en geschiedenis blijven behouden.",
   "updateDialog.verified": "Geverifieerd met de release-handtekening.",
   "updateDialog.later": "Later",
   "updateDialog.install": "Installeren en herstarten",
@@ -371,7 +407,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.meetings.recording.hotkey.label": "Vergadering starten en stoppen",
   "settings.meetings.recording.hotkey.hint": "Werkt overal in Windows.",
   "settings.meetings.recording.microphone.label": "Microfoon meenemen",
-  "settings.meetings.recording.microphone.hint": "Getranscribeerd als \"Jij\". Uit neemt alleen op wat de pc afspeelt.",
+  "settings.meetings.recording.microphone.hint":
+    'Getranscribeerd als "Jij". Uit neemt alleen op wat de pc afspeelt.',
   "settings.meetings.recording.archive.label": "Audio-opname bewaren",
   "settings.meetings.recording.archive.hint": "Een afspeelbare opname naast het transcript.",
   "settings.meetings.recording.quality.label": "Archiefkwaliteit",
@@ -379,12 +416,15 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.meetings.recording.quality.perHour": "7 MB, 14 MB of 28 MB per uur.",
   "settings.meetings.transcription.title": "Transcriptie",
   "settings.meetings.transcription.engine.label": "Vergadermotor",
-  "settings.meetings.transcription.engine.hint": "Alleen lokaal: uren audio verlaten deze computer nooit.",
+  "settings.meetings.transcription.engine.hint":
+    "Alleen lokaal: uren audio verlaten deze computer nooit.",
   "settings.meetings.speakers.title": "Sprekers",
   "settings.meetings.speakers.label.label": "Sprekers labelen",
-  "settings.meetings.speakers.label.hint": "Onderscheidt externe stemmen. Uit labelt elke regel \"Spreker\".",
+  "settings.meetings.speakers.label.hint":
+    'Onderscheidt externe stemmen. Uit labelt elke regel "Spreker".',
   "settings.meetings.speakers.sensitivity.label": "Gevoeligheid",
-  "settings.meetings.speakers.sensitivity.hint": "Hoe gelijk twee stemmen moeten zijn om als een persoon te tellen.",
+  "settings.meetings.speakers.sensitivity.hint":
+    "Hoe gelijk twee stemmen moeten zijn om als een persoon te tellen.",
   "settings.meetings.speakers.sensitivity.merge": "Gelijkende stemmen samenvoegen",
   "settings.meetings.speakers.sensitivity.keepApart": "Stemmen gescheiden houden",
   "settings.meetings.speakers.max.label": "Verwachte sprekers",
@@ -398,7 +438,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.meetings.advanced.vad.maxSpeech.label": "Langste uiting",
   "settings.meetings.advanced.vad.maxSpeech.hint": "Dwingt een grens af in een monoloog (ms).",
   "settings.meetings.advanced.refine.label": "Overlapverfijning",
-  "settings.meetings.advanced.refine.hint": "Langere beurten worden voor het labelen per spreker gesplitst (ms). 0 schakelt dit uit.",
+  "settings.meetings.advanced.refine.hint":
+    "Langere beurten worden voor het labelen per spreker gesplitst (ms). 0 schakelt dit uit.",
   "settings.meetings.advanced.housekeeping.title": "Onderhoud",
   "settings.meetings.advanced.autoStop.label": "Auto-stop na stilte",
   "settings.meetings.advanced.autoStop.hint": "Stopt een lege vergadering. 0 stopt nooit. Minuten.",
@@ -412,14 +453,22 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "meetings.setup.failedTitle": "Vergaderingen konden niet worden ingesteld",
   "meetings.setup.failedBody": "Controleer je verbinding en open Vergaderingen opnieuw.",
   "meetings.error.title": "Vergadering kon niet starten",
-  "meetings.error.assets-missing": "De bestanden die Vergaderingen nodig heeft, zijn nog niet klaar.",
-  "meetings.error.engine-not-ready": "De gekozen spraakservice is niet klaar. Controleer Modellen en probeer opnieuw.",
-  "meetings.error.worker-start-failed": "De spraakservice voor vergaderingen kon niet starten. Herstart Struq Voice en probeer opnieuw.",
-  "meetings.error.worker-failed": "De spraakservice voor vergaderingen is onverwacht gestopt. Start een nieuwe vergadering om door te gaan.",
-  "meetings.error.window-load-failed": "Het audiovenster voor vergaderingen kon niet openen. Herstart Struq Voice en probeer opnieuw.",
-  "meetings.error.loopback-denied": "Windows gaf geen toestemming om systeemaudio op te nemen. Controleer de privacy-instellingen en probeer opnieuw.",
-  "meetings.error.loopback-unavailable": "Struq Voice kon geen systeemaudio horen. Speel audio af en probeer opnieuw.",
-  "meetings.error.database-unavailable": "De vergadering kon niet worden opgeslagen. Controleer of Struq Voice naar de gegevensmap kan schrijven.",
+  "meetings.error.assets-missing":
+    "De bestanden die Vergaderingen nodig heeft, zijn nog niet klaar.",
+  "meetings.error.engine-not-ready":
+    "De gekozen spraakservice is niet klaar. Controleer Modellen en probeer opnieuw.",
+  "meetings.error.worker-start-failed":
+    "De spraakservice voor vergaderingen kon niet starten. Herstart Struq Voice en probeer opnieuw.",
+  "meetings.error.worker-failed":
+    "De spraakservice voor vergaderingen is onverwacht gestopt. Start een nieuwe vergadering om door te gaan.",
+  "meetings.error.window-load-failed":
+    "Het audiovenster voor vergaderingen kon niet openen. Herstart Struq Voice en probeer opnieuw.",
+  "meetings.error.loopback-denied":
+    "Windows gaf geen toestemming om systeemaudio op te nemen. Controleer de privacy-instellingen en probeer opnieuw.",
+  "meetings.error.loopback-unavailable":
+    "Struq Voice kon geen systeemaudio horen. Speel audio af en probeer opnieuw.",
+  "meetings.error.database-unavailable":
+    "De vergadering kon niet worden opgeslagen. Controleer of Struq Voice naar de gegevensmap kan schrijven.",
   "meetings.error.already-running": "Er loopt al een vergadering.",
   "meetings.error.retry": "Opnieuw proberen",
   "meetings.searchPlaceholder": "Vergaderingen doorzoeken",
@@ -438,7 +487,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "meetings.live.stop": "Stoppen",
   "meetings.live.waiting": "Wachten op de eerste woorden...",
   "meetings.live.jumpToLive": "Naar live",
-  "meetings.live.trimmed": "De laatste {count} regels worden getoond. Het volledige transcript is opgeslagen.",
+  "meetings.live.trimmed":
+    "De laatste {count} regels worden getoond. Het volledige transcript is opgeslagen.",
   "meetings.row.gap": "Niet getranscribeerd ({duration})",
   "meetings.row.speakers": "{count} sprekers",
   "meetings.row.words": "{count} woorden",

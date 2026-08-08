@@ -43,6 +43,8 @@ export const es: Partial<Record<MessageKey, unknown>> = {
   "overlay.meetingRecording": "Grabando reunión",
   "overlay.meetingPaused": "Reunión en pausa",
   "overlay.meetingSaving": "Guardando reunión...",
+  "search.open": "Buscar",
+  "search.clear": "Borrar búsqueda",
 
   "dictate.blocker.localMissing.message": "{model} aún no está en este equipo.",
   "dictate.blocker.localMissing.action": "Descargar",

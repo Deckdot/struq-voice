@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { transcripts } from "./schema";
+import { HISTORY_ACTIVITY_DAYS } from "../../shared/ipc";
 import type { HistoryStatsDay, HistoryStatsResult, TranscriptRecord } from "../../shared/ipc";
 
 export interface HistoryStore {
@@ -40,12 +41,6 @@ const toRecord = (row: TranscriptRow): TranscriptRecord => ({
 });
 
 const DAY_MS = 86_400_000;
-/**
- * Days in the activity window. Thirty reads as a habit rather than a
- * fortnight's noise, and it is still narrow enough that a single busy day is
- * visible rather than averaged away.
- */
-const SPARKLINE_DAYS = 30;
 
 interface DayTotals {
   readonly words: number;
@@ -203,7 +198,7 @@ export const createHistoryStore = (db: Database.Database): HistoryStore => {
     // the shape of a fortnight.
     const daily: HistoryStatsDay[] = [];
     const now = new Date();
-    for (let back = SPARKLINE_DAYS - 1; back >= 0; back -= 1) {
+    for (let back = HISTORY_ACTIVITY_DAYS - 1; back >= 0; back -= 1) {
       const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
       const entry = byDay.get(localDayKey(date));
       daily.push({

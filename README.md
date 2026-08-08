@@ -131,7 +131,7 @@ continuing and still leaves a working app.
 - The tray icon has three states, a tooltip carrying the engine and the current
   state, your recent transcripts, a capture toggle, an engine radio group, pause
   and quit.
-- A command palette on `Ctrl+K` for anyone who would rather not reach for the
+- A search palette on `Ctrl+F` for anyone who would rather not reach for the
   mouse.
 
 ### Updates you can actually trust
@@ -182,8 +182,8 @@ never crosses IPC back into a renderer.
 </table>
 
 <div align="center">
-  <img src="./docs/images/command-palette.png" alt="The command palette, opened with Ctrl+K" width="82%" />
-  <p><em>Ctrl+K reaches every view and the actions worth a shortcut.</em></p>
+  <img src="./docs/images/command-palette.png" alt="The search palette, opened with Ctrl+F" width="82%" />
+  <p><em>Ctrl+F reaches every view and the actions worth a shortcut.</em></p>
 </div>
 
 ---
@@ -240,7 +240,7 @@ Audio is 16kHz mono Int16 throughout. It is transferred to main as an
 | `Ctrl+Space` | Hold to record. Release to transcribe and paste. |
 | `Ctrl+Shift+Space` | Toggle a capture on, then off. |
 | `Escape` | Cancel the capture in progress. Registered only while one is live. |
-| `Ctrl+K` | Command palette, in the main window. |
+| `Ctrl+F` | Search palette, in the main window. |
 
 All of them are rebindable in Settings.
 

@@ -113,7 +113,8 @@ as `pnpm test:e2e`).
 - Application shell: branded custom title bar, left navigation rail with
   Dictate, Meetings, History, Dictionary, and Models at the top, Settings pinned at the bottom,
   and a flexible content region. Ctrl+1..6 jumps between
-  pages, Ctrl+K opens the command palette, Esc closes any overlay.
+  pages, Ctrl+F or the title-bar search button opens global search, Esc closes
+  any overlay.
   First paint reveals via a two-sheet curtain with trailing soft accent band.
 - Shared component layer in `src/renderer/main/components/ui/`: the
   full component inventory (Button, IconButton, Badge, Kbd, Field,

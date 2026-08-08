@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { motion, useReducedMotion } from "motion/react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { TranscriptRecord } from "../../../shared/ipc";
-import { EmptyState, SearchInput, TranscriptRow } from "../components/ui";
+import { Badge, EmptyState, SearchInput, TranscriptRow } from "../components/ui";
 import { formatDayHeading } from "../lib/format";
 
 import { useTranslation } from "../lib/useTranslation";
@@ -81,6 +82,9 @@ export function HistoryView(): JSX.Element {
   const [copyArmed, setCopyArmed] = useState<number | null>(null);
   const [deleteArmed, setDeleteArmed] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
+  const [resultRevision, setResultRevision] = useState(0);
+  const [searching, setSearching] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   // Stable within a calendar day, so the grouping memo survives every scroll.
   const todayStart = startOfDay(Date.now());
@@ -92,6 +96,7 @@ export function HistoryView(): JSX.Element {
   useEffect(() => {
     let cancelled = false;
     const trimmed = query.trim();
+    setSearching(trimmed.length > 0);
     const timer = window.setTimeout(
       () => {
         const request =
@@ -102,6 +107,8 @@ export function HistoryView(): JSX.Element {
           if (cancelled) return;
           setRecords(items);
           setLoading(false);
+          setSearching(false);
+          setResultRevision((current) => current + 1);
         });
       },
       trimmed.length === 0 ? 0 : 250
@@ -132,18 +139,12 @@ export function HistoryView(): JSX.Element {
     };
   }, [copyArmed]);
 
-  // Ctrl+F is what every desktop app binds to "find in this list". Escape
-  // clears the query rather than only blurring, because a stale filter is the
-  // reason a list looks empty.
+  // Escape clears the query rather than only blurring, because a stale filter
+  // is the reason a list looks empty. Ctrl+F belongs to the global search.
   useEffect(() => {
     // The React KeyboardEvent is imported above for the list handler, so the
     // DOM one has to be named explicitly here.
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        document.getElementById(SEARCH_INPUT_ID)?.focus();
-        return;
-      }
       if (event.key === "Escape" && query.length > 0) {
         event.preventDefault();
         setQuery("");
@@ -252,7 +253,7 @@ export function HistoryView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg">
-      <div className="flex shrink-0 items-center justify-between gap-4 px-6 pb-3 pt-5">
+      <div className="flex shrink-0 items-center gap-3 px-6 pb-3 pt-5">
         <SearchInput
           id={SEARCH_INPUT_ID}
           value={query}
@@ -261,12 +262,13 @@ export function HistoryView(): JSX.Element {
             setQuery("");
           }}
           placeholder={t("history.searchPlaceholder")}
+          clearLabel={t("search.clear")}
           className="w-[280px]"
         />
         {!loading && records.length > 0 && (
-          <span className="text-2xs text-text-muted" data-numeric>
+          <Badge tone="neutral" className="h-7 whitespace-nowrap font-normal tabular-nums">
             {t("history.count", { count: records.length })}
-          </span>
+          </Badge>
         )}
       </div>
 
@@ -277,27 +279,41 @@ export function HistoryView(): JSX.Element {
         tabIndex={0}
         role="list"
         aria-label="Transcripts"
+        aria-busy={searching}
       >
         {loading && <p className="px-4 py-6 text-sm text-text-muted">{t("history.loading")}</p>}
 
         {!loading && records.length === 0 && (
-          <EmptyState
-            icon="ph:clock-counter-clockwise"
-            title={
-              query.trim().length > 0
-                ? t("history.emptySearch.title")
-                : t("history.empty.title")
-            }
-            body={
-              query.trim().length > 0
-                ? t("history.emptySearch.body")
-                : t("history.empty.body")
-            }
-          />
+          <motion.div
+            key={`empty-${String(resultRevision)}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.18 }}
+          >
+            <EmptyState
+              icon="ph:clock-counter-clockwise"
+              title={
+                query.trim().length > 0
+                  ? t("history.emptySearch.title")
+                  : t("history.empty.title")
+              }
+              body={
+                query.trim().length > 0
+                  ? t("history.emptySearch.body")
+                  : t("history.empty.body")
+              }
+            />
+          </motion.div>
         )}
 
         {!loading && records.length > 0 && (
-          <div style={{ height: `${String(rowVirtualizer.getTotalSize())}px`, position: "relative" }}>
+          <motion.div
+            key={resultRevision}
+            initial={reducedMotion ? { opacity: 0 } : { opacity: 0.6, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            style={{ height: `${String(rowVirtualizer.getTotalSize())}px`, position: "relative" }}
+          >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const entry = entries[virtualRow.index];
               if (entry === undefined) return null;
@@ -351,7 +367,7 @@ export function HistoryView(): JSX.Element {
                 </div>
               );
             })}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

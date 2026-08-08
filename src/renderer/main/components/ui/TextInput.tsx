@@ -15,7 +15,9 @@ export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   readonly leadingIcon?: string | IconifyIcon;
   readonly trailingIcon?: string | IconifyIcon;
   readonly onTrailingClick?: () => void;
+  readonly trailingLabel?: string;
   readonly trailingSlot?: ReactNode;
+  readonly containerClassName?: string;
 }
 
 const HEIGHTS: Record<"sm" | "md", string> = {
@@ -30,7 +32,9 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
     leadingIcon,
     trailingIcon,
     onTrailingClick,
+    trailingLabel = "Clear",
     trailingSlot,
+    containerClassName,
     className,
     ...rest
   },
@@ -45,7 +49,8 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
         "relative inline-flex w-full items-center rounded-md border bg-bg-sunken transition-colors duration-hover",
         "focus-within:border-accent",
         invalid ? "border-danger" : "border-border",
-        HEIGHTS[size]
+        HEIGHTS[size],
+        containerClassName
       )}
     >
       {hasLeading && (
@@ -80,7 +85,8 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
                 "inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-sm",
                 onTrailingClick !== undefined && "hover:bg-surface-hover hover:text-text"
               )}
-              aria-label="Clear"
+              aria-label={trailingLabel}
+              title={trailingLabel}
             >
               <Icon
                 icon={trailingIcon}

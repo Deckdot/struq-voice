@@ -52,6 +52,8 @@ export const en = {
   "overlay.meetingRecording": "Meeting recording",
   "overlay.meetingPaused": "Meeting paused",
   "overlay.meetingSaving": "Saving meeting...",
+  "search.open": "Search",
+  "search.clear": "Clear search",
 
   // Dictate View
   "dictate.blocker.localMissing.message": "{model} is not on this computer yet.",

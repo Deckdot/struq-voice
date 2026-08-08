@@ -109,9 +109,9 @@ describe("history stats", () => {
     expect(statsStore.stats().totalWords).toBe(before);
   });
 
-  it("returns a full month of days, gaps included, oldest first", () => {
+  it("returns a full week of days, gaps included, oldest first", () => {
     const { daily } = statsStore.stats();
-    expect(daily).toHaveLength(30);
+    expect(daily).toHaveLength(7);
     for (let i = 1; i < daily.length; i += 1) {
       const previous = daily[i - 1];
       const current = daily[i];
@@ -139,6 +139,6 @@ describe("history stats", () => {
     expect(stats.totalWords).toBe(0);
     expect(stats.wpm).toBe(0);
     expect(stats.streakDays).toBe(0);
-    expect(stats.daily).toHaveLength(30);
+    expect(stats.daily).toHaveLength(7);
   });
 });

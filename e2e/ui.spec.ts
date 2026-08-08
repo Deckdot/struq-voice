@@ -198,7 +198,7 @@ test("the command palette opens and navigates", async () => {
   const { window, consoleErrors, close } = await launchApp();
 
   try {
-    await window.keyboard.press("Control+k");
+    await window.keyboard.press("Control+f");
 
     // cmdk renders a plain container, so the input identifies the palette.
     const input = window.getByPlaceholder("Type a command or search...");
@@ -212,7 +212,7 @@ test("the command palette opens and navigates", async () => {
 
     // Escape closes it again without navigating. The handler lives on the
     // palette, so the key has to be pressed while it holds focus.
-    await window.keyboard.press("Control+k");
+    await window.keyboard.press("Control+f");
     await expect(input).toBeVisible();
     await input.press("Escape");
     await expect(input).toBeHidden();

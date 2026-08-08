@@ -11,6 +11,7 @@ export interface SearchInputProps {
   readonly onChange: (next: string) => void;
   readonly onClear?: () => void;
   readonly placeholder?: string;
+  readonly clearLabel?: string;
   readonly id?: string;
   readonly className?: string;
 }
@@ -20,29 +21,31 @@ export function SearchInput({
   onChange,
   onClear,
   placeholder = "Search",
+  clearLabel = "Clear search",
   id,
   className
 }: SearchInputProps): JSX.Element {
   return (
     <TextInput
       id={id}
-      type="search"
+      type="text"
       value={value}
       placeholder={placeholder}
       onChange={(event) => {
         onChange(event.target.value);
       }}
       leadingIcon="ph:magnifying-glass"
-      {...(onClear !== undefined && value.length > 0
+      {...(value.length > 0
         ? {
             trailingIcon: "ph:x",
+            trailingLabel: clearLabel,
             onTrailingClick: () => {
               onChange("");
-              onClear();
+              onClear?.();
             }
           }
         : {})}
-      className={cn("max-w-md", className)}
+      containerClassName={cn("max-w-md", className)}
     />
   );
 }

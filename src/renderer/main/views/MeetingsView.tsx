@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { Icon } from "@iconify/react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { MainWindowApi } from "../../../shared/api";
 import type {
@@ -22,6 +22,7 @@ import { formatAccelerator, DEFAULT_MEETING_ACCELERATOR } from "../../../shared/
 import type { MessageKey } from "../../../shared/i18n";
 import { useMainStore } from "../store/use-main-store";
 import {
+  Badge,
   Button,
   Card,
   EmptyState,
@@ -29,6 +30,7 @@ import {
   Kbd,
   ProgressBar,
   SearchInput,
+  Skeleton,
   StatusDot
 } from "../components/ui";
 import { useTranslation } from "../lib/useTranslation";
@@ -510,6 +512,7 @@ function MeetingLibrary({
   const [searching, setSearching] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState<number | null>(null);
   const setMeetingDetailId = useMainStore((state) => state.setMeetingDetailId);
+  const reducedMotion = useReducedMotion();
 
   const load = useCallback(
     (offset = 0): void => {
@@ -533,13 +536,16 @@ function MeetingLibrary({
       return;
     }
     setSearching(true);
+    let cancelled = false;
     const timer = window.setTimeout(() => {
       void api.meetings.search({ query: trimmed, limit: 50 }).then((result) => {
+        if (cancelled) return;
         setSearchHits(result.items);
         setSearching(false);
       });
     }, 250);
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
     };
   }, [query, api]);
@@ -583,41 +589,88 @@ function MeetingLibrary({
       <div className="flex items-center gap-3 border-b border-border px-5 py-3">
         <SearchInput
           value={query}
-          onChange={setQuery}
+          onChange={(next) => {
+            setQuery(next);
+            setSearching(next.trim().length > 0);
+          }}
           placeholder={t("meetings.searchPlaceholder")}
+          clearLabel={t("search.clear")}
           className="w-72"
         />
-        <span className="text-xs text-text-muted">
+        <Badge tone="neutral" className="h-7 whitespace-nowrap font-normal tabular-nums">
           {searching ? t("meetings.searching") : t("meetings.count", { count: String(total) })}
-        </span>
+        </Badge>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
         {query.trim().length > 0 ? (
-          searchHits.length === 0 ? (
-            <EmptyState
-              icon="ph:magnifying-glass"
-              title={t("meetings.emptySearch.title")}
-              body={t("meetings.emptySearch.body")}
-            />
-          ) : (
-            <div className="flex flex-col gap-4">
-              {searchHits.map((hit) => (
-                <div
-                  key={`${String(hit.meetingStartedAtMs)}-${String(hit.segment.id)}`}
-                  className="rounded-lg border border-border p-3"
-                >
-                  <div className="mb-1 flex items-center gap-2 text-xs text-text-muted">
-                    <span className="font-medium text-text-secondary">{hit.meetingTitle}</span>
-                    <span>{formatDate(hit.meetingStartedAtMs)}</span>
+          <AnimatePresence mode="wait" initial={false}>
+            {searching ? (
+              <motion.div
+                key="searching"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.14 }}
+                className="flex flex-col gap-2"
+                aria-label={t("meetings.searching")}
+              >
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="rounded-lg border border-border bg-surface p-3">
+                    <Skeleton className="mb-2 h-3 w-40" />
+                    <Skeleton className="h-4 w-full max-w-xl" />
                   </div>
-                  <div className="flex items-baseline gap-2 text-sm text-text">
-                    <span className="w-12 shrink-0 text-xs tabular-nums text-text-muted">{formatStamp(hit.segment.startMs)}</span>
-                    <span className="min-w-0 flex-1 truncate">{hit.segment.text}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
+                ))}
+              </motion.div>
+            ) : searchHits.length === 0 ? (
+              <motion.div
+                key="empty-search"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16 }}
+              >
+                <EmptyState
+                  icon="ph:magnifying-glass"
+                  title={t("meetings.emptySearch.title")}
+                  body={t("meetings.emptySearch.body")}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={`search-results-${query.trim()}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="flex flex-col gap-4"
+              >
+                {searchHits.map((hit, index) => (
+                  <motion.div
+                    key={`${String(hit.meetingStartedAtMs)}-${String(hit.segment.id)}`}
+                    initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.2,
+                      delay: reducedMotion ? 0 : Math.min(index, 8) * 0.025,
+                      ease: [0.16, 1, 0.3, 1]
+                    }}
+                    className="rounded-lg border border-border bg-surface p-3 transition-colors duration-hover hover:border-border-strong"
+                  >
+                    <div className="mb-1 flex items-center gap-2 text-xs text-text-muted">
+                      <span className="font-medium text-text-secondary">{hit.meetingTitle}</span>
+                      <span>{formatDate(hit.meetingStartedAtMs)}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 text-sm text-text">
+                      <span className="w-12 shrink-0 text-xs tabular-nums text-text-muted">
+                        {formatStamp(hit.segment.startMs)}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{hit.segment.text}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         ) : meetings.length === 0 ? (
           <EmptyState
             icon="ph:users-three"

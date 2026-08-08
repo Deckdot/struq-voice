@@ -89,9 +89,9 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
-        setPaletteOpen((open) => !open);
+        setPaletteOpen(true);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -124,7 +124,11 @@ export function App(): JSX.Element {
   return (
     <div className="flex h-full flex-col bg-bg text-text">
       <Splash onReveal={handleReveal} />
-      <TitleBar />
+      <TitleBar
+        onSearch={() => {
+          setPaletteOpen(true);
+        }}
+      />
       {/* The opacity tween promotes this whole subtree to its own layer, which
           includes the virtualized History list. Clearing the inline opacity
           once it lands drops the layer again, so scrolling is not paying for

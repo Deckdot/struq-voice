@@ -227,6 +227,30 @@ describe("meeting session", () => {
     expect(states.some((state) => state.phase === "recording")).toBe(true);
   });
 
+  it("reports unavailable loopback instead of starting a microphone-only meeting", async () => {
+    const { session } = makeSession();
+    await session.start();
+    const failed = new Promise<MeetingState>((resolve) => {
+      const unsubscribe = session.subscribe((state) => {
+        if (state.phase === "error") {
+          unsubscribe();
+          resolve(state);
+        }
+      });
+    });
+
+    session.handleAudioState({
+      system: { live: false, code: "loopback-unavailable" },
+      microphone: { live: true },
+      finished: false
+    });
+
+    await expect(failed).resolves.toEqual({
+      phase: "error",
+      code: "loopback-unavailable"
+    });
+  });
+
   it("triggers the capture gesture without depending on the begin message arriving first", async () => {
     // The begin message and the gesture call are separate trips to the
     // renderer. The renderer defines its bridge at init precisely so the

@@ -438,7 +438,7 @@ export const en = {
   "meetings.error.worker-failed": "The meeting voice service stopped unexpectedly. Start a new meeting to continue.",
   "meetings.error.window-load-failed": "The meeting audio window could not open. Restart Struq Voice, then try again.",
   "meetings.error.loopback-denied": "Windows did not allow system audio capture. Check its privacy settings, then try again.",
-  "meetings.error.loopback-unavailable": "Struq Voice could not hear system audio. Play some audio, then try again.",
+  "meetings.error.loopback-unavailable": "System audio capture is unavailable on this machine. Dictation still works. Include your Windows version and build in a bug report.",
   "meetings.error.database-unavailable": "The meeting could not be saved. Check that Struq Voice can write to its data folder.",
   "meetings.error.already-running": "A meeting is already running.",
   "meetings.error.retry": "Try again",

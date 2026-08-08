@@ -554,6 +554,25 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
 
   const handleAudioState = (event: MeetingAudioStateEvent): void => {
     if (state.phase !== "starting" && state.phase !== "recording") return;
+    if (
+      state.phase === "starting" &&
+      (event.system.code === "loopback-denied" ||
+        event.system.code === "loopback-unavailable")
+    ) {
+      const code = event.system.code;
+      logError(
+        "[meeting] Start failed at audio-capture.",
+        new Error(
+          code === "loopback-denied"
+            ? "System audio capture was denied."
+            : "System audio capture is unavailable."
+        )
+      );
+      void stop().then(() => {
+        setState({ phase: "error", code });
+      });
+      return;
+    }
     if (event.system.live || event.microphone.live) {
       if (laneLiveTimer !== null) {
         clearTimeout(laneLiveTimer);
@@ -581,14 +600,6 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       };
       setState(recording);
       setAutoStopTimer();
-    } else if (event.system.code === "loopback-denied") {
-      logError(
-        "[meeting] Start failed at audio-capture.",
-        new Error("System audio capture was denied.")
-      );
-      void stop().then(() => {
-        setState({ phase: "error", code: "loopback-denied" });
-      });
     }
   };
 

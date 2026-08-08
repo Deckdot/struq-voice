@@ -35,6 +35,23 @@ const api: RecorderWindowApi = {
       ipcRenderer.removeListener(channels.recorder.end, wrapped);
     };
   },
+  onDiscardCapture: (callback: () => void) => {
+    const wrapped = (): void => { callback(); };
+    ipcRenderer.on(channels.recorder.discard, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.recorder.discard, wrapped);
+    };
+  },
+  onLevelsEnabled: (callback: (enabled: boolean) => void) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      payload: { enabled: boolean }
+    ): void => { callback(payload.enabled); };
+    ipcRenderer.on(channels.recorder.levelsEnabled, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.recorder.levelsEnabled, wrapped);
+    };
+  },
   sendCaptureData: (data: {
     pcm: ArrayBuffer;
     durationMs: number;

@@ -7,7 +7,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
 import type { RecorderBridge } from "../audio/recorder-bridge";
-import { recorderBeginCaptureChannel, recorderEndCaptureChannel } from "../../shared/ipc";
+import {
+  recorderBeginCaptureChannel,
+  recorderDiscardCaptureChannel,
+  recorderEndCaptureChannel
+} from "../../shared/ipc";
 
 export interface CaptureAudio {
   /** Int16 PCM, 16kHz mono. */
@@ -19,6 +23,8 @@ export interface CaptureAudio {
 export interface CaptureAudioSource {
   beginCapture: () => void;
   endCapture: () => Promise<CaptureAudio>;
+  /** Abort the active capture without waiting for PCM. */
+  discardCapture: () => void;
   isLive: () => boolean;
 }
 
@@ -28,17 +34,38 @@ export const createRecorderAudioSource = (
   recorderWindow: BrowserWindow,
   bridge: RecorderBridge
 ): CaptureAudioSource => {
+  // The overlay waveform reads levels, so the analyser loop must run for the
+  // life of a capture. Held here rather than in the session because these
+  // three calls are exactly the capture's boundaries.
+  let releaseLevels: (() => void) | null = null;
+
+  const dropLevelsHold = (): void => {
+    const release = releaseLevels;
+    releaseLevels = null;
+    release?.();
+  };
+
   return {
     beginCapture: () => {
       if (recorderWindow.isDestroyed()) return;
+      // A capture that never ended (a lost end-capture) would otherwise pin
+      // the loop on, so replace rather than stack.
+      dropLevelsHold();
+      releaseLevels = bridge.holdLevels();
       recorderWindow.webContents.send(recorderBeginCaptureChannel);
     },
     endCapture: () => {
+      dropLevelsHold();
       if (recorderWindow.isDestroyed()) {
         return Promise.reject(new Error("Recorder window is gone"));
       }
       recorderWindow.webContents.send(recorderEndCaptureChannel);
       return bridge.waitForCaptureData(CAPTURE_TIMEOUT_MS);
+    },
+    discardCapture: () => {
+      dropLevelsHold();
+      if (recorderWindow.isDestroyed()) return;
+      recorderWindow.webContents.send(recorderDiscardCaptureChannel);
     },
     isLive: () => bridge.isLive()
   };
@@ -78,6 +105,9 @@ export const createSimulatedAudioSource = (appPath: string): CaptureAudioSource 
         pcm[i] = Math.round(Math.sin(2 * Math.PI * 440 * t) * 4000);
       }
       return Promise.resolve({ pcm, durationMs: 1000, sampleRate });
+    },
+    discardCapture: () => {
+      // Nothing to discard; the simulated source holds no state.
     },
     isLive: () => false
   };

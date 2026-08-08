@@ -59,6 +59,12 @@ export interface MainWindowApi {
   readonly onCaptureLevelsChanged: (
     listener: (data: { bands: readonly number[]; level: number }) => void
   ) => () => void;
+  /**
+   * Ask main to keep live microphone levels flowing while a meter is on
+   * screen. Reference counted in main, so several meters can ask at once.
+   * Returns the release; call it when the meter unmounts.
+   */
+  readonly requestCaptureLevels: () => () => void;
   readonly history: {
     list: (request: { limit?: number; offset?: number }) => Promise<{
       items: readonly TranscriptRecord[];
@@ -179,6 +185,12 @@ export interface RecorderWindowApi {
   readonly isE2E: boolean;
   readonly onBeginCapture: (callback: () => void) => () => void;
   readonly onEndCapture: (callback: () => void) => () => void;
+  readonly onDiscardCapture: (callback: () => void) => () => void;
+  /**
+   * Run the analyser loop, or stop it. Main gates this on demand: a capture,
+   * or a window showing a live microphone meter.
+   */
+  readonly onLevelsEnabled: (callback: (enabled: boolean) => void) => () => void;
   readonly sendCaptureData: (data: {
     pcm: ArrayBuffer;
     durationMs: number;

@@ -134,6 +134,17 @@ const api: MainWindowApi = {
       ipcRenderer.removeListener(channels.captureLevelsChanged, handler);
     };
   },
+  requestCaptureLevels: () => {
+    ipcRenderer.send(channels.captureLevelsRequest, { wanted: true });
+    let released = false;
+    return () => {
+      // Guard the release: a double call would unbalance main's count and
+      // stop the loop while another meter is still on screen.
+      if (released) return;
+      released = true;
+      ipcRenderer.send(channels.captureLevelsRequest, { wanted: false });
+    };
+  },
   history: {
     list: (request: HistoryListRequest) =>
       ipcRenderer.invoke(channels.history.list, request) as Promise<HistoryListResult>,

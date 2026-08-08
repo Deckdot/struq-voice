@@ -61,6 +61,9 @@ export const recorderBeginCaptureChannel = "recorder:begin-capture" as const;
 /** Main to recorder: stop the capture and return the recorded PCM. */
 export const recorderEndCaptureChannel = "recorder:end-capture" as const;
 
+/** Main to recorder: abort a capture and throw away the buffer. */
+export const recorderDiscardCaptureChannel = "recorder:discard-capture" as const;
+
 /** Recorder to main: the captured PCM, as a transferable Int16 ArrayBuffer. */
 export const recorderCaptureDataChannel = "recorder:capture-data" as const;
 
@@ -76,6 +79,28 @@ export const recorderLevelsChannel = "recorder:levels" as const;
 export interface RecorderLevels {
   readonly bands: readonly number[];
   readonly level: number;
+}
+
+/**
+ * Main to recorder: run the analyser loop, or stop it. Levels are wanted
+ * during a capture (the overlay waveform) and while a window shows a live
+ * microphone meter (Dictate, the Capture settings tab, onboarding). Outside
+ * both, the loop is pure cost, so main gates it on demand.
+ */
+export const recorderLevelsEnabledChannel = "recorder:levels-enabled" as const;
+
+export interface RecorderLevelsEnabled {
+  readonly enabled: boolean;
+}
+
+/**
+ * Renderer to main: this window wants live microphone levels. Reference
+ * counted in main, so the loop runs while at least one window is asking.
+ */
+export const captureLevelsRequestChannel = "capture:levels-request" as const;
+
+export interface CaptureLevelsRequest {
+  readonly wanted: boolean;
 }
 
 /** Recorder to main: microphone stream state changes. */
@@ -667,12 +692,15 @@ export const PRELOAD_CHANNELS = {
   },
   captureStateChanged: captureStateChangedChannel,
   captureLevelsChanged: captureLevelsChangedChannel,
+  captureLevelsRequest: captureLevelsRequestChannel,
   capturePartialTranscript: capturePartialTranscriptChannel,
   recorder: {
     begin: recorderBeginCaptureChannel,
     end: recorderEndCaptureChannel,
+    discard: recorderDiscardCaptureChannel,
     data: recorderCaptureDataChannel,
     levels: recorderLevelsChannel,
+    levelsEnabled: recorderLevelsEnabledChannel,
     streamState: recorderStreamStateChannel,
     setDevice: recorderSetDeviceChannel,
     getDevices: recorderGetDevicesChannel,

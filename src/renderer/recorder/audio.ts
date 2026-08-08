@@ -26,12 +26,22 @@ interface AudioPipeline {
   readonly worklet: AudioWorkletNode;
   readonly unsubscribeBegin: () => void;
   readonly unsubscribeEnd: () => void;
+  readonly unsubscribeDiscard: () => void;
+  readonly unsubscribeLevelsEnabled: () => void;
   readonly unsubscribeSnapshot: () => void;
 }
 
 let current: AudioPipeline | null = null;
 let levelsTimer: ReturnType<typeof setInterval> | null = null;
 let monitorTimer: ReturnType<typeof setInterval> | null = null;
+// Whether main currently wants levels. Survives a pipeline rebuild: a device
+// switch mid-capture must not leave the overlay waveform frozen.
+let levelsWanted = false;
+// Invalidates in-flight pipeline builds: a device switch, teardown or a newer
+// build makes an older build clean up its own half-built pipeline instead of
+// overwriting `current` and orphaning a warm stream + AudioContext.
+let pipelineToken = 0;
+const retryTimers = new Set<ReturnType<typeof setTimeout>>();
 let deviceChangeListenerAttached = false;
 let deviceListListenerAttached = false;
 
@@ -104,10 +114,12 @@ const switchDevice = (api: RecorderWindowApi, deviceId: string): void => {
 };
 
 const teardown = (): void => {
-  if (levelsTimer !== null) {
-    clearInterval(levelsTimer);
-    levelsTimer = null;
+  pipelineToken++;
+  for (const timer of retryTimers) {
+    clearTimeout(timer);
   }
+  retryTimers.clear();
+  stopLevelsLoop();
   if (monitorTimer !== null) {
     clearInterval(monitorTimer);
     monitorTimer = null;
@@ -115,6 +127,8 @@ const teardown = (): void => {
   if (current !== null) {
     current.unsubscribeBegin();
     current.unsubscribeEnd();
+    current.unsubscribeDiscard();
+    current.unsubscribeLevelsEnabled();
     current.unsubscribeSnapshot();
     current.stream.getTracks().forEach((track) => {
       track.stop();
@@ -122,6 +136,19 @@ const teardown = (): void => {
     void current.context.close();
     current = null;
   }
+};
+
+/**
+ * Schedule a delayed pipeline re-acquire. Tracked so teardown can cancel
+ * pending retries: an untracked retry can fire after a device switch and
+ * build a second warm pipeline that orphans the first.
+ */
+const scheduleRetry = (callback: () => void): void => {
+  const timer = setTimeout(() => {
+    retryTimers.delete(timer);
+    callback();
+  }, REACQUIRE_GRACE_MS);
+  retryTimers.add(timer);
 };
 
 /**
@@ -156,6 +183,7 @@ const acquireStream = async (): Promise<MediaStream> => {
 };
 
 const buildPipeline = async (api: RecorderWindowApi): Promise<void> => {
+  const token = ++pipelineToken;
   let stream: MediaStream;
   try {
     stream = await acquireStream();
@@ -165,124 +193,178 @@ const buildPipeline = async (api: RecorderWindowApi): Promise<void> => {
       reason: "No microphone found. Plug one in and restart Struq Voice."
     });
     // Keep trying in the background; a hotplug should recover the app.
-    setTimeout(() => {
+    scheduleRetry(() => {
       void buildPipeline(api);
-    }, REACQUIRE_GRACE_MS);
+    });
+    return;
+  }
+  if (token !== pipelineToken) {
+    // A newer build or a teardown took over while we waited for the mic.
+    stream.getTracks().forEach((track) => {
+      track.stop();
+    });
     return;
   }
 
   // The browser resamples to 16kHz, which both engines want. Doing it by
   // hand would be slower and worse.
   const context = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
-  await context.audioWorklet.addModule(workletUrl);
-
-  const source = context.createMediaStreamSource(stream);
-  const analyser = context.createAnalyser();
-  analyser.fftSize = 128; // 64 frequency bins, paired into 32 bands
-  const worklet = new AudioWorkletNode(context, "pcm-collector");
-
-  source.connect(analyser);
-  analyser.connect(worklet);
-
-  const unsubscribeBegin = api.onBeginCapture(() => {
-    worklet.port.postMessage({
-      type: "arm",
-      prerollSamples: Math.floor((TARGET_SAMPLE_RATE * DEFAULT_PREROLL_MS) / 1000)
-    });
-  });
-
-  const unsubscribeEnd = api.onEndCapture(() => {
-    worklet.port.postMessage({ type: "disarm" });
-  });
-
-  const unsubscribeSnapshot = api.onSnapshotRequest((sequence) => {
-    worklet.port.postMessage({ type: "snapshot", sequence });
-  });
-
-  worklet.port.onmessage = (event: MessageEvent) => {
-    const message = event.data as {
-      type?: string;
-      samples?: Float32Array;
-      sequence?: number;
-    };
-    if (message.samples === undefined) return;
-    if (message.type !== "capture" && message.type !== "snapshot") return;
-
-    const samples = message.samples;
-    const { pcm } = toInt16(samples);
-    const durationMs = Math.round((samples.length / TARGET_SAMPLE_RATE) * 1000);
-
-    if (message.type === "snapshot") {
-      api.sendSnapshotData({
-        pcm,
-        durationMs,
-        sampleRate: TARGET_SAMPLE_RATE,
-        sequence: message.sequence ?? 0
+  try {
+    await context.audioWorklet.addModule(workletUrl);
+    if (token !== pipelineToken) {
+      stream.getTracks().forEach((track) => {
+        track.stop();
       });
+      void context.close();
       return;
     }
 
-    api.sendCaptureData({
-      pcm,
-      durationMs,
-      sampleRate: TARGET_SAMPLE_RATE
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 128; // 64 frequency bins, paired into 32 bands
+    const worklet = new AudioWorkletNode(context, "pcm-collector");
+
+    source.connect(analyser);
+    analyser.connect(worklet);
+
+    const unsubscribeBegin = api.onBeginCapture(() => {
+      worklet.port.postMessage({
+        type: "arm",
+        prerollSamples: Math.floor((TARGET_SAMPLE_RATE * DEFAULT_PREROLL_MS) / 1000)
+      });
     });
-  };
 
-  current = {
-    api,
-    stream,
-    context,
-    analyser,
-    worklet,
-    unsubscribeBegin,
-    unsubscribeEnd,
-    unsubscribeSnapshot
-  };
+    const unsubscribeEnd = api.onEndCapture(() => {
+      worklet.port.postMessage({ type: "disarm" });
+    });
 
-  api.sendStreamState({ live: true });
+    const unsubscribeDiscard = api.onDiscardCapture(() => {
+      worklet.port.postMessage({ type: "discard" });
+    });
 
-  // The microphone's own lifecycle: track.onended fires on unplug or driver
-  // reset. A dead mic must never silently produce empty transcripts.
-  stream.getTracks()[0]?.addEventListener("ended", () => {
-    api.sendStreamState({ live: false, reason: "Microphone disconnected" });
-    teardown();
-    setTimeout(() => {
-      void buildPipeline(api);
-    }, REACQUIRE_GRACE_MS);
-  });
+    // Main decides when levels are worth computing: during a capture, and
+    // while a window shows a microphone meter. Outside both the loop is pure
+    // cost, so it stays stopped.
+    const unsubscribeLevelsEnabled = api.onLevelsEnabled((enabled) => {
+      levelsWanted = enabled;
+      if (enabled) {
+        startLevelsLoop();
+      } else {
+        stopLevelsLoop();
+      }
+    });
 
-  // Some drivers report mute before onended. Re-acquire if it does not
-  // recover on its own.
-  monitorTimer = setInterval(() => {
-    const track = current?.stream.getTracks()[0];
-    if (track !== undefined && track.muted) {
-      setTimeout(() => {
-        if (track.muted) {
-          api.sendStreamState({ live: false, reason: "Microphone muted" });
-          teardown();
-          void buildPipeline(api);
-        }
-      }, REACQUIRE_GRACE_MS);
+    const unsubscribeSnapshot = api.onSnapshotRequest((sequence) => {
+      worklet.port.postMessage({ type: "snapshot", sequence });
+    });
+
+    worklet.port.onmessage = (event: MessageEvent) => {
+      const message = event.data as {
+        type?: string;
+        samples?: Float32Array;
+        sequence?: number;
+      };
+      if (message.samples === undefined) return;
+      if (message.type !== "capture" && message.type !== "snapshot") return;
+
+      const samples = message.samples;
+      const { pcm } = toInt16(samples);
+      const durationMs = Math.round((samples.length / TARGET_SAMPLE_RATE) * 1000);
+
+      if (message.type === "snapshot") {
+        api.sendSnapshotData({
+          pcm,
+          durationMs,
+          sampleRate: TARGET_SAMPLE_RATE,
+          sequence: message.sequence ?? 0
+        });
+        return;
+      }
+
+      api.sendCaptureData({
+        pcm,
+        durationMs,
+        sampleRate: TARGET_SAMPLE_RATE
+      });
+    };
+
+    current = {
+      api,
+      stream,
+      context,
+      analyser,
+      worklet,
+      unsubscribeBegin,
+      unsubscribeEnd,
+      unsubscribeDiscard,
+      unsubscribeLevelsEnabled,
+      unsubscribeSnapshot
+    };
+
+    // A rebuild (device switch, mute recovery) must not leave a meter or the
+    // overlay waveform frozen: pick the loop back up if demand still stands.
+    if (levelsWanted) startLevelsLoop();
+
+    api.sendStreamState({ live: true });
+
+    // The microphone's own lifecycle: track.onended fires on unplug or driver
+    // reset. A dead mic must never silently produce empty transcripts.
+    stream.getTracks()[0]?.addEventListener("ended", () => {
+      api.sendStreamState({ live: false, reason: "Microphone disconnected" });
+      teardown();
+      scheduleRetry(() => {
+        void buildPipeline(api);
+      });
+    });
+
+    // Some drivers report mute before onended. Re-acquire if it does not
+    // recover on its own.
+    monitorTimer = setInterval(() => {
+      const track = current?.stream.getTracks()[0];
+      if (track !== undefined && track.muted) {
+        scheduleRetry(() => {
+          if (track.muted) {
+            api.sendStreamState({ live: false, reason: "Microphone muted" });
+            teardown();
+            void buildPipeline(api);
+          }
+        });
+      }
+    }, 5000);
+
+    if (!deviceChangeListenerAttached) {
+      deviceChangeListenerAttached = true;
+      // Windows rotates device IDs across reboots and hotplugs change the
+      // default device. Re-enumerate and follow the default when it moves.
+      navigator.mediaDevices.addEventListener("devicechange", () => {
+        void handleDeviceChange(api);
+      });
     }
-  }, 5000);
-
-  startLevelsLoop();
-
-  if (!deviceChangeListenerAttached) {
-    deviceChangeListenerAttached = true;
-    // Windows rotates device IDs across reboots and hotplugs change the
-    // default device. Re-enumerate and follow the default when it moves.
-    navigator.mediaDevices.addEventListener("devicechange", () => {
-      void handleDeviceChange(api);
+  } catch (error) {
+    // The mic stream is open at this point; never let a failed setup leave
+    // it capturing into a half-built pipeline.
+    stopLevelsLoop();
+    if (monitorTimer !== null) {
+      clearInterval(monitorTimer);
+      monitorTimer = null;
+    }
+    stream.getTracks().forEach((track) => {
+      track.stop();
     });
+    void context.close();
+    throw error;
+  }
+};
+
+const stopLevelsLoop = (): void => {
+  if (levelsTimer !== null) {
+    clearInterval(levelsTimer);
+    levelsTimer = null;
   }
 };
 
 const startLevelsLoop = (): void => {
-  if (levelsTimer !== null) {
-    clearInterval(levelsTimer);
-  }
+  stopLevelsLoop();
   levelsTimer = setInterval(() => {
     const pipeline = current;
     if (pipeline === null) return;

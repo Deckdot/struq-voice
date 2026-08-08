@@ -84,6 +84,10 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
   const listeners = new Set<(state: CaptureState) => void>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let startedAt: number | null = null;
+  // Bumped on every capture. The paste result comes back asynchronously, and
+  // comparing the text alone cannot tell a late result apart from a newer
+  // capture that happens to have produced the same words.
+  let generation = 0;
 
   const setState = (next: CaptureState): void => {
     state = next;
@@ -109,7 +113,9 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
 
   const delay = (ms: number): Promise<void> =>
     new Promise((resolve) => {
-      setTimeout(resolve, ms);
+      schedule(ms, () => {
+        resolve();
+      });
     });
 
   const toIdle = (): void => {
@@ -120,6 +126,7 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
 
   const start = (): void => {
     if (state.phase !== "idle") return;
+    generation++;
     setState({ phase: "arming", reason: "warming stream" });
     schedule(0, () => {
       startedAt = Date.now();
@@ -145,7 +152,9 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
     if (state.phase !== "listening" || startedAt === null) return;
     const elapsedMs = Date.now() - startedAt;
     if (elapsedMs < options.minCaptureMs) {
-      // Accidental tap. Nothing happened; nothing is reported.
+      // Accidental tap. Nothing happened; nothing is reported. The worklet is
+      // still armed from beginCapture, so throw the buffer away explicitly.
+      options.source?.discardCapture();
       toIdle();
       return;
     }
@@ -215,16 +224,23 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       // Fire-and-forget: the paste must not delay the delivering hold or
       // the return to idle. keyTap completes in ~2ms; the state updates
       // when it settles, and only if we are still in the same delivering
-      // state (a new capture may have replaced it meanwhile).
+      // state (a new capture may have replaced it meanwhile). The generation
+      // is what makes that check exact: two captures can produce the same
+      // text, and then the text alone cannot tell them apart.
+      const deliveringGeneration = generation;
+      const stillCurrent = (): boolean =>
+        deliveringGeneration === generation &&
+        state.phase === "delivering" &&
+        state.text === text;
       void options
         .deliver(text)
         .then((outcome) => {
-          if (state.phase === "delivering" && state.text === text) {
+          if (stillCurrent()) {
             setState({ phase: "delivering", text, inserted: outcome.inserted });
           }
         })
         .catch(() => {
-          if (state.phase === "delivering" && state.text === text) {
+          if (stillCurrent()) {
             setState({ phase: "delivering", text, inserted: false });
           }
         });
@@ -237,6 +253,9 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
   const cancel = (): void => {
     if (state.phase !== "listening" && state.phase !== "arming") return;
     if (state.phase === "listening") options.onListeningEnd?.();
+    // The worklet stays armed after a cancel: release its buffer or it grows
+    // for as long as the app sits idle.
+    options.source?.discardCapture();
     toIdle();
   };
 

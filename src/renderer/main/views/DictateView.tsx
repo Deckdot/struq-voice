@@ -151,9 +151,16 @@ export function DictateView(): JSX.Element {
   }, [api, capture.phase]);
 
   useEffect(() => {
-    return api.onCaptureLevelsChanged(({ level: next }) => {
+    // Dictate is the readiness home: its meter answers "is the mic working?"
+    // while the view is open, not only during a capture.
+    const releaseLevels = api.requestCaptureLevels();
+    const unsubscribe = api.onCaptureLevelsChanged(({ level: next }) => {
       setLevel((current) => Math.max(current * 0.6, next * 0.4));
     });
+    return () => {
+      unsubscribe();
+      releaseLevels();
+    };
   }, [api]);
 
   useEffect(() => {

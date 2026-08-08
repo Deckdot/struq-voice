@@ -48,6 +48,18 @@ if (existsSync(releaseDir)) {
 }
 mkdirSync(releaseDir, { recursive: true });
 
+// Before packaging, not after: an installer that shipped without the meeting
+// models would gate Meetings behind a download on a machine that just paid
+// for a full install.
+try {
+  run("node", ["scripts/vendor-meeting-assets.mjs"]);
+} catch {
+  die(
+    "could not vendor the meeting support models, so no installer was produced",
+    "Check the network, then run node scripts/vendor-meeting-assets.mjs on its own to see which asset failed."
+  );
+}
+
 try {
   run("pnpm", ["exec", "electron-vite", "build"]);
 } catch {

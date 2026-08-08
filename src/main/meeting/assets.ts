@@ -1,14 +1,21 @@
 /**
- * Meeting asset service: downloads and installs the VAD, speaker embedding
- * and segmentation models into userData/meeting-assets, built on the same
- * resumable downloader the Models page uses. Kept separate from
- * ModelsService so the Models view stays about transcription quality and its
- * disk total keeps meaning "transcription models".
+ * Meeting asset service: resolves the VAD, speaker embedding and segmentation
+ * models a meeting needs. Kept separate from ModelsService so the Models view
+ * stays about transcription quality and its disk total keeps meaning
+ * "transcription models".
+ *
+ * The installer ships these, so in a packaged build they are already present
+ * under resources/meeting-assets and nothing is ever downloaded. The
+ * downloader remains as the repair path: a dev checkout that has not vendored
+ * them, or an install whose files went missing, fetches into
+ * userData/meeting-assets. A bundled asset always wins over a fetched one, so
+ * a repair cannot shadow a good file with a stale one.
  */
 
 import { join } from "node:path";
 import {
   MEETING_ASSETS,
+  type MeetingAsset,
   type MeetingAssetId,
   type MeetingAssetRole
 } from "../../shared/meeting-assets";
@@ -31,9 +38,19 @@ export const createMeetingAssetService = (
   deps?: {
     /** Injected so tests can exercise the install without a network. */
     fetch?: typeof fetch;
+    /**
+     * Where the installer put the bundled copies, read only. Checked before
+     * assetsRoot, so a shipped asset is never re-downloaded.
+     */
+    bundledRoot?: string;
   }
 ): MeetingAssetService => {
   const installer: ModelInstaller = createModelInstaller(assetsRoot);
+  const bundled: ModelInstaller | null =
+    deps?.bundledRoot === undefined ? null : createModelInstaller(deps.bundledRoot);
+
+  const isPresent = (asset: MeetingAsset): boolean =>
+    (bundled?.isInstalled(asset) ?? false) || installer.isInstalled(asset);
   const states = new Map<string, ModelDownloadState>();
   const listeners = new Set<(result: MeetingAssetsResult) => void>();
 
@@ -65,25 +82,23 @@ export const createMeetingAssetService = (
       purpose: asset.purpose,
       bytes: asset.bytes,
       required: asset.required,
-      installed: installer.isInstalled(asset),
+      installed: isPresent(asset),
       download: states.get(asset.id) ?? { state: "idle" }
     }));
     return {
       items,
-      ready: MEETING_ASSETS.filter((asset) => asset.required).every((asset) =>
-        installer.isInstalled(asset)
-      )
+      ready: MEETING_ASSETS.filter((asset) => asset.required).every(isPresent)
     };
   };
 
   const installMissing = async (): Promise<void> => {
-    const missing = MEETING_ASSETS.filter((asset) => !installer.isInstalled(asset));
+    const missing = MEETING_ASSETS.filter((asset) => !isPresent(asset));
     for (const asset of missing) {
       const handle = downloader.start(asset);
       await handle.done;
       states.set(
         asset.id,
-        installer.isInstalled(asset) ? { state: "done" } : downloader.state(asset.id)
+        isPresent(asset) ? { state: "done" } : downloader.state(asset.id)
       );
     }
     notify();
@@ -94,6 +109,12 @@ export const createMeetingAssetService = (
     if (asset === undefined) return null;
     const file = asset.files[0];
     if (file === undefined) return null;
+    // The bundled copy wins: it shipped with this build and was verified at
+    // build time, so it cannot be a stale leftover from an older version.
+    if (bundled !== null && bundled.isInstalled(asset)) {
+      return join(deps?.bundledRoot ?? "", asset.id, file.path);
+    }
+    if (!installer.isInstalled(asset)) return null;
     return join(assetsRoot, asset.id, file.path);
   };
 

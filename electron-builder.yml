@@ -22,6 +22,14 @@ files:
   - resources/tray/**
   - resources/sounds/**
 
+# The meeting support models, shipped with the installer rather than fetched
+# from a card in the app. They are ~36MB of the download and never change, so
+# the differential updater skips them on every update after the first.
+# scripts/vendor-meeting-assets.mjs puts them here, sha256-verified.
+extraResources:
+  - from: resources/meeting-assets
+    to: meeting-assets
+
 # Where installed copies look for updates, and what makes latest.yml get
 # written at all. The signature in struq-voice-release.json is what actually
 # authorises an update; this only says where to look.

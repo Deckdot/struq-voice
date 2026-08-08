@@ -58,6 +58,10 @@ export interface CaptureStateChangedEvent {
 /** Main to recorder: start appending to the active capture buffer. */
 export const recorderBeginCaptureChannel = "recorder:begin-capture" as const;
 
+export interface RecorderBeginCaptureRequest {
+  readonly maxCaptureMs: number;
+}
+
 /** Main to recorder: stop the capture and return the recorded PCM. */
 export const recorderEndCaptureChannel = "recorder:end-capture" as const;
 

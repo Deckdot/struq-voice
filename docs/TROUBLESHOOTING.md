@@ -70,7 +70,7 @@ Ctrl+V, restore clipboard.
 ## A capture never ends
 
 - The stuck-key watchdog force-stops any capture at `maxCaptureMs` (default
-  120s) if the key-up is eaten by sleep, alt-tab or a crash.
+  300s) if the key-up is eaten by sleep, alt-tab or a crash.
 - Escape cancels the current capture. Nothing is pasted and nothing is
   written to history on cancel.
 

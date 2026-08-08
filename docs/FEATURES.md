@@ -27,7 +27,7 @@ as `pnpm test:e2e`).
 - Hotkey reassignment in Settings via a key-capture widget; re-registers at
   runtime without a restart.
 - Capture state machine (`idle/arming/listening/transcribing/delivering/
-  error`) with 350ms min capture and 120s max capture.
+  error`) with 350ms min capture and 300s max capture.
 
 ### Audio
 - Warm `getUserMedia` + AudioWorklet (`pcm-collector.worklet.js`).

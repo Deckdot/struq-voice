@@ -227,10 +227,11 @@ const buildPipeline = async (api: RecorderWindowApi): Promise<void> => {
     source.connect(analyser);
     analyser.connect(worklet);
 
-    const unsubscribeBegin = api.onBeginCapture(() => {
+    const unsubscribeBegin = api.onBeginCapture(({ maxCaptureMs }) => {
       worklet.port.postMessage({
         type: "arm",
-        prerollSamples: Math.floor((TARGET_SAMPLE_RATE * DEFAULT_PREROLL_MS) / 1000)
+        prerollSamples: Math.floor((TARGET_SAMPLE_RATE * DEFAULT_PREROLL_MS) / 1000),
+        maxCaptureMs
       });
     });
 

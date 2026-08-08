@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserWindow } from "electron";
 import type { RecorderBridge } from "../audio/recorder-bridge";
+import type { RecorderBeginCaptureRequest } from "../../shared/ipc";
 import {
   recorderBeginCaptureChannel,
   recorderDiscardCaptureChannel,
@@ -21,7 +22,7 @@ export interface CaptureAudio {
 }
 
 export interface CaptureAudioSource {
-  beginCapture: () => void;
+  beginCapture: (maxCaptureMs: number) => void;
   endCapture: () => Promise<CaptureAudio>;
   /** Abort the active capture without waiting for PCM. */
   discardCapture: () => void;
@@ -46,13 +47,14 @@ export const createRecorderAudioSource = (
   };
 
   return {
-    beginCapture: () => {
+    beginCapture: (maxCaptureMs) => {
       if (recorderWindow.isDestroyed()) return;
       // A capture that never ended (a lost end-capture) would otherwise pin
       // the loop on, so replace rather than stack.
       dropLevelsHold();
       releaseLevels = bridge.holdLevels();
-      recorderWindow.webContents.send(recorderBeginCaptureChannel);
+      const request: RecorderBeginCaptureRequest = { maxCaptureMs };
+      recorderWindow.webContents.send(recorderBeginCaptureChannel, request);
     },
     endCapture: () => {
       dropLevelsHold();

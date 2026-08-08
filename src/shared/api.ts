@@ -24,6 +24,7 @@ import type {
   MeetingPauseResult,
   MeetingRenameRequest,
   MeetingRenameSpeakerRequest,
+  RecorderBeginCaptureRequest,
   MeetingSearchRequest,
   MeetingSearchResult,
   MeetingSegmentAppendedEvent,
@@ -189,7 +190,9 @@ export interface OverlayWindowApi {
 export interface RecorderWindowApi {
   readonly windowKind: "recorder";
   readonly isE2E: boolean;
-  readonly onBeginCapture: (callback: () => void) => () => void;
+  readonly onBeginCapture: (
+    callback: (request: RecorderBeginCaptureRequest) => void
+  ) => () => void;
   readonly onEndCapture: (callback: () => void) => () => void;
   readonly onDiscardCapture: (callback: () => void) => () => void;
   /**

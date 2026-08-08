@@ -316,7 +316,7 @@ No disk IO in the hot path. The largest avoidable cost is StruqADE's PowerShell 
 - **Debounce key repeat.** Windows fires repeated `keydown` while held. Track `pttActive` and
   ignore repeats until the matching `keyup`.
 - **Watchdog the stuck-key case.** Alt-tabbing or a sleep event can eat the `keyup`. Force-stop at
-  `maxCaptureMs` (default 120s) and re-check modifier state on every event.
+  `maxCaptureMs` (default 300s) and re-check modifier state on every event.
 - **Never block in the callback.** It runs on the hook thread. Set a flag, post to main, return.
   Slow work here makes the user's entire keyboard feel laggy, which is the worst available failure
   mode.

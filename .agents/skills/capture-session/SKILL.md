@@ -27,7 +27,7 @@ idle ──arm──▶ arming ──ready──▶ listening ──stop──�
 - `cancel` is Escape, registered as a `globalShortcut` only for the duration
   of a capture (the overlay cannot receive key events).
 - Captures under `minCaptureMs` (350ms) are discarded silently.
-- A `maxCaptureMs` (120s) watchdog force-stops a stuck-key capture.
+- A `maxCaptureMs` (300s) watchdog force-stops a stuck-key capture.
 - Delivering auto-dismisses to idle after 900ms; error after 4s.
 
 ## Hotkeys

@@ -50,7 +50,7 @@ saved to disk as audio, and the window you were working in never loses focus.
 - **250ms of pre-roll.** The audio from just before the key went down is part of
   the capture, so an early first word is never clipped.
 - **Guard rails.** Anything under 350ms is discarded silently so a mistyped key
-  never pastes, and a stuck key is force-stopped by a watchdog at 120 seconds.
+  never pastes, and a stuck key is force-stopped by a watchdog at five minutes.
 - **Rebind anything** in Settings with a key-capture widget. New keys register
   at runtime, with no restart.
 

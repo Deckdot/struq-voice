@@ -9,14 +9,12 @@
 
 const SAMPLE_RATE = 16000;
 const RING_SECONDS = 30;
-// The main-process watchdog force-stops captures at 120s, so a live capture
-// never legitimately exceeds this. A cap keeps the buffer bounded even if a
-// disarm/discard message is ever lost.
-const MAX_ACTIVE_SAMPLES = SAMPLE_RATE * 122;
+const DEFAULT_MAX_CAPTURE_MS = 300000;
 const ring = new Float32Array(SAMPLE_RATE * RING_SECONDS);
 let ringPos = 0;
 let armed = false;
 let active = [];
+let maxActiveSamples = SAMPLE_RATE * (RING_SECONDS + DEFAULT_MAX_CAPTURE_MS / 1000);
 
 class PcmCollectorProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -26,6 +24,9 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
       if (message.type === "arm") {
         armed = true;
         active = [];
+        const maxCaptureMs = Math.max(5000, Math.min(600000, message.maxCaptureMs));
+        maxActiveSamples =
+          Math.ceil((SAMPLE_RATE * maxCaptureMs) / 1000) + SAMPLE_RATE * RING_SECONDS;
         const preroll = Math.max(0, Math.min(SAMPLE_RATE * RING_SECONDS, message.prerollSamples));
         if (preroll > 0) {
           const start = (ringPos - preroll + ring.length) % ring.length;
@@ -67,7 +68,7 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
       ring[ringPos] = sample;
       ringPos = (ringPos + 1) % ring.length;
       if (armed) {
-        if (active.length < MAX_ACTIVE_SAMPLES) {
+        if (active.length < maxActiveSamples) {
           active.push(sample);
         }
       }

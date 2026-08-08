@@ -32,6 +32,28 @@ describe("capture session", () => {
     vi.useRealTimers();
   });
 
+  it("defaults the stuck-key watchdog to five minutes", () => {
+    expect(DEFAULT_CAPTURE_OPTIONS.maxCaptureMs).toBe(300_000);
+  });
+
+  it("reads the current maximum when each capture starts", () => {
+    const beginCapture = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      getMaxCaptureMs: () => 1000,
+      source: stubSource({ beginCapture })
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    expect(beginCapture).toHaveBeenCalledWith(1000);
+
+    vi.advanceTimersByTime(999);
+    expect(session.state.phase).toBe("listening");
+    vi.advanceTimersByTime(1);
+    expect(session.state.phase).toBe("transcribing");
+  });
+
   it("idle to arming to listening on start", () => {
     const session = createCaptureSession(OPTIONS);
     const history: CaptureState[] = [];

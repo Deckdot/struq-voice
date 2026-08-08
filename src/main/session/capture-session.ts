@@ -40,6 +40,9 @@ export interface CaptureSessionOptions {
   readonly minCaptureMs: number;
   /** Force-stop a capture that ran this long (ms): stuck key, sleep, alt-tab. */
   readonly maxCaptureMs: number;
+  /** Read live settings at the start of each capture when provided. */
+  readonly getMinCaptureMs?: () => number;
+  readonly getMaxCaptureMs?: () => number;
   /** Simulated inference time between stop and delivering (ms). */
   readonly simulatedInferenceMs: number;
   /** How long delivering stays on screen before returning to idle (ms). */
@@ -64,7 +67,7 @@ export interface CaptureSessionOptions {
 
 export const DEFAULT_CAPTURE_OPTIONS: CaptureSessionOptions = {
   minCaptureMs: 350,
-  maxCaptureMs: 120_000,
+  maxCaptureMs: 300_000,
   simulatedInferenceMs: 300,
   deliverHoldMs: 900,
   errorHoldMs: 4000,
@@ -84,6 +87,7 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
   const listeners = new Set<(state: CaptureState) => void>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let startedAt: number | null = null;
+  let activeMinCaptureMs = options.minCaptureMs;
   // Bumped on every capture. The paste result comes back asynchronously, and
   // comparing the text alone cannot tell a late result apart from a newer
   // capture that happens to have produced the same words.
@@ -129,10 +133,12 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
     generation++;
     setState({ phase: "arming", reason: "warming stream" });
     schedule(0, () => {
+      activeMinCaptureMs = options.getMinCaptureMs?.() ?? options.minCaptureMs;
+      const maxCaptureMs = options.getMaxCaptureMs?.() ?? options.maxCaptureMs;
       startedAt = Date.now();
       setState({ phase: "listening", startedAtMs: startedAt });
       try {
-        options.source?.beginCapture();
+        options.source?.beginCapture(maxCaptureMs);
       } catch (error) {
         fail("Microphone unavailable. Check the device and try again.");
         void error;
@@ -140,7 +146,7 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       }
       // Stuck-key watchdog: if the keyup is eaten (sleep, alt-tab, crash),
       // force-stop instead of recording forever.
-      schedule(options.maxCaptureMs, () => {
+      schedule(maxCaptureMs, () => {
         if (state.phase === "listening") {
           stop();
         }
@@ -151,7 +157,7 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
   const stop = (): void => {
     if (state.phase !== "listening" || startedAt === null) return;
     const elapsedMs = Date.now() - startedAt;
-    if (elapsedMs < options.minCaptureMs) {
+    if (elapsedMs < activeMinCaptureMs) {
       // Accidental tap. Nothing happened; nothing is reported. The worklet is
       // still armed from beginCapture, so throw the buffer away explicitly.
       options.source?.discardCapture();

@@ -25,6 +25,10 @@ const legacySettings = {
 };
 
 describe("settings migration", () => {
+  it("defaults the maximum capture duration to five minutes", () => {
+    expect(DEFAULT_SETTINGS.maxCaptureMs).toBe(300_000);
+  });
+
   it("fills the onboarding block for settings written before it existed", () => {
     const settings = migrateSettings(legacySettings);
     expect(settings.onboarding.completed).toBe(false);

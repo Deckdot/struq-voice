@@ -457,6 +457,8 @@ if (!gotLock) {
 
     const session = createCaptureSession({
       ...DEFAULT_CAPTURE_OPTIONS,
+      getMinCaptureMs: () => settingsStore.get().minCaptureMs,
+      getMaxCaptureMs: () => settingsStore.get().maxCaptureMs,
       source,
       onAudio: (audio) => {
         lastCaptureAudio = audio;

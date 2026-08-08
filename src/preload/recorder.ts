@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { RecorderDevice, RecorderWindowApi } from "../shared/api";
-import type { PreloadChannels } from "../shared/ipc";
+import type { PreloadChannels, RecorderBeginCaptureRequest } from "../shared/ipc";
 
 /**
  * Sandboxed preloads cannot load shared modules (the bundle must be one
@@ -21,8 +21,13 @@ const e2e = process.argv.includes("--struq-e2e");
 const api: RecorderWindowApi = {
   windowKind: "recorder",
   isE2E: e2e,
-  onBeginCapture: (callback: () => void) => {
-    const wrapped = (): void => { callback(); };
+  onBeginCapture: (callback: (request: RecorderBeginCaptureRequest) => void) => {
+    const wrapped = (
+      _event: Electron.IpcRendererEvent,
+      request: RecorderBeginCaptureRequest
+    ): void => {
+      callback(request);
+    };
     ipcRenderer.on(channels.recorder.begin, wrapped);
     return () => {
       ipcRenderer.removeListener(channels.recorder.begin, wrapped);

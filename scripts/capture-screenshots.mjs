@@ -82,7 +82,7 @@ const HISTORY = [
 const settings = {
   version: 1,
   minCaptureMs: 350,
-  maxCaptureMs: 120000,
+  maxCaptureMs: 300000,
   prerollMs: 250,
   restoreClipboard: true,
   restoreClipboardDelayMs: 400,

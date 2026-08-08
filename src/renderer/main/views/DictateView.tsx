@@ -16,6 +16,7 @@ import type { HistoryStatsResult, TranscriptRecord } from "../../../shared/ipc";
 import type { MeetingState } from "../../../shared/meeting";
 import { isMeetingActive } from "../../../shared/meeting";
 import { formatRelativeTime } from "../lib/format";
+import { micLevelToBar, smoothMicLevel } from "../lib/mic-level";
 
 /**
  * The home view: a dashboard, not a setup wizard. It shows what you have
@@ -155,7 +156,7 @@ export function DictateView(): JSX.Element {
     // while the view is open, not only during a capture.
     const releaseLevels = api.requestCaptureLevels();
     const unsubscribe = api.onCaptureLevelsChanged(({ level: next }) => {
-      setLevel((current) => Math.max(current * 0.6, next * 0.4));
+      setLevel((current) => smoothMicLevel(current, micLevelToBar(next)));
     });
     return () => {
       unsubscribe();

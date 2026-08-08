@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { RecorderDevice } from "../../../shared/ipc";
 import { Button, Select } from "../components/ui";
+import { micLevelToBar, smoothMicLevel } from "../lib/mic-level";
 import { ReadyRow } from "./StepShell";
 
 /**
@@ -41,7 +42,7 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
     // meter must be live before any capture has happened.
     const releaseLevels = api.requestCaptureLevels();
     const unsubscribe = api.onCaptureLevelsChanged(({ level: next }) => {
-      setLevel((current) => Math.max(current * 0.6, next * 0.4));
+      setLevel((current) => smoothMicLevel(current, micLevelToBar(next)));
     });
     return () => {
       unsubscribe();

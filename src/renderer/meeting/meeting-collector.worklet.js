@@ -46,12 +46,19 @@ class MeetingCollectorProcessor extends AudioWorkletProcessor {
     this.peak = 0;
   }
 
-  process(inputs) {
+  process(inputs, outputs) {
     if (this.stopped) return true;
     const input = inputs[0];
     if (input === undefined || input.length === 0) return true;
     const channel = input[0];
     if (channel === undefined) return true;
+
+    const output = outputs[0];
+    if (output !== undefined) {
+      for (const outputChannel of output) {
+        outputChannel.set(channel);
+      }
+    }
 
     for (let i = 0; i < channel.length; i++) {
       const sample = channel[i] ?? 0;

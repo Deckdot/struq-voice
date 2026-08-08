@@ -25,7 +25,9 @@ import type {
 } from "./protocol";
 import { createSpeakerClusterer, type SpeakerClusterer } from "./speaker-clusterer";
 import { createVadLane, type VadLane } from "./vad-lane";
+import { drainVadSegments } from "./vad-segments";
 import { refineLongTurn } from "./refine-long-turn";
+import { computeSpeakerEmbedding } from "./speaker-embedding";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -42,7 +44,7 @@ interface SpeechSegment {
 interface VadLike {
   readonly acceptWaveform: (window: Float32Array) => void;
   readonly isEmpty: () => boolean;
-  readonly front: () => SpeechSegment;
+  readonly front: (enableExternalBuffer: boolean) => SpeechSegment;
   readonly pop: () => void;
   readonly flush: () => void;
 }
@@ -54,7 +56,10 @@ interface EmbeddingStreamLike {
 
 interface EmbeddingExtractorLike {
   readonly createStream: () => EmbeddingStreamLike;
-  readonly compute: (stream: EmbeddingStreamLike) => Float32Array;
+  readonly compute: (
+    stream: EmbeddingStreamLike,
+    enableExternalBuffer: boolean
+  ) => Float32Array;
 }
 
 interface DiarizationSegment {
@@ -125,10 +130,7 @@ const embed = (samples: Float32Array): Float32Array => {
   if (activeExtractor === null) {
     throw new Error("Embedding extractor is not initialised.");
   }
-  const stream = activeExtractor.createStream();
-  stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
-  stream.inputFinished();
-  return activeExtractor.compute(stream);
+  return computeSpeakerEmbedding(activeExtractor, samples, SAMPLE_RATE);
 };
 
 const buildVad = (config: object): VadLike => {
@@ -337,14 +339,8 @@ const onInit = (init: Extract<WorkerCommand, { type: "init" }>): void => {
           vadInstances[source]?.acceptWaveform(window);
         },
         drainSegments: () => {
-          const segments: SpeechSegment[] = [];
           const vad = vadInstances[source];
-          if (vad === undefined) return segments;
-          while (!vad.isEmpty()) {
-            segments.push(vad.front());
-            vad.pop();
-          }
-          return segments;
+          return vad === undefined ? [] : drainVadSegments(vad);
         },
         onUtterance: (utterance) => {
           enqueue({ source, startSample: utterance.startSample, samples: utterance.samples });

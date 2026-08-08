@@ -16,6 +16,7 @@ import type {
   MeetingAudioFrames,
   MeetingLevelsEvent
 } from "../../shared/ipc";
+import { connectMeetingLaneGraph } from "./audio-graph";
 import workletUrl from "./meeting-collector.worklet.js?url";
 
 const TARGET_SAMPLE_RATE = 16_000;
@@ -33,6 +34,7 @@ interface LanePipeline {
 let beginRequest: MeetingAudioBeginRequest | null = null;
 const lanes = new Map<Lane, LanePipeline>();
 let context: AudioContext | null = null;
+let archiveSink: MediaStreamAudioDestinationNode | null = null;
 let archiveRecorder: MediaRecorder | null = null;
 const lastPeak: { system: number; microphone: number } = { system: 0, microphone: 0 };
 let levelsTimer: ReturnType<typeof setInterval> | null = null;
@@ -173,7 +175,7 @@ const acquireMicrophone = async (): Promise<MediaStream | null> => {
 };
 
 const attachLane = (lane: Lane, stream: MediaStream): void => {
-  if (context === null) return;
+  if (context === null || archiveSink === null) return;
   const source = context.createMediaStreamSource(stream);
   const worklet = new AudioWorkletNode(context, "meeting-collector");
 
@@ -208,7 +210,7 @@ const attachLane = (lane: Lane, stream: MediaStream): void => {
     }
   };
 
-  source.connect(worklet);
+  connectMeetingLaneGraph(source, worklet, archiveSink);
   lanes.set(lane, { source, worklet });
   reportState();
 };
@@ -230,6 +232,10 @@ const begin = async (): Promise<void> => {
   const audioContext = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
   try {
     await audioContext.audioWorklet.addModule(workletUrl);
+    await audioContext.resume();
+    if (audioContext.state !== "running") {
+      throw new Error(`Meeting audio context stayed ${audioContext.state}.`);
+    }
   } catch (error) {
     // The system stream is live and the context is half-built: release both
     // instead of orphaning them until GC.
@@ -241,15 +247,10 @@ const begin = async (): Promise<void> => {
     throw error;
   }
   context = audioContext;
+  archiveSink = audioContext.createMediaStreamDestination();
   starting = false;
 
-  const archiveSink = audioContext.createMediaStreamDestination();
-  const systemSource = audioContext.createMediaStreamSource(system);
-  const systemWorklet = new AudioWorkletNode(audioContext, "meeting-collector");
-  systemSource.connect(systemWorklet);
-  systemSource.connect(archiveSink);
-  lanes.set("system", { source: systemSource, worklet: systemWorklet });
-  reportState();
+  attachLane("system", system);
 
   system.getTracks()[0]?.addEventListener("ended", () => {
     handleTrackEnded("system");
@@ -405,6 +406,7 @@ const stopAll = (): void => {
       });
     }
     lanes.clear();
+    archiveSink = null;
     const current = context;
     context = null;
     if (current !== null) {

@@ -360,10 +360,10 @@ describe("meeting session", () => {
     await session.start();
     session.handleAudioState(liveAudioState());
     const frames = {
-      type: "frames" as const,
       source: "system" as const,
       pcm: new ArrayBuffer(16),
-      startSample: 16000
+      startSample: 16000,
+      sampleRate: 16000
     };
 
     session.handleFrames(frames);
@@ -454,13 +454,18 @@ describe("meeting session", () => {
   it("forwards frames to the worker without holding them", () => {
     const { session, worker } = makeSession();
     const frames = {
-      type: "frames" as const,
       source: "system" as const,
       pcm: new ArrayBuffer(16),
-      startSample: 16000
+      startSample: 16000,
+      sampleRate: 16000
     };
     session.handleFrames(frames);
-    expect(worker.sendFrames).toHaveBeenCalledWith(frames);
+    expect(worker.sendFrames).toHaveBeenCalledWith({
+      type: "frames",
+      source: frames.source,
+      pcm: frames.pcm,
+      startSample: frames.startSample
+    });
   });
 
   it("forwards archive chunks to the writer", () => {

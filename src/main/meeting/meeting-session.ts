@@ -31,6 +31,7 @@ import type {
 } from "../../shared/meeting";
 import { INITIAL_MEETING_STATE, isMeetingActive } from "../../shared/meeting";
 import type {
+  MeetingAudioFrames,
   MeetingAudioStateEvent,
   MeetingSegmentAppendedEvent,
   MeetingStartResult
@@ -84,7 +85,7 @@ export interface MeetingSession {
   /** Called by the capture session so dictation always wins. */
   setDictationActive: (active: boolean) => void;
   /** Meeting window -> main -> worker. Main holds nothing. */
-  handleFrames: (frames: WorkerFrames) => void;
+  handleFrames: (frames: MeetingAudioFrames) => void;
   handleArchiveChunk: (bytes: ArrayBuffer) => void;
   handleAudioState: (event: MeetingAudioStateEvent) => void;
   subscribe: (listener: (state: MeetingState) => void) => () => void;
@@ -536,9 +537,15 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     options.worker.setYielding(active);
   };
 
-  const handleFrames = (frames: WorkerFrames): void => {
+  const handleFrames = (frames: MeetingAudioFrames): void => {
     if (state.phase === "paused") return;
-    options.worker.sendFrames(frames);
+    const command: WorkerFrames = {
+      type: "frames",
+      source: frames.source,
+      pcm: frames.pcm,
+      startSample: frames.startSample
+    };
+    options.worker.sendFrames(command);
   };
 
   const handleArchiveChunk = (bytes: ArrayBuffer): void => {

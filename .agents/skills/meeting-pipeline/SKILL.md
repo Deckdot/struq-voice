@@ -22,6 +22,10 @@ idle ──start──▶ starting ──lanes live──▶ recording ──sto
 - Refused up front when the database, the support assets or the engine are
   unavailable. The renderer turns each refusal into its own copy, never an
   error toast.
+- The support assets ship with the installer (`extraResources`), so in a
+  packaged build they are always present and nothing is downloaded. The
+  downloader is the repair path for a dev checkout or missing files, and it
+  runs on its own without naming a single model to the user.
 - The hidden meeting window is created on start, destroyed on stop; the
   `struq-meeting` utilityProcess is forked on start, drained on stop, killed.
 

@@ -100,10 +100,22 @@ engine.
 Meetings need three ONNX models beyond the ASR engine: a Silero voice
 activity detector, a CAM++ speaker embedding extractor, and a pyannote
 speaker segmentation model. They are defined in
-`src/shared/meeting-assets.ts` (sizes and sha256 from the Hugging Face API)
-and install into `userData/meeting-assets/`, deliberately separate from
-`models/` so the Models view's disk total keeps meaning "transcription
-models".
+`src/shared/meeting-assets.ts` (sizes and sha256 from the Hugging Face API),
+deliberately separate from `models/` so the Models view's disk total keeps
+meaning "transcription models".
+
+**These ship with the installer.** `scripts/vendor-meeting-assets.mjs` fetches
+and sha256-verifies them into `resources/meeting-assets/`, and
+`electron-builder.yml` carries that directory as `extraResources`, so a
+packaged install resolves them from `process.resourcesPath` and downloads
+nothing. `build-installer.mjs` runs the vendor step before packaging, so an
+installer cannot be produced without them.
+
+The user is never told any of this. Which models a meeting uses, how many
+there are and what each weighs is not something anybody opens the app to
+learn, and naming them invites a decision the user has no basis to make. The
+onnx files are gitignored, so a fresh checkout fetches them on the first
+build.
 
 | Asset | File | Size | Required |
 |---|---|---|---|
@@ -111,11 +123,21 @@ models".
 | CAM++ embedding | `3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx` | 29.6 MB | yes |
 | Pyannote segmentation | `model.onnx` | 6.0 MB | no |
 
-They reuse the same resumable downloader the catalog models use (the
-`DownloadBundle` interface in `src/shared/models.ts` is the shared
-structural part), but never appear in `MODEL_CATALOG`, so the Models view
-stays a page about transcription quality. A first-time install of the
-required assets is about 31 MB.
+They never appear in `MODEL_CATALOG`, so the Models view stays a page about
+transcription quality.
+
+The resumable downloader (the `DownloadBundle` interface in
+`src/shared/models.ts` is the shared structural part) remains as the repair
+path only: a dev checkout that has not vendored them, or an install whose
+files went missing. It writes to `userData/meeting-assets/` and starts on its
+own when the Meetings tab opens, with a card that says it is setting up and
+nothing more. A bundled copy always wins over a fetched one, so a repair
+cannot shadow the file the build shipped.
+
+Bundling costs about 36 MB in the installer, roughly a third of it. Because
+the files are pinned by hash and do not change between versions, the
+differential updater skips every one of their blocks on subsequent updates,
+so the cost is paid once at first install rather than on every update.
 
 ## OpenRouter (cloud)
 

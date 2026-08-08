@@ -127,7 +127,21 @@ export function MeetingsView(): JSX.Element {
   const [assetProgress, setAssetProgress] = useState<Record<string, MeetingAssetProgressEvent>>({});
 
   useEffect(() => {
-    void api.meetings.assets().then(setAssets);
+    void api.meetings.assets().then((result) => {
+      setAssets(result);
+      // Installed builds ship these, so this is the repair path: a dev
+      // checkout, or files that went missing. Start it without asking. There
+      // is nothing here the user could usefully decide.
+      if (!result.ready) {
+        setInstalling(true);
+        void api.meetings.installAssets().then((outcome) => {
+          setInstalling(false);
+          if (outcome.ok) {
+            void api.meetings.assets().then(setAssets);
+          }
+        });
+      }
+    });
     return api.meetings.onAssetProgress((event) => {
       setAssetProgress((current) => ({ ...current, [event.assetId]: event }));
     });
@@ -139,25 +153,8 @@ export function MeetingsView(): JSX.Element {
 
   const active = isMeetingActive(meeting);
 
-  const install = (): void => {
-    setInstalling(true);
-    void api.meetings.installAssets().then((result) => {
-      setInstalling(false);
-      if (result.ok) {
-        void api.meetings.assets().then(setAssets);
-      }
-    });
-  };
-
   if (assets !== null && !assets.ready) {
-    return (
-      <InstallCard
-        assets={assets}
-        progress={assetProgress}
-        installing={installing}
-        onInstall={install}
-      />
-    );
+    return <SetupCard progress={assetProgress} installing={installing} />;
   }
 
   return (
@@ -208,72 +205,55 @@ export function MeetingsView(): JSX.Element {
   );
 }
 
-function InstallCard({
-  assets,
+/**
+ * Shown only when Meetings is not ready yet, which a normal install never
+ * hits: the installer ships what a meeting needs. This is the repair path (a
+ * dev checkout, or files that went missing), and it runs on its own.
+ *
+ * Deliberately says nothing about what is being fetched. Which models a
+ * meeting uses, how many there are and what each weighs is not something
+ * anybody opened this app to learn, and naming them invites a decision the
+ * user has no basis to make.
+ */
+function SetupCard({
   progress,
-  installing,
-  onInstall
+  installing
 }: {
-  readonly assets: MeetingAssetsResult;
   readonly progress: Record<string, MeetingAssetProgressEvent>;
   readonly installing: boolean;
-  readonly onInstall: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
-  const totalBytes = REQUIRED_ASSET_BYTES;
   const received = Object.values(progress).reduce(
     (sum, event) => (event.state === "downloading" ? sum + event.receivedBytes : sum),
     0
   );
-  const installingNow = installing || Object.values(progress).some((event) => event.state === "downloading");
+  const failed = Object.values(progress).some((event) => event.state === "error");
+  const busy =
+    installing || Object.values(progress).some((event) => event.state === "downloading");
 
   return (
-    <div className="h-full overflow-y-auto bg-bg [scrollbar-gutter:stable]" data-selectable>
-      <div className="mx-auto w-full max-w-[680px] px-6 py-10">
-        <Card className="p-6">
-          <div className="mb-1 text-lg font-semibold text-text">{t("meetings.setup.title")}</div>
-          <p className="mb-6 text-sm text-text-secondary">{t("meetings.setup.body")}</p>
-          <div className="flex flex-col gap-3">
-            {assets.items.map((asset) => {
-              return (
-                <div key={asset.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
-                  <Icon
-                    icon={asset.installed ? "ph:check-circle" : "ph:download-simple"}
-                    className={
-                      asset.installed ? "h-5 w-5 text-success" : "h-5 w-5 text-text-muted"
-                    }
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-sm font-medium text-text">
-                      {asset.name}
-                      {!asset.required && (
-                        <span className="text-xs text-text-muted">{t("meetings.setup.optional")}</span>
-                      )}
-                    </div>
-                    <div className="truncate text-xs text-text-secondary">{asset.purpose}</div>
-                  </div>
-                  <span className="shrink-0 text-xs text-text-muted">{formatSize(asset.bytes)}</span>
-                </div>
-              );
-            })}
+    <div className="flex h-full items-center justify-center bg-bg px-6" data-selectable>
+      <Card className="w-full max-w-[420px] p-6 text-center">
+        <Icon
+          icon={failed ? "ph:warning-circle" : "ph:users-three"}
+          className={`mx-auto mb-3 h-7 w-7 ${failed ? "text-danger" : "text-text-muted"}`}
+          aria-hidden="true"
+        />
+        <div className="mb-1 text-base font-semibold text-text">
+          {failed ? t("meetings.setup.failedTitle") : t("meetings.setup.title")}
+        </div>
+        <p className="text-sm text-text-secondary">
+          {failed ? t("meetings.setup.failedBody") : t("meetings.setup.body")}
+        </p>
+        {busy && (
+          <div className="mt-5">
+            <ProgressBar
+              value={Math.min(100, (received / REQUIRED_ASSET_BYTES) * 100)}
+              label={t("meetings.setup.working")}
+            />
           </div>
-          <div className="mt-6">
-            {installingNow ? (
-              <div className="flex flex-col gap-2">
-                <ProgressBar
-                  value={totalBytes > 0 ? Math.min(100, (received / totalBytes) * 100) : 0}
-                  label={t("meetings.setup.downloading")}
-                />
-              </div>
-            ) : (
-              <Button onClick={onInstall} className="w-full">
-                {t("meetings.setup.install", { size: formatSize(totalBytes) })}
-              </Button>
-            )}
-          </div>
-        </Card>
-      </div>
+        )}
+      </Card>
     </div>
   );
 }

@@ -26,3 +26,6 @@ playwright-report/
 
 .DS_Store
 Thumbs.db
+
+# Malformed temp paths created by local debug runs.
+UsersRoyheAppDataLocalTempopencode*/

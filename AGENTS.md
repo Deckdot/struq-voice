@@ -14,7 +14,7 @@ as invokable skills.
 anywhere in Windows, speak, release, and the transcript appears in whatever
 field you were focused on.
 
-Target: **Windows 11 x64 only.** Electron 39 pinned, React 19, Tailwind v4,
+Target: **Windows 10 and 11, 64-bit.** Electron 39 pinned, React 19, Tailwind v4,
 TypeScript strict.
 
 The one design document that matters more than any other is

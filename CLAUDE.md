@@ -7,8 +7,8 @@ use this file for invocation details and skill loading.
 ## What this project is
 
 A tray-resident Windows dictation app: hold a key anywhere in Windows,
-speak, release, and the transcript appears in the focused field. Windows 11
-x64 only. Electron 39 pinned, React 19, Tailwind v4, TypeScript strict.
+speak, release, and the transcript appears in the focused field. Windows 10
+and 11, 64-bit. Electron 39 pinned, React 19, Tailwind v4, TypeScript strict.
 
 The single design document that binds every UI decision is
 `docs/DESIGN_SYSTEM.md` (Evergreen and Ember). Build views against it or

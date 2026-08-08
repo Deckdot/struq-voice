@@ -9,7 +9,7 @@
 **On-device transcription · Works in every application · Never steals focus**
 
 [![Release](https://img.shields.io/github/v/release/Deckdot/struq-voice?style=flat-square&color=A65332&label=release)](https://github.com/Deckdot/struq-voice/releases/latest)
-[![Windows 11](https://img.shields.io/badge/Windows_11-x64-294638?style=flat-square&logo=windows&logoColor=white)](#install)
+[![Windows 10 and 11](https://img.shields.io/badge/Windows_10_%C2%B7_11-64--bit-294638?style=flat-square&logo=windows&logoColor=white)](#install)
 [![Electron 39](https://img.shields.io/badge/Electron-39-294638?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![React 19](https://img.shields.io/badge/React_19-Tailwind_v4-294638?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-294638?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -248,7 +248,7 @@ All of them are rebindable in Settings.
 
 ## Install
 
-**Requirements:** Windows 11 x64, and a microphone.
+**Requirements:** Windows 10 or 11, 64-bit, and a microphone.
 
 1. Download `struq-voice-<version>-setup.exe` from the
    [latest release](https://github.com/Deckdot/struq-voice/releases/latest).
@@ -348,6 +348,7 @@ interface, and no error message that names a problem without naming the fix.
 | [`docs/FEATURES.md`](docs/FEATURES.md) | What is built, current state, known gaps |
 | [`docs/MODELS.md`](docs/MODELS.md) | Engines, catalog, download pipeline |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Cut, sign, verify, publish, and why updates are signed |
+| [`docs/TESTING.md`](docs/TESTING.md) | Risk-weighted test strategy, layers, and review standard |
 | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Known failures and their fixes |
 
 AI agents can load the invokable skills in `.agents/skills/` and the mirrored

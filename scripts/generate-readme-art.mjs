@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Renders the README banner art in docs/images. Everything here is drawn from
- * the Velden Linen Forest tokens and the two Instrument faces, so the artwork
+ * the Evergreen and Ember tokens and the product typefaces, so the artwork
  * and the interface cannot drift apart.
  *
  * Usage: pnpm docs:art
@@ -19,17 +19,14 @@ const fontDir = join(root, "node_modules", "@fontsource");
 const dataUrl = async (path) =>
   `data:font/woff2;base64,${(await readFile(path)).toString("base64")}`;
 
-const serif = await dataUrl(
-  join(fontDir, "instrument-serif", "files", "instrument-serif-latin-400-normal.woff2")
+const display = await dataUrl(
+  join(fontDir, "urbanist", "files", "urbanist-latin-400-normal.woff2")
 );
 const sans400 = await dataUrl(
-  join(fontDir, "instrument-sans", "files", "instrument-sans-latin-400-normal.woff2")
+  join(fontDir, "plus-jakarta-sans", "files", "plus-jakarta-sans-latin-400-normal.woff2")
 );
 const sans500 = await dataUrl(
-  join(fontDir, "instrument-sans", "files", "instrument-sans-latin-500-normal.woff2")
-);
-const mono = await dataUrl(
-  join(fontDir, "ibm-plex-mono", "files", "ibm-plex-mono-latin-400-normal.woff2")
+  join(fontDir, "plus-jakarta-sans", "files", "plus-jakarta-sans-latin-500-normal.woff2")
 );
 
 const tokens = `
@@ -45,10 +42,9 @@ const tokens = `
 `;
 
 const fonts = `
-  @font-face { font-family: "Instrument Serif"; src: url(${serif}) format("woff2"); font-weight: 400; }
-  @font-face { font-family: "Instrument Sans"; src: url(${sans400}) format("woff2"); font-weight: 400; }
-  @font-face { font-family: "Instrument Sans"; src: url(${sans500}) format("woff2"); font-weight: 500; }
-  @font-face { font-family: "IBM Plex Mono"; src: url(${mono}) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Urbanist"; src: url(${display}) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Plus Jakarta Sans"; src: url(${sans400}) format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Plus Jakarta Sans"; src: url(${sans500}) format("woff2"); font-weight: 500; }
 `;
 
 /** The brand mark: five bars rising to a stop, then the terracotta dot. */
@@ -88,19 +84,19 @@ const hero = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     width: 1600px; height: 520px; background: var(--bg);
-    font-family: "Instrument Sans", sans-serif; color: var(--text);
+    font-family: "Plus Jakarta Sans", sans-serif; color: var(--text);
     display: flex; flex-direction: column; justify-content: space-between;
     padding: 72px 88px 0;
     position: relative; overflow: hidden;
   }
   .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 64px; }
   .lockup { display: flex; align-items: center; gap: 20px; }
-  .wordmark { font-family: "Instrument Serif", serif; font-size: 92px; line-height: 1; letter-spacing: -0.02em; }
+  .wordmark { font-family: "Urbanist", sans-serif; font-size: 92px; line-height: 1; letter-spacing: -0.02em; }
   .tagline { margin-top: 28px; font-size: 27px; line-height: 1.45; color: var(--text-secondary); max-width: 720px; }
   .tagline b { font-weight: 500; color: var(--text); }
   .keys { margin-top: 34px; display: flex; align-items: center; gap: 14px; }
   .kbd {
-    font-family: "IBM Plex Mono", monospace; font-size: 20px; color: var(--text);
+    font-family: "Plus Jakarta Sans", sans-serif; font-size: 20px; color: var(--text);
     background: var(--sunken); border: 1px solid var(--border); border-radius: 8px;
     padding: 10px 16px;
   }
@@ -108,7 +104,7 @@ const hero = `
   .step { font-size: 20px; color: var(--text-muted); }
   .facts { display: flex; gap: 0; align-items: stretch; border-top: 1px solid var(--border); margin-top: 56px; }
   .fact { flex: 1; padding: 24px 32px 30px 0; }
-  .fact dt { font-family: "IBM Plex Mono", monospace; font-size: 15px; letter-spacing: 0.06em;
+  .fact dt { font-family: "Plus Jakarta Sans", sans-serif; font-size: 15px; letter-spacing: 0.06em;
              text-transform: uppercase; color: var(--text-muted); }
   .fact dd { margin-top: 8px; font-size: 21px; color: var(--text); }
   .wave { display: flex; align-items: center; gap: 5px; height: 132px; padding-top: 18px; }
@@ -137,7 +133,7 @@ const hero = `
   <div class="fact"><dt>Transcription</dt><dd>Runs on your machine</dd></div>
   <div class="fact"><dt>Latency</dt><dd>Warm mic, no record delay</dd></div>
   <div class="fact"><dt>Delivery</dt><dd>Pastes into any window</dd></div>
-  <div class="fact"><dt>Platform</dt><dd>Windows 11 x64</dd></div>
+  <div class="fact"><dt>Platform</dt><dd>Windows 10 and 11, 64-bit</dd></div>
 </dl>
 `;
 
@@ -148,13 +144,13 @@ const flow = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     width: 1600px; height: 300px; background: var(--bg); padding: 56px 64px;
-    font-family: "Instrument Sans", sans-serif; color: var(--text);
+    font-family: "Plus Jakarta Sans", sans-serif; color: var(--text);
     display: flex; align-items: stretch; gap: 0;
   }
   .step { flex: 1; padding: 0 36px; position: relative; }
   .step + .step { border-left: 1px solid var(--border); }
-  .n { font-family: "IBM Plex Mono", monospace; font-size: 16px; color: var(--accent); letter-spacing: 0.08em; }
-  h3 { margin-top: 14px; font-family: "Instrument Serif", serif; font-size: 34px; font-weight: 400; letter-spacing: -0.01em; }
+  .n { font-family: "Plus Jakarta Sans", sans-serif; font-size: 16px; color: var(--accent); letter-spacing: 0.08em; }
+  h3 { margin-top: 14px; font-family: "Urbanist", sans-serif; font-size: 34px; font-weight: 400; letter-spacing: -0.01em; }
   p { margin-top: 12px; font-size: 19px; line-height: 1.5; color: var(--text-secondary); }
 </style>
 <div class="step">

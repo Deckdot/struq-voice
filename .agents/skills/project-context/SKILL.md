@@ -6,8 +6,8 @@ description: "Load the full Struq Voice picture before starting any task: what t
 # Project context: Struq Voice
 
 A tray-resident Windows dictation app. Hold a key anywhere in Windows,
-speak, release, and the transcript appears in the focused field. Windows 11
-x64 only. Electron 39 pinned, React 19, Tailwind v4, TypeScript strict.
+speak, release, and the transcript appears in the focused field. Windows 10
+and 11, 64-bit. Electron 39 pinned, React 19, Tailwind v4, TypeScript strict.
 
 ## Read in this order
 
@@ -55,7 +55,7 @@ engines · paste · db    -> main
 
 ## Current state (verified)
 
-All 7 plan phases are built and committed. 106 unit tests pass; typecheck,
-lint and the headless dev e2e suite (8 specs) are green. See
+All 7 plan phases are built and committed. The unit suite, typecheck, lint,
+and the headless dev e2e suite are green. See
 `docs/FEATURES.md` for the details and the short known-gaps list (settings +
 a11y e2e specs not written, manual checklist not run, shadcn not adopted).

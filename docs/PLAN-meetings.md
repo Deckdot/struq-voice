@@ -2539,7 +2539,7 @@ State these in the PR description so nobody thinks they were missed.
   endpoint, not one process. Capturing only Teams needs process loopback,
   which Electron does not expose.
 - **macOS or Linux.** `audio: "loopback"` is Windows only, per the Electron
-  typings. The product is Windows 11 x64 anyway.
+  typings. The product supports Windows 10 and 11, 64-bit only.
 - **Muxing separate lane files.** One mixed archive is what ships.
 
 ---

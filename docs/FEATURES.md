@@ -7,8 +7,8 @@ project-status index any agent or human should read first, after AGENTS.md.
 
 The build plan (`docs/IMPLEMENTATION_PLAN.md`) is fully implemented and
 committed. All gates green: `pnpm typecheck`, `pnpm lint`, `pnpm test`
-(106 unit tests), and the dev e2e suite (8 specs, headless, green when run
-as `pnpm test:e2e`).
+and the dev e2e suite (headless, green when run as `pnpm test:e2e`). The
+risk-weighted test policy lives in `docs/TESTING.md`.
 
 ## The product loop, end to end
 

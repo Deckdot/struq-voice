@@ -5,7 +5,7 @@
 > with [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md).
 
 **Owner:** Roy Heilbron
-**Target:** Windows 11 x64. Sole supported platform for v1.
+**Target:** Windows 10 and 11, 64-bit. Sole supported platform for v1.
 **Reference implementation to port from:** `C:\Users\Royhe\Documents\Coding\Projects\1Personal\StruqMain\StruqADE`
 
 ---

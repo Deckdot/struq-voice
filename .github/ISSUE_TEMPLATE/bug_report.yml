@@ -1,0 +1,79 @@
+name: Bug report
+description: Report a reproducible problem with Struq Voice
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping make Struq Voice more reliable.
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      description: Find this under Settings, System, About, Windows specifications.
+      placeholder: Windows 11 24H2, build 26100.4652
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Struq Voice version
+      placeholder: 0.5.0
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Transcription engine
+      options:
+        - Parakeet
+        - Whisper.cpp
+        - OpenRouter
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Dictation
+        - Meetings
+        - Both
+        - Another part of the app
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open...
+        2. Press...
+        3. See...
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add logs, screenshots, microphone details, or anything else that may help. Remove private transcript content first.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked that this has not already been reported.
+          required: true
+        - label: I removed API keys, private transcript text, and other sensitive data.
+          required: true

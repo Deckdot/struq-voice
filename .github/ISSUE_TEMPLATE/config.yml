@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Struq Voice website
+    url: https://struq-voice.vercel.app
+    about: Learn about Struq Voice and find the latest download.
+  - name: Report a security vulnerability
+    url: https://github.com/Deckdot/struq-voice/security/advisories/new
+    about: Share security reports privately with the maintainers.

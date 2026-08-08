@@ -15,6 +15,7 @@ export interface PttChord {
 
 export const DEFAULT_PTT_ACCELERATOR = "CommandOrControl+Space";
 export const DEFAULT_TOGGLE_ACCELERATOR = "CommandOrControl+Shift+Space";
+export const DEFAULT_MEETING_ACCELERATOR = "CommandOrControl+Shift+M";
 
 /** Canonical key names (accelerator tokens) to uiohook keycodes. */
 const KEYNAME_TO_KEYCODE: Record<string, number> = {

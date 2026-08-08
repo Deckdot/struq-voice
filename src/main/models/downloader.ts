@@ -23,7 +23,7 @@ import type {
   ModelDownloadErrorCode,
   ModelDownloadState,
   ModelFile,
-  ModelInfo
+  DownloadBundle
 } from "../../shared/models";
 
 const ZERO_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -118,7 +118,7 @@ export interface DownloadHandle {
 }
 
 export interface Downloader {
-  start: (model: ModelInfo) => DownloadHandle;
+  start: (model: DownloadBundle) => DownloadHandle;
   cancel: (modelId: string) => void;
   state: (modelId: string) => ModelDownloadState;
 }
@@ -208,7 +208,7 @@ export const createDownloader = (
 
   /** Persist the real on-disk byte count so a later resume range matches. */
   const persistPartMeta = async (
-    model: ModelInfo,
+    model: DownloadBundle,
     file: ModelFile,
     metaPath: string,
     partPath: string
@@ -235,7 +235,7 @@ export const createDownloader = (
     return hash.digest("hex");
   };
 
-  const installedFile = async (model: ModelInfo, file: ModelFile): Promise<boolean> => {
+  const installedFile = async (model: DownloadBundle, file: ModelFile): Promise<boolean> => {
     const finalPath = join(modelsRoot, model.id, file.path);
     try {
       await stat(finalPath);
@@ -248,10 +248,10 @@ export const createDownloader = (
     return (await hashFile(finalPath)) === file.sha256;
   };
 
-  const partPathFor = (model: ModelInfo, file: ModelFile): string =>
+  const partPathFor = (model: DownloadBundle, file: ModelFile): string =>
     join(modelsRoot, model.id, ".partial", `${file.path}.part`);
 
-  const metaPathFor = (model: ModelInfo, file: ModelFile): string =>
+  const metaPathFor = (model: DownloadBundle, file: ModelFile): string =>
     `${partPathFor(model, file)}.json`;
 
   const readPartMeta = async (metaPath: string): Promise<PartMeta | null> => {
@@ -263,7 +263,7 @@ export const createDownloader = (
     }
   };
 
-  const receivedBytes = (model: ModelInfo, run: Run): number => {
+  const receivedBytes = (model: DownloadBundle, run: Run): number => {
     let total = 0;
     for (const file of model.files) {
       const progress = run.progress.get(file.path);
@@ -274,7 +274,7 @@ export const createDownloader = (
     return total;
   };
 
-  const emitThrottled = (model: ModelInfo, run: Run): void => {
+  const emitThrottled = (model: DownloadBundle, run: Run): void => {
     const now = Date.now();
     if (now - run.lastEmit < PROGRESS_INTERVAL_MS) {
       return;
@@ -287,7 +287,7 @@ export const createDownloader = (
     });
   };
 
-  const emitFinal = (model: ModelInfo, run: Run): void => {
+  const emitFinal = (model: DownloadBundle, run: Run): void => {
     deps.emitProgress({
       modelId: model.id,
       receivedBytes: receivedBytes(model, run),
@@ -295,7 +295,7 @@ export const createDownloader = (
     });
   };
 
-  const setDownloading = (model: ModelInfo, run: Run): void => {
+  const setDownloading = (model: DownloadBundle, run: Run): void => {
     states.set(model.id, {
       state: "downloading",
       receivedBytes: receivedBytes(model, run),
@@ -309,7 +309,7 @@ export const createDownloader = (
     partPath: string,
     mode: "append" | "truncate",
     resumeFrom: number,
-    model: ModelInfo,
+    model: DownloadBundle,
     run: Run,
     progress: FileProgress,
     onActivity: () => void
@@ -381,7 +381,7 @@ export const createDownloader = (
   };
 
   const downloadFile = async (
-    model: ModelInfo,
+    model: DownloadBundle,
     file: ModelFile,
     run: Run
   ): Promise<"ok" | "aborted" | "failed"> => {
@@ -582,7 +582,7 @@ export const createDownloader = (
     states.set(modelId, { state: "idle" });
   };
 
-  const runLoop = (model: ModelInfo, run: Run): Promise<void> => {
+  const runLoop = (model: DownloadBundle, run: Run): Promise<void> => {
     return (async (): Promise<void> => {
       try {
         for (const file of model.files) {
@@ -666,7 +666,7 @@ export const createDownloader = (
   };
 
   return {
-    start: (model: ModelInfo): DownloadHandle => {
+    start: (model: DownloadBundle): DownloadHandle => {
       const existing = runs.get(model.id);
       if (existing !== undefined && existing.handle !== undefined) {
         return existing.handle;

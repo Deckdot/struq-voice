@@ -56,9 +56,10 @@ interface DayTotals {
  * SQLite has no split, so words are counted as separators plus one. Dictated
  * text is single-spaced, which is what makes this exact in practice; runs of
  * whitespace would each count as an extra word. Guarded by NON_EMPTY so a
- * blank transcript cannot report itself as one word.
+ * blank transcript cannot report itself as one word. Exported because the
+ * meeting store counts words over its own segments with the same expression.
  */
-const WORD_COUNT = `(length(trim(text)) - length(replace(trim(text), ' ', '')) + 1)`;
+export const WORD_COUNT = `(length(trim(text)) - length(replace(trim(text), ' ', '')) + 1)`;
 const NON_EMPTY = `length(trim(text)) > 0`;
 
 /** The local-time YYYY-MM-DD that SQLite's 'localtime' modifier produces. */
@@ -70,9 +71,11 @@ const localDayKey = (date: Date): string => {
 
 /**
  * FTS5 MATCH queries reject arbitrary syntax; quote every word so the user's
- * input can never break the query.
+ * input can never break the query. Exported because the meeting store must
+ * sanitize its own search the same way; duplicating the reasoning in two
+ * places invites one of them to drift.
  */
-const sanitizeFtsQuery = (query: string): string => {
+export const sanitizeFtsQuery = (query: string): string => {
   const words = query
     .split(/\s+/)
     .map((word) => word.replace(/"/g, "").trim())

@@ -10,6 +10,10 @@ import {
   registerToggleShortcut,
   unregisterToggleShortcut
 } from "./toggle-shortcut";
+import {
+  registerMeetingShortcut,
+  unregisterMeetingShortcut
+} from "./meeting-shortcut";
 import { parseAccelerator } from "../../shared/hotkeys";
 
 export interface HotkeyInput {
@@ -17,6 +21,7 @@ export interface HotkeyInput {
   readonly onPttStart: () => void;
   readonly onPttStop: () => void;
   readonly onToggle: () => void;
+  readonly onMeetingToggle: () => void;
 }
 
 export interface HotkeyController {
@@ -25,8 +30,12 @@ export interface HotkeyController {
   setPaused: (paused: boolean) => void;
   registerEscape: (onEscape: () => void) => void;
   unregisterEscape: () => void;
-  /** Reconfigure PTT and toggle at runtime, without a restart. */
-  setHotkeys: (pttAccelerator: string, toggleAccelerator: string) => void;
+  /** Reconfigure PTT, toggle and meeting at runtime, without a restart. */
+  setHotkeys: (
+    pttAccelerator: string,
+    toggleAccelerator: string,
+    meetingAccelerator: string
+  ) => void;
 }
 
 export const createHotkeys = (input: HotkeyInput): HotkeyController => {
@@ -38,32 +47,50 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
   let paused = false;
   let escapeRegistered = false;
   let escapeHandler: (() => void) | null = null;
+  // The cancel handler the session asked for, kept across a pause. Escape is
+  // registered only during a capture, so pausing mid-capture and resuming has
+  // to put it back: without this, cancel is dead until the next capture.
+  let wantedEscapeHandler: (() => void) | null = null;
 
   const setPaused = (next: boolean): void => {
     paused = next;
     if (paused) {
       pttHook.stop();
       unregisterToggleShortcut();
+      unregisterMeetingShortcut();
+      const wanted = wantedEscapeHandler;
       unregisterEscape();
+      wantedEscapeHandler = wanted;
     } else {
       if (!input.e2e) {
         pttHook.start();
         registerToggleShortcut(input.onToggle);
+        registerMeetingShortcut(input.onMeetingToggle);
+        if (wantedEscapeHandler !== null) {
+          registerEscape(wantedEscapeHandler);
+        }
       }
     }
   };
 
-  const setHotkeys = (pttAccelerator: string, toggleAccelerator: string): void => {
+  const setHotkeys = (
+    pttAccelerator: string,
+    toggleAccelerator: string,
+    meetingAccelerator: string
+  ): void => {
     const chord = parseAccelerator(pttAccelerator);
     if (chord !== null) {
       pttHook.setChord(chord);
     }
     if (!paused && !input.e2e) {
       registerToggleShortcut(input.onToggle, toggleAccelerator);
+      registerMeetingShortcut(input.onMeetingToggle, meetingAccelerator);
     }
   };
 
   const registerEscape = (onEscape: () => void): void => {
+    // Remembered even while paused, so resuming can restore it.
+    wantedEscapeHandler = onEscape;
     if (input.e2e || paused) return;
     if (escapeRegistered) {
       escapeHandler = onEscape;
@@ -86,6 +113,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       escapeRegistered = false;
     }
     escapeHandler = null;
+    wantedEscapeHandler = null;
   };
 
   return {
@@ -93,6 +121,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       if (input.e2e) return;
       pttHook.start();
       registerToggleShortcut(input.onToggle);
+      registerMeetingShortcut(input.onMeetingToggle);
       // Quit from the keyboard. The tray menu has the same action.
       const registered = globalShortcut.register("CommandOrControl+Q", () => {
         app.quit();
@@ -104,6 +133,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
     dispose: () => {
       pttHook.stop();
       unregisterToggleShortcut();
+      unregisterMeetingShortcut();
       unregisterEscape();
       globalShortcut.unregister("CommandOrControl+Q");
     },

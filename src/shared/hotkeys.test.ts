@@ -5,6 +5,7 @@ import {
   formatChord,
   domEventToAccelerator,
   DEFAULT_PTT_ACCELERATOR,
+  DEFAULT_MEETING_ACCELERATOR,
   DEFAULT_TOGGLE_ACCELERATOR
 } from "./hotkeys";
 
@@ -39,6 +40,16 @@ describe("parseAccelerator", () => {
   it("parses the default toggle chord", () => {
     expect(parseAccelerator(DEFAULT_TOGGLE_ACCELERATOR)).toEqual({
       keycode: 57,
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: false,
+      metaKey: false
+    });
+  });
+
+  it("parses the default meeting chord", () => {
+    expect(parseAccelerator(DEFAULT_MEETING_ACCELERATOR)).toEqual({
+      keycode: 50,
       ctrlKey: true,
       shiftKey: true,
       altKey: false,

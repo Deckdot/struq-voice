@@ -1,50 +1,27 @@
-import { useEffect, useState } from "react";
-import type { MainWindowApi } from "../../../shared/api";
-import { isRtl, resolveLocale, t as translate, type MessageKey, type TranslationParams } from "../../../shared/i18n";
-import { clearFormatCaches } from "../../../shared/i18n/format";
+import { useCallback } from "react";
+import { t as translate, type MessageKey, type TranslationParams } from "../../../shared/i18n";
+import { useMainStore } from "../store/use-main-store";
 
+/**
+ * Read the resolved UI locale and translate against it.
+ *
+ * The locale itself is owned by the store and kept current by a single
+ * settings subscription in Bootstrap. This hook deliberately opens no IPC of
+ * its own: it has twenty callers, and one subscription per caller meant twenty
+ * settings round trips and twenty listeners for one window-wide value.
+ */
 export function useTranslation(): {
   t: (key: MessageKey, params?: TranslationParams) => string;
   locale: string;
   dir: "ltr" | "rtl";
 } {
-  const api = window.struqVoice as MainWindowApi;
-  const initialLocale = api.initialLocale;
-  const initialDir = api.initialDir;
+  const locale = useMainStore((state) => state.locale);
+  const dir = useMainStore((state) => state.dir);
 
-  const [locale, setLocale] = useState<string>(initialLocale);
-  const [dir, setDir] = useState<"ltr" | "rtl">(initialDir);
+  const t = useCallback(
+    (key: MessageKey, params?: TranslationParams) => translate(locale, key, params),
+    [locale]
+  );
 
-  useEffect(() => {
-    void api.settings.get().then(({ settings }) => {
-      const resolved =
-        settings.locale === "system"
-          ? resolveLocale(navigator.languages)
-          : settings.locale;
-      const nextDir = isRtl(resolved) ? "rtl" : "ltr";
-      setLocale(resolved);
-      setDir(nextDir);
-      document.documentElement.lang = resolved;
-      document.documentElement.dir = nextDir;
-    });
-
-    return api.settings.onChange((settings) => {
-      const resolved =
-        settings.locale === "system"
-          ? resolveLocale(navigator.languages)
-          : settings.locale;
-      const nextDir = isRtl(resolved) ? "rtl" : "ltr";
-      clearFormatCaches();
-      setLocale(resolved);
-      setDir(nextDir);
-      document.documentElement.lang = resolved;
-      document.documentElement.dir = nextDir;
-    });
-  }, [api]);
-
-  return {
-    t: (key: MessageKey, params?: TranslationParams) => translate(locale, key, params),
-    locale,
-    dir
-  };
+  return { t, locale, dir };
 }

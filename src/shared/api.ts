@@ -8,11 +8,35 @@ import type { CaptureState } from "./capture";
 import type {
   AppReadiness,
   HistoryStatsResult,
+  MeetingAssetsResult,
+  MeetingAssetProgressEvent,
+  MeetingAudioBeginRequest,
+  MeetingAudioFrames,
+  MeetingAudioArchiveChunk,
+  MeetingAudioStateEvent,
+  MeetingExportRequest,
+  MeetingExportResult,
+  MeetingGetRequest,
+  MeetingGetResult,
+  MeetingLevelsEvent,
+  MeetingListRequest,
+  MeetingListResult,
+  MeetingPauseResult,
+  MeetingRenameRequest,
+  MeetingRenameSpeakerRequest,
+  MeetingSearchRequest,
+  MeetingSearchResult,
+  MeetingSegmentAppendedEvent,
+  MeetingSegmentsRequest,
+  MeetingSegmentsResult,
+  MeetingSimpleResult,
+  MeetingStartResult,
   ModelsDownloadProgressEvent,
   TranscriptRecord
 } from "./ipc";
 import type { ModelsListResult, ModelsModelResult } from "./ipc";
 import type { OnboardingProfileResult, OnboardingStartRecommendedResult } from "./ipc";
+import type { MeetingState } from "./meeting";
 import type { Settings } from "./settings";
 import type { UpdateState } from "./updates";
 
@@ -35,6 +59,12 @@ export interface MainWindowApi {
   readonly onCaptureLevelsChanged: (
     listener: (data: { bands: readonly number[]; level: number }) => void
   ) => () => void;
+  /**
+   * Ask main to keep live microphone levels flowing while a meter is on
+   * screen. Reference counted in main, so several meters can ask at once.
+   * Returns the release; call it when the meter unmounts.
+   */
+  readonly requestCaptureLevels: () => () => void;
   readonly history: {
     list: (request: { limit?: number; offset?: number }) => Promise<{
       items: readonly TranscriptRecord[];
@@ -96,6 +126,32 @@ export interface MainWindowApi {
     startRecommended: () => Promise<OnboardingStartRecommendedResult>;
     complete: () => Promise<{ settings: Settings }>;
   };
+  readonly meetings: {
+    start: () => Promise<MeetingStartResult>;
+    stop: () => Promise<MeetingSimpleResult>;
+    pause: () => Promise<MeetingPauseResult>;
+    list: (request: MeetingListRequest) => Promise<MeetingListResult>;
+    get: (request: MeetingGetRequest) => Promise<MeetingGetResult>;
+    segments: (request: MeetingSegmentsRequest) => Promise<MeetingSegmentsResult>;
+    search: (request: MeetingSearchRequest) => Promise<MeetingSearchResult>;
+    remove: (request: MeetingGetRequest) => Promise<MeetingSimpleResult>;
+    rename: (request: MeetingRenameRequest) => Promise<MeetingSimpleResult>;
+    renameSpeaker: (
+      request: MeetingRenameSpeakerRequest
+    ) => Promise<MeetingSimpleResult>;
+    export: (request: MeetingExportRequest) => Promise<MeetingExportResult>;
+    revealRecording: (request: MeetingGetRequest) => Promise<MeetingSimpleResult>;
+    assets: () => Promise<MeetingAssetsResult>;
+    installAssets: () => Promise<MeetingSimpleResult>;
+    onStateChanged: (listener: (state: MeetingState) => void) => () => void;
+    onSegmentAppended: (
+      listener: (event: MeetingSegmentAppendedEvent) => void
+    ) => () => void;
+    onLevels: (listener: (event: MeetingLevelsEvent) => void) => () => void;
+    onAssetProgress: (
+      listener: (event: MeetingAssetProgressEvent) => void
+    ) => () => void;
+  };
 }
 
 export interface OverlayWindowApi {
@@ -129,6 +185,12 @@ export interface RecorderWindowApi {
   readonly isE2E: boolean;
   readonly onBeginCapture: (callback: () => void) => () => void;
   readonly onEndCapture: (callback: () => void) => () => void;
+  readonly onDiscardCapture: (callback: () => void) => () => void;
+  /**
+   * Run the analyser loop, or stop it. Main gates this on demand: a capture,
+   * or a window showing a live microphone meter.
+   */
+  readonly onLevelsEnabled: (callback: (enabled: boolean) => void) => () => void;
   readonly sendCaptureData: (data: {
     pcm: ArrayBuffer;
     durationMs: number;
@@ -163,4 +225,21 @@ export interface RecorderDevice {
   readonly label: string;
 }
 
-export type WindowApi = MainWindowApi | OverlayWindowApi | RecorderWindowApi;
+export interface MeetingWindowApi {
+  readonly windowKind: "meeting";
+  readonly onBegin: (
+    callback: (request: MeetingAudioBeginRequest) => void
+  ) => () => void;
+  readonly onStop: (callback: () => void) => () => void;
+  readonly onPause: (callback: (paused: boolean) => void) => () => void;
+  readonly sendFrames: (data: MeetingAudioFrames) => void;
+  readonly sendArchiveChunk: (data: MeetingAudioArchiveChunk) => void;
+  readonly sendState: (data: MeetingAudioStateEvent) => void;
+  readonly sendLevels: (data: MeetingLevelsEvent) => void;
+}
+
+export type WindowApi =
+  | MainWindowApi
+  | OverlayWindowApi
+  | RecorderWindowApi
+  | MeetingWindowApi;

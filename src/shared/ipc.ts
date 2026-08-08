@@ -6,7 +6,12 @@
 
 import type { CaptureState } from "./capture";
 import type { HardwareProfile, ModelRecommendation } from "./hardware";
-import type { ModelDownloadErrorCode, ModelStatus } from "./models";
+import type { ModelDownloadErrorCode, ModelDownloadState, ModelStatus } from "./models";
+import type {
+  MeetingRecord,
+  MeetingSegment,
+  MeetingSpeaker
+} from "./meeting";
 import type { Settings } from "./settings";
 import type { UpdateState } from "./updates";
 
@@ -56,6 +61,9 @@ export const recorderBeginCaptureChannel = "recorder:begin-capture" as const;
 /** Main to recorder: stop the capture and return the recorded PCM. */
 export const recorderEndCaptureChannel = "recorder:end-capture" as const;
 
+/** Main to recorder: abort a capture and throw away the buffer. */
+export const recorderDiscardCaptureChannel = "recorder:discard-capture" as const;
+
 /** Recorder to main: the captured PCM, as a transferable Int16 ArrayBuffer. */
 export const recorderCaptureDataChannel = "recorder:capture-data" as const;
 
@@ -71,6 +79,28 @@ export const recorderLevelsChannel = "recorder:levels" as const;
 export interface RecorderLevels {
   readonly bands: readonly number[];
   readonly level: number;
+}
+
+/**
+ * Main to recorder: run the analyser loop, or stop it. Levels are wanted
+ * during a capture (the overlay waveform) and while a window shows a live
+ * microphone meter (Dictate, the Capture settings tab, onboarding). Outside
+ * both, the loop is pure cost, so main gates it on demand.
+ */
+export const recorderLevelsEnabledChannel = "recorder:levels-enabled" as const;
+
+export interface RecorderLevelsEnabled {
+  readonly enabled: boolean;
+}
+
+/**
+ * Renderer to main: this window wants live microphone levels. Reference
+ * counted in main, so the loop runs while at least one window is asking.
+ */
+export const captureLevelsRequestChannel = "capture:levels-request" as const;
+
+export interface CaptureLevelsRequest {
+  readonly wanted: boolean;
 }
 
 /** Recorder to main: microphone stream state changes. */
@@ -412,6 +442,214 @@ export interface OnboardingCompleteResult {
   readonly settings: Settings;
 }
 
+/** Push channel: the meeting state changed. Broadcast to every window. */
+export const meetingStateChangedChannel = "meeting:state-changed" as const;
+
+export const meetingStartChannel = "meeting:start" as const;
+export const meetingStopChannel = "meeting:stop" as const;
+export const meetingPauseChannel = "meeting:pause" as const;
+export const meetingListChannel = "meeting:list" as const;
+export const meetingGetChannel = "meeting:get" as const;
+export const meetingSegmentsChannel = "meeting:segments" as const;
+export const meetingSearchChannel = "meeting:search" as const;
+export const meetingDeleteChannel = "meeting:delete" as const;
+export const meetingRenameChannel = "meeting:rename" as const;
+export const meetingRenameSpeakerChannel = "meeting:rename-speaker" as const;
+export const meetingExportChannel = "meeting:export" as const;
+export const meetingRevealRecordingChannel = "meeting:reveal-recording" as const;
+
+/**
+ * Push channel: one finished transcript line. Sent as it is written, so the
+ * live view appends rather than re-reading the meeting on every utterance.
+ */
+export const meetingSegmentAppendedChannel = "meeting:segment-appended" as const;
+
+/** Push channel: input levels for both lanes, for the live meters. */
+export const meetingLevelsChannel = "meeting:levels" as const;
+
+export const meetingAssetsChannel = "meeting:assets" as const;
+export const meetingInstallAssetsChannel = "meeting:install-assets" as const;
+export const meetingAssetProgressChannel = "meeting:asset-progress" as const;
+
+export interface MeetingStartResult {
+  readonly ok: boolean;
+  readonly meetingId?: number;
+  /** Machine-readable; the renderer translates it. */
+  readonly code?: string;
+}
+
+export interface MeetingSimpleResult {
+  readonly ok: boolean;
+}
+
+export interface MeetingPauseResult {
+  readonly ok: boolean;
+  readonly paused: boolean;
+}
+
+export interface MeetingListRequest {
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+export interface MeetingListResult {
+  readonly items: readonly MeetingRecord[];
+  readonly total: number;
+}
+
+export interface MeetingGetRequest {
+  readonly meetingId: number;
+}
+
+export interface MeetingGetResult {
+  readonly meeting: MeetingRecord | null;
+  readonly speakers: readonly MeetingSpeaker[];
+}
+
+export interface MeetingSegmentsRequest {
+  readonly meetingId: number;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+export interface MeetingSegmentsResult {
+  readonly items: readonly MeetingSegment[];
+  readonly total: number;
+}
+
+export interface MeetingSearchRequest {
+  readonly query: string;
+  readonly limit?: number;
+}
+
+/** A hit carries its meeting so the result list can be grouped without a join. */
+export interface MeetingSearchHit {
+  readonly segment: MeetingSegment;
+  readonly meetingTitle: string;
+  readonly meetingStartedAtMs: number;
+}
+
+export interface MeetingSearchResult {
+  readonly items: readonly MeetingSearchHit[];
+}
+
+export interface MeetingRenameRequest {
+  readonly meetingId: number;
+  readonly title: string;
+}
+
+export interface MeetingRenameSpeakerRequest {
+  readonly meetingId: number;
+  readonly speakerKey: string;
+  readonly label: string;
+}
+
+export type MeetingExportFormat = "markdown" | "text" | "srt";
+
+export interface MeetingExportRequest {
+  readonly meetingId: number;
+  readonly format: MeetingExportFormat;
+}
+
+export interface MeetingExportResult {
+  readonly ok: boolean;
+  readonly path?: string;
+  readonly code?: string;
+}
+
+export interface MeetingSegmentAppendedEvent {
+  readonly meetingId: number;
+  readonly segment: MeetingSegment;
+  readonly speakerCount: number;
+}
+
+export interface MeetingLevelsEvent {
+  readonly system: number;
+  readonly microphone: number;
+}
+
+export interface MeetingAssetStatus {
+  readonly id: string;
+  readonly name: string;
+  readonly purpose: string;
+  readonly bytes: number;
+  readonly required: boolean;
+  readonly installed: boolean;
+  readonly download: ModelDownloadState;
+}
+
+export interface MeetingAssetsResult {
+  readonly items: readonly MeetingAssetStatus[];
+  /** True when every required asset is on disk. */
+  readonly ready: boolean;
+}
+
+export type MeetingAssetProgressEvent =
+  | {
+      readonly state: "downloading";
+      readonly assetId: string;
+      readonly receivedBytes: number;
+      readonly totalBytes: number;
+    }
+  | { readonly state: "done"; readonly assetId: string }
+  | {
+      readonly state: "error";
+      readonly assetId: string;
+      readonly code: ModelDownloadErrorCode;
+      readonly message: string;
+    };
+
+/** Main to meeting window: acquire the loopback stream and start recording. */
+export const meetingAudioBeginChannel = "meeting-audio:begin" as const;
+
+export interface MeetingAudioBeginRequest {
+  readonly includeMicrophone: boolean;
+  readonly archiveAudio: boolean;
+  readonly archiveBitrateKbps: number;
+  /** Persisted dictation device id, so both lanes use the same microphone. */
+  readonly microphoneDeviceId: string | null;
+}
+
+/** Main to meeting window: stop both lanes and flush the archive. */
+export const meetingAudioStopChannel = "meeting-audio:stop" as const;
+
+/** Main to meeting window: pause or resume the archive recorder. */
+export const meetingAudioPauseChannel = "meeting-audio:pause" as const;
+
+/**
+ * Meeting window to main: one second of 16 kHz mono Int16 for one lane.
+ * `startSample` is the index of the first sample since capture began, which
+ * is what makes the two lanes share a clock without a wall-clock timestamp.
+ */
+export const meetingAudioFramesChannel = "meeting-audio:frames" as const;
+
+export interface MeetingAudioFrames {
+  readonly source: "system" | "microphone";
+  readonly pcm: ArrayBuffer;
+  readonly startSample: number;
+  readonly sampleRate: number;
+}
+
+/** Meeting window to main: an opus chunk for the archive file. */
+export const meetingAudioArchiveChannel = "meeting-audio:archive" as const;
+
+export interface MeetingAudioArchiveChunk {
+  readonly bytes: ArrayBuffer;
+}
+
+/** Meeting window to main: lane health, and the terminal flush signal. */
+export const meetingAudioStateChannel = "meeting-audio:state" as const;
+
+export interface MeetingAudioStateEvent {
+  readonly system: { readonly live: boolean; readonly code?: string };
+  readonly microphone: { readonly live: boolean; readonly code?: string };
+  /** True once every archive chunk has been sent and both lanes are closed. */
+  readonly finished: boolean;
+}
+
+/** Meeting window to main: 10 Hz levels for the two meters. */
+export const meetingAudioLevelsChannel = "meeting-audio:levels" as const;
+
 export const openRouterKeyStatusChannel = "secrets:openrouter-status" as const;
 export const openRouterKeySetChannel = "secrets:openrouter-set" as const;
 export const openRouterKeyClearChannel = "secrets:openrouter-clear" as const;
@@ -454,12 +692,15 @@ export const PRELOAD_CHANNELS = {
   },
   captureStateChanged: captureStateChangedChannel,
   captureLevelsChanged: captureLevelsChangedChannel,
+  captureLevelsRequest: captureLevelsRequestChannel,
   capturePartialTranscript: capturePartialTranscriptChannel,
   recorder: {
     begin: recorderBeginCaptureChannel,
     end: recorderEndCaptureChannel,
+    discard: recorderDiscardCaptureChannel,
     data: recorderCaptureDataChannel,
     levels: recorderLevelsChannel,
+    levelsEnabled: recorderLevelsEnabledChannel,
     streamState: recorderStreamStateChannel,
     setDevice: recorderSetDeviceChannel,
     getDevices: recorderGetDevicesChannel,
@@ -517,6 +758,35 @@ export const PRELOAD_CHANNELS = {
     profile: onboardingProfileChannel,
     startRecommended: onboardingStartRecommendedChannel,
     complete: onboardingCompleteChannel
+  },
+  meeting: {
+    stateChanged: meetingStateChangedChannel,
+    start: meetingStartChannel,
+    stop: meetingStopChannel,
+    pause: meetingPauseChannel,
+    list: meetingListChannel,
+    get: meetingGetChannel,
+    segments: meetingSegmentsChannel,
+    search: meetingSearchChannel,
+    delete: meetingDeleteChannel,
+    rename: meetingRenameChannel,
+    renameSpeaker: meetingRenameSpeakerChannel,
+    export: meetingExportChannel,
+    revealRecording: meetingRevealRecordingChannel,
+    segmentAppended: meetingSegmentAppendedChannel,
+    levels: meetingLevelsChannel,
+    assets: meetingAssetsChannel,
+    installAssets: meetingInstallAssetsChannel,
+    assetProgress: meetingAssetProgressChannel
+  },
+  meetingAudio: {
+    begin: meetingAudioBeginChannel,
+    stop: meetingAudioStopChannel,
+    pause: meetingAudioPauseChannel,
+    frames: meetingAudioFramesChannel,
+    archive: meetingAudioArchiveChannel,
+    state: meetingAudioStateChannel,
+    levels: meetingAudioLevelsChannel
   }
 } as const;
 

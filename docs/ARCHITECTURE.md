@@ -7,16 +7,35 @@ record; see `IMPLEMENTATION_PLAN.md` for the full specification and
 
 ## Process and window model
 
-Three window types plus the main process:
+Four window types plus the main process and the meeting worker:
 
 ```
 MAIN PROCESS
-  lifecycle · ipc · (later: tray, hotkeys, capture session, engines, paste, db)
+  lifecycle · ipc · tray · hotkeys · capture session · engines · paste · db
+  meeting session (state machine) · archive writer · worker client
     |
-    +-- MAIN WINDOW    frameless, on demand. Dictate, History, Models, Settings.
+    +-- MAIN WINDOW    frameless, on demand. Dictate, Meetings, History,
+    |                  Models, Settings.
     +-- OVERLAY        frameless, transparent, never focusable. The capture pill.
     +-- RECORDER       hidden, never focused, permanently warm microphone.
-```
+    +-- MEETING        hidden, on demand, never focused. Loopback + mic
+    |                  capture, opus archive encoder. Created when a meeting
+    |                  starts, destroyed when it stops.
+    |
+    +-- MEETING WORKER  utilityProcess (struq-meeting), forked on start,
+                       killed on stop. VAD -> ASR -> speaker clustering.
+
+## Why meeting transcription runs out of process
+
+`sherpa-onnx-node`'s `recognizer.decode()` is a synchronous blocking native
+call. For a 3 second dictation that is fine; for continuous meeting decoding
+it would stall the main process, and with it the tray, IPC, settings store,
+hotkey dispatch and every window pump, for most of the meeting. A
+`utilityProcess` gets its own event loop, crash isolation (a segfault inside
+ONNX ends the meeting, not the app) and memory that is genuinely released on
+kill. The cost is a second copy of the model in RAM while a meeting runs,
+which is the correct trade and why the process is spawned per meeting rather
+than kept warm.
 
 Phase 0 creates only the main window. The overlay and recorder windows land in
 Phase 1, the audio pipeline in Phase 2.
@@ -42,20 +61,31 @@ bridge via `contextBridge` (`window.struqVoice`); main registers handlers in
 ## File tree
 
 ```
-electron.vite.config.ts   three main/preload/renderer entries
+electron.vite.config.ts   four main/preload/renderer entries (plus the
+                          meeting worker as a second main entry)
 src/
   shared/                 ipc.ts (single source) · result.ts (Result<T>)
                           hardware.ts (profile, tier, recommendation)
+                          meeting.ts · meeting-assets.ts
   main/                   index.ts (lifecycle) · ipc.ts (typed dispatch)
     hardware/detect.ts    os + getGPUInfo probing, degrades to unknown
-  preload/                main.ts · overlay.ts · recorder.ts
+    meeting/              meeting-session.ts (state machine) · assets.ts
+                          archive-writer.ts · worker-client.ts · ipc.ts
+                          loopback.ts · export.ts
+      worker/             index.ts (utilityProcess entry) · protocol.ts
+                          vad-lane.ts · speaker-clusterer.ts
+  preload/                main.ts · overlay.ts · recorder.ts · meeting.ts
   renderer/
     styles/               main.css · theme.css (Evergreen and Ember tokens)
     main/                 index.html · main.tsx · App.tsx
       components/ui/      the shared visual layer, built on the tokens
       onboarding/         first-run takeover, one file per step
+      views/              Dictate · Meetings · History · Dictionary · Models
+                          · Settings
     overlay/              index.html · overlay.tsx · Overlay.tsx
     recorder/             index.html · recorder.ts
+    meeting/              index.html · meeting.ts · audio.ts
+                          meeting-collector.worklet.js
 e2e/
   helpers/launch.ts       harness: strips ELECTRON_RUN_AS_NODE, fresh userData
   boot.spec.ts            launch, title, one window, zero console errors

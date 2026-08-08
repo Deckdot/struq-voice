@@ -251,7 +251,31 @@ export function ModelsView(): JSX.Element {
 
   useEffect(() => {
     refresh();
-    return api.models.onDownloadProgress(refresh);
+    return api.models.onDownloadProgress((event) => {
+      // A progress tick changes one row's byte counter and nothing else, so
+      // update that row in place. Re-listing the whole catalog per tick meant
+      // an IPC round trip and a full re-render several times a second.
+      if (event.state === "downloading") {
+        setStatuses((current) =>
+          current.map((status) =>
+            status.model.id === event.modelId
+              ? {
+                  ...status,
+                  download: {
+                    state: "downloading",
+                    receivedBytes: event.receivedBytes,
+                    totalBytes: event.totalBytes
+                  }
+                }
+              : status
+          )
+        );
+        return;
+      }
+      // Terminal states change installed flags and disk usage, which only
+      // main can answer for.
+      refresh();
+    });
   }, [api]);
 
   /**

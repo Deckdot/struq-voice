@@ -15,6 +15,8 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { PRELOAD_CHANNELS } from "./ipc";
+import type { PreloadChannels } from "./ipc";
 
 /** Stand-in for a React SyntheticEvent: nested functions and a DOM-ish node. */
 const makeSyntheticEventLike = (): Record<string, unknown> => ({
@@ -94,5 +96,19 @@ describe("IPC argument cloneability", () => {
     expect(isIpcCloneable({ deviceId: "default" })).toBe(true);
     expect(isIpcCloneable({ patch: { autostart: true } })).toBe(true);
     expect(isIpcCloneable({ bands: [0.1, 0.5], level: 0.3 })).toBe(true);
+  });
+
+  it("keeps the meeting preload channel keys after the argv round trip", () => {
+    // Main serialises PRELOAD_CHANNELS into additionalArguments; a preload
+    // parses it back. The meeting keys must survive, or every meeting window
+    // call silently reaches a channel main never listens on.
+    const argvChannels = JSON.parse(JSON.stringify(PRELOAD_CHANNELS)) as PreloadChannels;
+    expect(argvChannels.meeting.start).toBe("meeting:start");
+    expect(argvChannels.meeting.stateChanged).toBe("meeting:state-changed");
+    expect(argvChannels.meeting.segmentAppended).toBe("meeting:segment-appended");
+    expect(argvChannels.meeting.assets).toBe("meeting:assets");
+    expect(argvChannels.meetingAudio.begin).toBe("meeting-audio:begin");
+    expect(argvChannels.meetingAudio.frames).toBe("meeting-audio:frames");
+    expect(argvChannels.meetingAudio.state).toBe("meeting-audio:state");
   });
 });

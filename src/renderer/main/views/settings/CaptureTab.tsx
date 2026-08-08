@@ -41,9 +41,16 @@ export function CaptureTab({
   const [level, setLevel] = useState(0);
 
   useEffect(() => {
-    return api.onCaptureLevelsChanged(({ level: next }) => {
+    // The meter exists to test the microphone without starting a capture, so
+    // it has to ask main to keep the analyser loop running.
+    const releaseLevels = api.requestCaptureLevels();
+    const unsubscribe = api.onCaptureLevelsChanged(({ level: next }) => {
       setLevel((current) => Math.max(current * 0.6, next * 0.4));
     });
+    return () => {
+      unsubscribe();
+      releaseLevels();
+    };
   }, [api]);
 
   const meterValue = Math.min(100, Math.max(0, Math.round(level * 100)));

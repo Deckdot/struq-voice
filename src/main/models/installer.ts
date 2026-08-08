@@ -12,21 +12,21 @@ import type { Dirent } from "node:fs";
 import { createReadStream, existsSync, readdirSync, statSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { ModelFile, ModelInfo } from "../../shared/models";
+import type { ModelFile, DownloadBundle } from "../../shared/models";
 
 const ZERO_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
 
 export interface ModelInstaller {
-  isInstalled: (model: ModelInfo) => boolean;
-  verify: (model: ModelInfo) => Promise<boolean>;
-  installedBytes: (model: ModelInfo) => number;
-  delete: (model: ModelInfo) => Promise<void>;
+  isInstalled: (model: DownloadBundle) => boolean;
+  verify: (model: DownloadBundle) => Promise<boolean>;
+  installedBytes: (model: DownloadBundle) => number;
+  delete: (model: DownloadBundle) => Promise<void>;
   totalDiskUsed: () => number;
   readonly modelsRoot: string;
 }
 
 export const createModelInstaller = (modelsRoot: string): ModelInstaller => {
-  const modelDir = (model: ModelInfo): string => join(modelsRoot, model.id);
+  const modelDir = (model: DownloadBundle): string => join(modelsRoot, model.id);
 
   const hashFile = async (filePath: string): Promise<string> => {
     const hash = createHash("sha256");
@@ -41,10 +41,10 @@ export const createModelInstaller = (modelsRoot: string): ModelInstaller => {
     return hash.digest("hex");
   };
 
-  const isInstalled = (model: ModelInfo): boolean =>
+  const isInstalled = (model: DownloadBundle): boolean =>
     model.files.every((file: ModelFile) => existsSync(join(modelDir(model), file.path)));
 
-  const verify = async (model: ModelInfo): Promise<boolean> => {
+  const verify = async (model: DownloadBundle): Promise<boolean> => {
     for (const file of model.files) {
       const stats = await stat(join(modelDir(model), file.path)).catch(() => null);
       if (stats === null || !stats.isFile()) {
@@ -57,7 +57,7 @@ export const createModelInstaller = (modelsRoot: string): ModelInstaller => {
     return true;
   };
 
-  const installedBytes = (model: ModelInfo): number => {
+  const installedBytes = (model: DownloadBundle): number => {
     let total = 0;
     for (const file of model.files) {
       try {
@@ -72,7 +72,7 @@ export const createModelInstaller = (modelsRoot: string): ModelInstaller => {
     return total;
   };
 
-  const deleteModel = async (model: ModelInfo): Promise<void> => {
+  const deleteModel = async (model: DownloadBundle): Promise<void> => {
     // rm can hit EPERM/EBUSY when a scanner or an aborted download stream
     // still holds a file open. Retry briefly; a delete that visibly fails is
     // worse than one that takes half a second.

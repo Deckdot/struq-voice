@@ -14,15 +14,23 @@ export interface ModelFile {
   sha256: string;
 }
 
-export interface ModelInfo {
-  id: string;
-  name: string;
-  engine: "parakeet" | "whisper-cpp";
-  bytes: number;
-  languages: string;
-  whenToUse: string;
-  license: string;
-  files: readonly ModelFile[];
+/**
+ * The part of a model the downloader and installer actually need. Meeting
+ * assets (src/shared/meeting-assets.ts) satisfy this too, which is how they
+ * reuse the resumable downloader without appearing in MODEL_CATALOG.
+ */
+export interface DownloadBundle {
+  readonly id: string;
+  readonly name: string;
+  readonly bytes: number;
+  readonly files: readonly ModelFile[];
+}
+
+export interface ModelInfo extends DownloadBundle {
+  readonly engine: "parakeet" | "whisper-cpp";
+  readonly languages: string;
+  readonly whenToUse: string;
+  readonly license: string;
 }
 
 /**

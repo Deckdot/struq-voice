@@ -15,10 +15,13 @@
 import { Menu, Notification, Tray, nativeImage } from "electron";
 import { join } from "node:path";
 import type { CaptureState } from "../shared/capture";
+import type { MeetingState } from "../shared/meeting";
+import { isMeetingActive } from "../shared/meeting";
 import { t, type MessageKey } from "../shared/i18n";
 
 export interface TrayInput {
   readonly onToggleCapture: () => void;
+  readonly onToggleMeeting: () => void;
   readonly onOpenMainWindow: () => void;
   readonly onSetHotkeysPaused: (paused: boolean) => void;
   readonly onQuit: () => void;
@@ -28,6 +31,7 @@ export interface TrayInput {
 
 export interface TrayController {
   setState: (state: CaptureState) => void;
+  setMeetingState: (state: MeetingState) => void;
   setLocale: (locale: string) => void;
   setRecentTranscripts: (items: readonly { id: number; text: string }[]) => void;
   getMenuItemIds: () => readonly string[];
@@ -64,6 +68,7 @@ export const createTray = (input: TrayInput): TrayController => {
 
   let currentLocale = "en";
   let state: CaptureState = { phase: "idle" };
+  let meetingState: MeetingState = { phase: "idle" };
   let tray: Tray | null = null;
   let contextMenu: Menu | null = null;
   let tooltip: string | null = null;
@@ -120,8 +125,15 @@ export const createTray = (input: TrayInput): TrayController => {
       state.phase === "listening" || state.phase === "arming"
         ? t(currentLocale, "tray.stopCapture")
         : t(currentLocale, "tray.startCapture");
+    const meetingActive = isMeetingActive(meetingState);
     const template: Electron.MenuItemConstructorOptions[] = [
       { id: "startStop", label: captureLabel, click: () => { input.onToggleCapture(); } },
+      { type: "separator" },
+      {
+        id: "startStopMeeting",
+        label: t(currentLocale, meetingActive ? "tray.stopMeeting" : "tray.startMeeting"),
+        click: () => { input.onToggleMeeting(); }
+      },
       { type: "separator" },
       { id: "recent", label: t(currentLocale, "tray.recentTranscripts"), submenu: recentSubmenu() },
       { type: "separator" },
@@ -173,7 +185,28 @@ export const createTray = (input: TrayInput): TrayController => {
     }
 
     const stateStr = t(currentLocale, PHASE_KEY[state.phase]);
-    tooltip = t(currentLocale, "tray.tooltip", { state: stateStr, engine: input.engineDisplayName() });
+    const meetingSuffix = isMeetingActive(meetingState)
+      ? ` ${t(currentLocale, "tray.phase.meeting")}`
+      : "";
+    tooltip = t(currentLocale, "tray.tooltip", {
+      state: `${stateStr}${meetingSuffix}`,
+      engine: input.engineDisplayName()
+    });
+    tray.setToolTip(tooltip);
+    refreshMenu();
+  };
+
+  const setMeetingState = (next: MeetingState): void => {
+    meetingState = next;
+    if (tray === null) return;
+    const stateStr = t(currentLocale, PHASE_KEY[state.phase]);
+    const meetingSuffix = isMeetingActive(meetingState)
+      ? ` ${t(currentLocale, "tray.phase.meeting")}`
+      : "";
+    tooltip = t(currentLocale, "tray.tooltip", {
+      state: `${stateStr}${meetingSuffix}`,
+      engine: input.engineDisplayName()
+    });
     tray.setToolTip(tooltip);
     refreshMenu();
   };
@@ -181,7 +214,13 @@ export const createTray = (input: TrayInput): TrayController => {
   const setLocale = (locale: string): void => {
     currentLocale = locale;
     const stateStr = t(currentLocale, PHASE_KEY[state.phase]);
-    tooltip = t(currentLocale, "tray.tooltip", { state: stateStr, engine: input.engineDisplayName() });
+    const meetingSuffix = isMeetingActive(meetingState)
+      ? ` ${t(currentLocale, "tray.phase.meeting")}`
+      : "";
+    tooltip = t(currentLocale, "tray.tooltip", {
+      state: `${stateStr}${meetingSuffix}`,
+      engine: input.engineDisplayName()
+    });
     if (tray !== null) {
       tray.setToolTip(tooltip);
       refreshMenu();
@@ -208,6 +247,7 @@ export const createTray = (input: TrayInput): TrayController => {
 
   return {
     setState,
+    setMeetingState,
     setLocale,
     setRecentTranscripts: (items: readonly { id: number; text: string }[]) => {
       recentTranscripts = items;

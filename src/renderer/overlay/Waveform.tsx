@@ -92,6 +92,9 @@ export function Waveform({
 
     const reducedMotion = prefersReducedMotion();
     let barColor = resolveColor(canvas, colorToken, "#b4653a");
+    // Resolved once with barColor: getComputedStyle inside the per-bar draw
+    // loop would force a style resolution on every frame.
+    let peakColor = resolveColor(canvas, "--color-border-strong", "#c0c4b8");
 
     let width = 0;
     let height = 0;
@@ -109,6 +112,7 @@ export function Waveform({
       canvas.style.height = `${String(height)}px`;
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       barColor = resolveColor(canvas, colorToken, barColor);
+      peakColor = resolveColor(canvas, "--color-border-strong", peakColor);
     };
 
     resize();
@@ -172,7 +176,7 @@ export function Waveform({
           const peakLevel = Math.min(1, Math.max(0, peaks[i] ?? 0));
           const peakHalf = Math.max(MIN_BAR / 2, (0.08 + peakLevel * 0.92) * usableHalf);
           if (peakHalf > half + 2) {
-            context.fillStyle = resolveColor(canvas, "--color-border-strong", "#c0c4b8");
+            context.fillStyle = peakColor;
             context.beginPath();
             context.roundRect(x, centerY - peakHalf, barWidth, 1.5, 0.75);
             context.fill();

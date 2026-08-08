@@ -10,7 +10,15 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        input: resolve(__dirname, "src/main/index.ts"),
+        // Two entries: the main process, and the meeting transcription
+        // worker that utilityProcess.fork loads from out/main/.
+        input: {
+          index: resolve(__dirname, "src/main/index.ts"),
+          "meeting-worker": resolve(
+            __dirname,
+            "src/main/meeting/worker/index.ts"
+          ),
+        },
         // Force CJS. The main process uses `__dirname` for preload and
         // renderer paths, which does not exist in ESM. Pinning CJS keeps
         // the output format deterministic.
@@ -26,12 +34,13 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
-        // One preload per window type. All three are sandboxed and use the
-        // same contextBridge pattern; each window loads its own file.
+        // One preload per window type. All are sandboxed and use the same
+        // contextBridge pattern; each window loads its own file.
         input: {
           main: resolve(__dirname, "src/preload/main.ts"),
           overlay: resolve(__dirname, "src/preload/overlay.ts"),
           recorder: resolve(__dirname, "src/preload/recorder.ts"),
+          meeting: resolve(__dirname, "src/preload/meeting.ts"),
         },
         output: {
           format: "cjs",
@@ -54,12 +63,13 @@ export default defineConfig({
       // cannot load data: URLs. Force every asset to a real file.
       assetsInlineLimit: 0,
       rollupOptions: {
-        // Multi-page Vite build. Three windows, three entries. Output lands
+        // Multi-page Vite build. Four windows, four entries. Output lands
         // at out/renderer/<name>/index.html and is loaded by each window.
         input: {
           main: resolve(rendererRoot, "main/index.html"),
           overlay: resolve(rendererRoot, "overlay/index.html"),
           recorder: resolve(rendererRoot, "recorder/index.html"),
+          meeting: resolve(rendererRoot, "meeting/index.html"),
         },
       },
     },

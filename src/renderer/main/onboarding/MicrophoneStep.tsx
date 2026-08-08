@@ -37,9 +37,16 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
   }, [api, onReady]);
 
   useEffect(() => {
-    return api.onCaptureLevelsChanged(({ level: next }) => {
+    // First run asks the user to confirm their microphone works, so the
+    // meter must be live before any capture has happened.
+    const releaseLevels = api.requestCaptureLevels();
+    const unsubscribe = api.onCaptureLevelsChanged(({ level: next }) => {
       setLevel((current) => Math.max(current * 0.6, next * 0.4));
     });
+    return () => {
+      unsubscribe();
+      releaseLevels();
+    };
   }, [api]);
 
   const current = devices.find((device) => device.deviceId === currentId) ?? devices[0];

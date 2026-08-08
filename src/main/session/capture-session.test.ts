@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CaptureState } from "../../shared/capture";
+import type { PasteOutcome } from "../platform/win32/paste";
 import type { CaptureAudio, CaptureAudioSource } from "./audio-source";
 import {
   DEFAULT_CAPTURE_OPTIONS,
@@ -17,6 +18,7 @@ const stubSource = (overrides: Partial<CaptureAudioSource> = {}): CaptureAudioSo
       durationMs: 100,
       sampleRate: 16_000,
     }),
+  discardCapture: () => {},
   isLive: () => true,
   ...overrides,
 });
@@ -113,6 +115,95 @@ describe("capture session", () => {
 
     expect(session.state.phase).toBe("idle");
     expect(history.map((s) => s.phase)).toEqual(["arming", "listening", "idle"]);
+  });
+
+  it("discards the worklet buffer on a sub-minimum tap", () => {
+    const discardCapture = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      source: stubSource({ discardCapture }),
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(100);
+    session.stop();
+
+    expect(discardCapture).toHaveBeenCalledOnce();
+  });
+
+  it("discards the worklet buffer on cancel", () => {
+    const discardCapture = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      source: stubSource({ discardCapture }),
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    session.cancel();
+
+    expect(discardCapture).toHaveBeenCalledOnce();
+    expect(session.state.phase).toBe("idle");
+  });
+
+  it("a late paste result does not stamp a newer capture with the same text", async () => {
+    // Two captures producing identical text: without a generation counter the
+    // late result from the first would match the second's delivering state.
+    const meta = {
+      engineId: "mock",
+      modelId: "mock",
+      language: null,
+      inferenceMs: 1,
+      costUsd: null,
+      durationMs: 100,
+    };
+    const pasteGate: { release: ((outcome: PasteOutcome) => void) | null } = {
+      release: null,
+    };
+    let pasteCall = 0;
+    const session = createCaptureSession({
+      ...OPTIONS,
+      source: stubSource(),
+      transcribe: () => Promise.resolve({ text: "same words", meta }),
+      deliver: () => {
+        pasteCall++;
+        if (pasteCall === 1) {
+          return new Promise<PasteOutcome>((resolve) => {
+            pasteGate.release = resolve;
+          });
+        }
+        return Promise.resolve({ inserted: true });
+      },
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(500);
+    session.stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.state.phase).toBe("delivering");
+
+    // Return to idle, then run a second capture with the same transcript.
+    await vi.advanceTimersByTimeAsync(OPTIONS.deliverHoldMs);
+    expect(session.state.phase).toBe("idle");
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(500);
+    session.stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.state.phase).toBe("delivering");
+    const insertedAfterSecond =
+      session.state.phase === "delivering" ? session.state.inserted : null;
+
+    // The first capture's paste finally settles, reporting a failure.
+    pasteGate.release?.({ inserted: false });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const insertedNow =
+      session.state.phase === "delivering" ? session.state.inserted : null;
+    expect(insertedNow).toBe(insertedAfterSecond);
   });
 
   it("cancel during listening returns to idle with no transcript", () => {

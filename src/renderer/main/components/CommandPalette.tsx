@@ -17,6 +17,7 @@ export interface CommandPaletteProps {
 
 const ROUTE_ICONS: Record<Route, string> = {
   dictate: "ph:microphone",
+  meetings: "ph:users-three",
   history: "ph:clock-counter-clockwise",
   dictionary: "ph:book-open-text",
   models: "ph:cube",
@@ -25,6 +26,7 @@ const ROUTE_ICONS: Record<Route, string> = {
 
 const ROUTE_KEYS: Record<Route, MessageKey> = {
   dictate: "nav.dictate",
+  meetings: "nav.meetings",
   history: "nav.history",
   dictionary: "nav.dictionary",
   models: "nav.models",

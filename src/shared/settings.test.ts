@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
   dictionaryFileSchema,
+  meetingSettingsSchema,
   migrateSettings,
   settingsSchema,
   shouldRunOnboarding
 } from "./settings";
 import { DEFAULT_ENGINE_ID, ENGINE_OPTIONS, MOCK_ENGINE_ID } from "./engines";
+import { DEFAULT_MEETING_ACCELERATOR } from "./hotkeys";
 
 /**
  * The migration path matters more than the schema: an existing install has a
@@ -69,6 +71,28 @@ describe("settings migration", () => {
       }
     });
     expect(migrated.post.dictionary[0]?.enabled).toBe(true);
+  });
+
+  it("fills the meeting block for settings written before it existed", () => {
+    const settings = migrateSettings(legacySettings);
+    expect(settings.meeting.includeMicrophone).toBe(true);
+    expect(settings.meeting.accelerator).toBe(DEFAULT_MEETING_ACCELERATOR);
+    expect(settings.meeting.engineId).toBe("parakeet");
+    expect(settings.meeting.diarization).toBe(true);
+    expect(settings.meeting.diarizationRefineOverMs).toBe(6000);
+    expect(settings.meeting.speakerThreshold).toBe(0.55);
+    expect(settings.meeting.maxSpeakers).toBe(0);
+    expect(settings.meeting.archiveAudio).toBe(true);
+    expect(settings.meeting.archiveBitrateKbps).toBe(32);
+    expect(settings.meeting.vadMinSpeechMs).toBe(250);
+    expect(settings.meeting.vadMinSilenceMs).toBe(500);
+    expect(settings.meeting.vadMaxSpeechMs).toBe(20_000);
+    expect(settings.meeting.autoStopSilentMinutes).toBe(0);
+    expect(settings.meeting.retentionDays).toBe(0);
+  });
+
+  it("rejects a cloud engine for meetings", () => {
+    expect(meetingSettingsSchema.safeParse({ engineId: "openrouter" }).success).toBe(false);
   });
 });
 

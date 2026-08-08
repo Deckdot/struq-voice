@@ -47,6 +47,10 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
   let paused = false;
   let escapeRegistered = false;
   let escapeHandler: (() => void) | null = null;
+  // The cancel handler the session asked for, kept across a pause. Escape is
+  // registered only during a capture, so pausing mid-capture and resuming has
+  // to put it back: without this, cancel is dead until the next capture.
+  let wantedEscapeHandler: (() => void) | null = null;
 
   const setPaused = (next: boolean): void => {
     paused = next;
@@ -54,12 +58,17 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       pttHook.stop();
       unregisterToggleShortcut();
       unregisterMeetingShortcut();
+      const wanted = wantedEscapeHandler;
       unregisterEscape();
+      wantedEscapeHandler = wanted;
     } else {
       if (!input.e2e) {
         pttHook.start();
         registerToggleShortcut(input.onToggle);
         registerMeetingShortcut(input.onMeetingToggle);
+        if (wantedEscapeHandler !== null) {
+          registerEscape(wantedEscapeHandler);
+        }
       }
     }
   };
@@ -80,6 +89,8 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
   };
 
   const registerEscape = (onEscape: () => void): void => {
+    // Remembered even while paused, so resuming can restore it.
+    wantedEscapeHandler = onEscape;
     if (input.e2e || paused) return;
     if (escapeRegistered) {
       escapeHandler = onEscape;
@@ -102,6 +113,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       escapeRegistered = false;
     }
     escapeHandler = null;
+    wantedEscapeHandler = null;
   };
 
   return {

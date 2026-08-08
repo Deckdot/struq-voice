@@ -312,9 +312,18 @@ if (!gotLock) {
 
     const modelsRoot = join(app.getPath("userData"), "models");
     const meetingsRoot = join(app.getPath("userData"), "meetings");
+    // Packaged builds ship the meeting models beside the app, so Meetings
+    // works on a fresh install with nothing to download. In a dev checkout
+    // they come from the repo's resources/ if vendored, and otherwise the
+    // service falls back to fetching them into userData.
     const meetingAssets = createMeetingAssetService(
       join(app.getPath("userData"), "meeting-assets"),
-      { fetch: netFetch }
+      {
+        fetch: netFetch,
+        bundledRoot: app.isPackaged
+          ? join(process.resourcesPath, "meeting-assets")
+          : join(app.getAppPath(), "resources", "meeting-assets")
+      }
     );
     const meetings = createMeetingSession({
       settings: () => settingsStore.get().meeting,

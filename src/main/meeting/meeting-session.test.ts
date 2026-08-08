@@ -215,6 +215,34 @@ describe("meeting session", () => {
     expect(states.some((state) => state.phase === "recording")).toBe(true);
   });
 
+  it("triggers the capture gesture without depending on the begin message arriving first", async () => {
+    // The begin message and the gesture call are separate trips to the
+    // renderer. The renderer defines its bridge at init precisely so the
+    // gesture cannot land on an undefined function, which used to throw here
+    // and abort the start as loopback-unavailable, leaving a 0s meeting.
+    const { session, window } = makeSession();
+
+    const outcome = await session.start();
+
+    expect(outcome.ok).toBe(true);
+    const script = window.webContents.executeJavaScript.mock.calls[0]?.[0] as string;
+    // Optional call: a renderer that has not finished wiring up must not throw.
+    expect(script).toContain("__struqBeginMeetingAudio?.()");
+    // And it must be sent with the user-gesture flag, or getDisplayMedia is
+    // refused for want of transient activation.
+    expect(window.webContents.executeJavaScript.mock.calls[0]?.[1]).toBe(true);
+  });
+
+  it("fails the start honestly when the capture gesture throws", async () => {
+    const { session, window } = makeSession();
+    window.webContents.executeJavaScript.mockRejectedValueOnce(new Error("no such function"));
+
+    const outcome = await session.start();
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.code).toBe("loopback-unavailable");
+  });
+
   it("stores segments from worker events and broadcasts them", async () => {
     const { session, store, worker } = makeSession();
     const seen: unknown[] = [];

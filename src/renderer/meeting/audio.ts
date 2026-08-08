@@ -41,6 +41,14 @@ let stopResolve: (() => void) | null = null;
 let stopTimer: ReturnType<typeof setTimeout> | null = null;
 let api: MeetingWindowApi | null = null;
 let paused = false;
+/**
+ * Whether main has called the gesture bridge yet. The begin request and the
+ * gesture call are two separate trips from main and can land in either order,
+ * so whichever arrives second starts the capture.
+ */
+let gestureSeen = false;
+/** Guards the window between entering begin() and the context being set. */
+let starting = false;
 
 declare global {
   interface Window {
@@ -50,11 +58,20 @@ declare global {
 
 export const initMeetingAudio = (windowApi: MeetingWindowApi): void => {
   api = windowApi;
+  // Defined at init, not inside onBegin. Main sends meeting-audio:begin and
+  // then immediately calls this over executeJavaScript to borrow the user
+  // gesture getDisplayMedia needs. Those are two separate trips, and the send
+  // does not have to arrive first: defining the function only once the message
+  // landed made the call throw whenever it lost the race, which aborted the
+  // start as loopback-unavailable and left a 0s meeting behind.
+  window.__struqBeginMeetingAudio = () => {
+    void begin();
+  };
   windowApi.onBegin((request) => {
     beginRequest = request;
-    window.__struqBeginMeetingAudio = () => {
-      void begin();
-    };
+    // The gesture call may already have run and found no request to act on.
+    // Begin now if so; begin() is guarded against running twice.
+    if (gestureSeen) void begin();
   });
   windowApi.onStop(() => {
     stopAll();
@@ -192,11 +209,18 @@ const attachLane = (lane: Lane, stream: MediaStream): void => {
 };
 
 const begin = async (): Promise<void> => {
+  gestureSeen = true;
   const request = beginRequest;
-  if (request === null || context !== null) return;
+  // Called by the gesture bridge before the begin request landed. onBegin
+  // starts the capture when it arrives.
+  if (request === null || context !== null || starting) return;
+  starting = true;
 
   const system = await acquireSystem();
-  if (system === null) return;
+  if (system === null) {
+    starting = false;
+    return;
+  }
 
   const audioContext = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
   try {
@@ -204,6 +228,7 @@ const begin = async (): Promise<void> => {
   } catch (error) {
     // The system stream is live and the context is half-built: release both
     // instead of orphaning them until GC.
+    starting = false;
     system.getTracks().forEach((track) => {
       track.stop();
     });
@@ -211,6 +236,7 @@ const begin = async (): Promise<void> => {
     throw error;
   }
   context = audioContext;
+  starting = false;
 
   const archiveSink = audioContext.createMediaStreamDestination();
   const systemSource = audioContext.createMediaStreamSource(system);

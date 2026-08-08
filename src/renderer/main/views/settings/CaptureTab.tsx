@@ -14,6 +14,7 @@ import {
   Switch
 } from "../../components/ui";
 import { MicrophoneMeter } from "../../components/MicrophoneMeter";
+import { micLevelToBar, smoothMicLevel } from "../../lib/mic-level";
 
 import { useTranslation } from "../../lib/useTranslation";
 
@@ -45,7 +46,7 @@ export function CaptureTab({
     // it has to ask main to keep the analyser loop running.
     const releaseLevels = api.requestCaptureLevels();
     const unsubscribe = api.onCaptureLevelsChanged(({ level: next }) => {
-      setLevel((current) => Math.max(current * 0.6, next * 0.4));
+      setLevel((current) => smoothMicLevel(current, micLevelToBar(next)));
     });
     return () => {
       unsubscribe();
@@ -54,7 +55,9 @@ export function CaptureTab({
   }, [api]);
 
   const meterValue = Math.min(100, Math.max(0, Math.round(level * 100)));
-  const signalDetected = meterValue >= 3;
+  // On the dB scale a quiet room still reads a few percent, so the threshold
+  // is set above room tone rather than just above zero.
+  const signalDetected = meterValue >= 20;
 
   return (
     <div className="flex flex-col gap-6">

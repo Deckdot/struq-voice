@@ -1,6 +1,6 @@
 appId: com.struq.voice
 productName: Struq Voice
-copyright: Copyright (c) 2026 Struq
+copyright: Copyright (c) 2026 Roy Heilbron
 # Windows Task Manager uses the executable's FileDescription as its process
 # label. Keep the longer package description for repository metadata, but make
 # the installed application identify itself by its product name.

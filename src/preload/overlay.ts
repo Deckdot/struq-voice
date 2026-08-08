@@ -2,7 +2,12 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { IpcRendererEvent } from "electron";
 import type { OverlayWindowApi } from "../shared/api";
 import type { CaptureState } from "../shared/capture";
-import type { CaptureStateChangedEvent, PreloadChannels } from "../shared/ipc";
+import type {
+  CaptureStateChangedEvent,
+  MeetingLevelsEvent,
+  PreloadChannels
+} from "../shared/ipc";
+import type { MeetingState } from "../shared/meeting";
 
 /**
  * Sandboxed preloads cannot load shared modules (the bundle must be one
@@ -49,6 +54,8 @@ type CaptureStateListener = (
 
 let latestCaptureState: CaptureStateChangedEvent | null = null;
 const captureStateListeners = new Set<CaptureStateListener>();
+const meetingStateListeners = new Set<(state: MeetingState) => void>();
+let latestMeetingState: MeetingState | null = null;
 
 // The main process replays the current state on did-finish-load, before React
 // effects are guaranteed to subscribe. Listen from preload startup and retain
@@ -59,6 +66,16 @@ ipcRenderer.on(
     latestCaptureState = payload;
     for (const listener of captureStateListeners) {
       listener(payload.state, payload.liveTranscription ?? false);
+    }
+  }
+);
+
+ipcRenderer.on(
+  channels.meeting.stateChanged,
+  (_event: IpcRendererEvent, state: MeetingState): void => {
+    latestMeetingState = state;
+    for (const listener of meetingStateListeners) {
+      listener(state);
     }
   }
 );
@@ -106,6 +123,27 @@ const api: OverlayWindowApi = {
     ipcRenderer.on(channels.capturePartialTranscript, wrapped);
     return () => {
       ipcRenderer.removeListener(channels.capturePartialTranscript, wrapped);
+    };
+  },
+  onMeetingStateChanged: (listener: (state: MeetingState) => void) => {
+    meetingStateListeners.add(listener);
+    if (latestMeetingState !== null) {
+      listener(latestMeetingState);
+    }
+    return () => {
+      meetingStateListeners.delete(listener);
+    };
+  },
+  onMeetingLevels: (listener: (event: MeetingLevelsEvent) => void) => {
+    const wrapped = (
+      _event: IpcRendererEvent,
+      payload: MeetingLevelsEvent
+    ): void => {
+      listener(payload);
+    };
+    ipcRenderer.on(channels.meeting.levels, wrapped);
+    return () => {
+      ipcRenderer.removeListener(channels.meeting.levels, wrapped);
     };
   },
   // Explicit numbers, never the caller's arguments: anything non-cloneable

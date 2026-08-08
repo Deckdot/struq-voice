@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const handlers = new Map<string, () => void>();
 let menuTemplate: unknown[] = [];
+const shownImages: string[] = [];
 
 vi.mock("electron", () => {
   class FakeTray {
@@ -23,8 +24,8 @@ vi.mock("electron", () => {
     setToolTip(): void {
       /* no-op */
     }
-    setImage(): void {
-      /* no-op */
+    setImage(image: { readonly path: string }): void {
+      shownImages.push(image.path);
     }
     displayBalloon(): void {
       /* no-op */
@@ -53,7 +54,7 @@ vi.mock("electron", () => {
       }
     },
     nativeImage: {
-      createFromPath: () => ({ isEmpty: () => true })
+      createFromPath: (path: string) => ({ path, isEmpty: () => false })
     }
   };
 });
@@ -86,6 +87,7 @@ const setup = (): {
 
 beforeEach(() => {
   handlers.clear();
+  shownImages.length = 0;
 });
 
 describe("tray click", () => {
@@ -147,5 +149,39 @@ describe("tray click", () => {
 
     controller.setMeetingState({ phase: "idle" });
     expect(meetingItem()?.label).toBe("Start Meeting");
+  });
+
+  it("animates the tray icon while a meeting records", () => {
+    vi.useFakeTimers();
+    try {
+      const controller = createTray({
+        onToggleCapture: () => undefined,
+        onToggleMeeting: () => undefined,
+        onOpenMainWindow: () => undefined,
+        onSetHotkeysPaused: () => undefined,
+        onQuit: () => undefined,
+        onCopyTranscript: () => undefined,
+        engineDisplayName: () => "Mock"
+      });
+
+      controller.setMeetingState({
+        phase: "recording",
+        meetingId: 1,
+        startedAtMs: 1000,
+        system: { live: true },
+        microphone: { live: true },
+        backlogSeconds: 0,
+        segmentCount: 0,
+        speakerCount: 1
+      });
+      vi.advanceTimersByTime(100);
+
+      expect(shownImages.some((path) => path.includes("recording-frame-"))).toBe(true);
+
+      controller.setMeetingState({ phase: "idle" });
+      expect(shownImages.at(-1)).toContain("idle.png");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OverlayWindowApi } from "../shared/api";
 import type { CaptureStateChangedEvent } from "../shared/ipc";
 import { PRELOAD_CHANNELS } from "../shared/ipc";
+import type { MeetingState } from "../shared/meeting";
 
-type IpcListener = (event: unknown, payload: CaptureStateChangedEvent) => void;
+type IpcListener = (event: unknown, payload: never) => void;
 
 const ipcListeners = new Map<string, Set<IpcListener>>();
 const exposed: { api?: OverlayWindowApi } = {};
@@ -29,7 +30,19 @@ vi.mock("electron", () => ({
 
 const emitState = (payload: CaptureStateChangedEvent): void => {
   for (const listener of ipcListeners.get(PRELOAD_CHANNELS.captureStateChanged) ?? []) {
-    listener({}, payload);
+    listener({}, payload as never);
+  }
+};
+
+const emitMeetingState = (payload: MeetingState): void => {
+  for (const listener of ipcListeners.get(PRELOAD_CHANNELS.meeting.stateChanged) ?? []) {
+    listener({}, payload as never);
+  }
+};
+
+const emitMeetingLevels = (payload: { system: number; microphone: number }): void => {
+  for (const listener of ipcListeners.get(PRELOAD_CHANNELS.meeting.levels) ?? []) {
+    listener({}, payload as never);
   }
 };
 
@@ -125,5 +138,40 @@ describe("overlay preload initial theme", () => {
   it("reads light from argv", async () => {
     const api = await loadPreload("--struq-theme=light");
     expect(api.initialTheme).toBe("light");
+  });
+});
+
+describe("overlay preload meeting feedback", () => {
+  it("replays meeting state received before the renderer subscribes", async () => {
+    const api = await loadPreload();
+    const state: MeetingState = {
+      phase: "recording",
+      meetingId: 9,
+      startedAtMs: 1000,
+      system: { live: true },
+      microphone: { live: true },
+      backlogSeconds: 0,
+      segmentCount: 0,
+      speakerCount: 1
+    };
+    emitMeetingState(state);
+
+    const listener = vi.fn();
+    api.onMeetingStateChanged(listener);
+
+    expect(listener).toHaveBeenCalledWith(state);
+  });
+
+  it("forwards live meeting levels and stops after unsubscribe", async () => {
+    const api = await loadPreload();
+    const listener = vi.fn();
+    const unsubscribe = api.onMeetingLevels(listener);
+
+    emitMeetingLevels({ system: 0.4, microphone: 0.2 });
+    unsubscribe();
+    emitMeetingLevels({ system: 0.8, microphone: 0.6 });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ system: 0.4, microphone: 0.2 });
   });
 });

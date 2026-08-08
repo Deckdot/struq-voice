@@ -108,6 +108,37 @@ export const createTray = (input: TrayInput): TrayController => {
     }, 90);
   };
 
+  const setStaticIcon = (name: string): void => {
+    const icon = nativeImage.createFromPath(iconPath(name));
+    if (!icon.isEmpty()) {
+      tray?.setImage(icon);
+    }
+  };
+
+  const refreshIcon = (): void => {
+    const captureRecording = state.phase === "listening" || state.phase === "arming";
+    const meetingRecording =
+      meetingState.phase === "starting" || meetingState.phase === "recording";
+
+    if (captureRecording) {
+      startAnimation();
+      return;
+    }
+
+    stopAnimation();
+    if (state.phase === "transcribing" || state.phase === "delivering") {
+      setStaticIcon("transcribing.png");
+    } else if (meetingRecording) {
+      startAnimation();
+    } else if (meetingState.phase === "finalizing") {
+      setStaticIcon("transcribing.png");
+    } else if (meetingState.phase === "paused") {
+      setStaticIcon("recording.png");
+    } else {
+      setStaticIcon(iconForState(state));
+    }
+  };
+
   const recentSubmenu = (): Electron.MenuItemConstructorOptions[] => {
     if (recentTranscripts.length === 0) {
       return [{ id: "recentEmpty", label: t(currentLocale, "tray.noTranscripts"), enabled: false }];
@@ -174,15 +205,7 @@ export const createTray = (input: TrayInput): TrayController => {
     state = next;
     if (tray === null) return;
 
-    if (state.phase === "listening" || state.phase === "arming") {
-      startAnimation();
-    } else {
-      stopAnimation();
-      const icon = nativeImage.createFromPath(iconPath(iconForState(state)));
-      if (!icon.isEmpty()) {
-        tray.setImage(icon);
-      }
-    }
+    refreshIcon();
 
     const stateStr = t(currentLocale, PHASE_KEY[state.phase]);
     const meetingSuffix = isMeetingActive(meetingState)
@@ -199,6 +222,7 @@ export const createTray = (input: TrayInput): TrayController => {
   const setMeetingState = (next: MeetingState): void => {
     meetingState = next;
     if (tray === null) return;
+    refreshIcon();
     const stateStr = t(currentLocale, PHASE_KEY[state.phase]);
     const meetingSuffix = isMeetingActive(meetingState)
       ? ` ${t(currentLocale, "tray.phase.meeting")}`

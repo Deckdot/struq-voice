@@ -668,6 +668,7 @@ if (!gotLock) {
           window.webContents.send(meetingStateChangedChannel, state);
         }
       }
+      overlay?.updateMeeting(state);
     });
 
     settingsStore.subscribe((latest) => {

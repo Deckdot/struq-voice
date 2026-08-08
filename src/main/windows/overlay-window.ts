@@ -29,7 +29,14 @@ import { join } from "node:path";
 import type { CaptureState } from "../../shared/capture";
 import { isActiveCapture } from "../../shared/capture";
 import type { CaptureStateChangedEvent } from "../../shared/ipc";
-import { captureStateChangedChannel, PRELOAD_CHANNELS } from "../../shared/ipc";
+import {
+  captureStateChangedChannel,
+  meetingStateChangedChannel,
+  PRELOAD_CHANNELS
+} from "../../shared/ipc";
+import type { MeetingState } from "../../shared/meeting";
+import { INITIAL_MEETING_STATE, isMeetingActive } from "../../shared/meeting";
+import { t } from "../../shared/i18n";
 import type { OverlayPosition, Rect } from "../../shared/overlay-position";
 import {
   clampToWorkArea,
@@ -47,6 +54,7 @@ import {
 export const OVERLAY_WIDTH = 280;
 export const OVERLAY_HEIGHT_COMPACT = 48;
 export const OVERLAY_HEIGHT_TRANSCRIPT = 150;
+export const OVERLAY_HEIGHT_MEETING = 96;
 
 export const overlayHeight = (liveTranscription: boolean): number =>
   liveTranscription ? OVERLAY_HEIGHT_TRANSCRIPT : OVERLAY_HEIGHT_COMPACT;
@@ -77,6 +85,8 @@ export interface OverlayWindowOptions {
 export interface OverlayWindowController {
   /** Reflect a capture state: show the panel for active states, hide for idle. */
   update: (state: CaptureState) => void;
+  /** Reflect meeting state in the same non-focusable feedback panel. */
+  updateMeeting: (state: MeetingState) => void;
   /** The live overlay window, or null before first use or after failure. */
   getWindow: () => BrowserWindow | null;
   /** Move the panel to a screen position, clamped to a visible display. */
@@ -99,6 +109,7 @@ let overlayWindow: BrowserWindow | null = null;
  */
 let lastState: CaptureState = { phase: "idle" };
 let lastLiveTranscription = false;
+let lastMeetingState: MeetingState = INITIAL_MEETING_STATE;
 
 /**
  * Where the user last dragged the panel. Held in memory and pushed to the
@@ -171,6 +182,7 @@ const createOverlayWindow = (height: number, locale = "en", dir = "ltr"): Browse
       liveTranscription: lastLiveTranscription
     };
     window.webContents.send(captureStateChangedChannel, payload);
+    window.webContents.send(meetingStateChangedChannel, lastMeetingState);
   });
 
   const rendererUrl = process.env["ELECTRON_RENDERER_URL"];
@@ -247,14 +259,20 @@ const broadcastState = (state: CaptureState, liveTranscription: boolean): void =
 
 let fallbackNotification: Notification | null = null;
 
-const setFallbackNotification = (active: boolean): void => {
+const setFallbackNotification = (
+  active: boolean,
+  meeting: boolean,
+  locale: string
+): void => {
   if (active) {
     if (fallbackNotification !== null) return;
     try {
-      const notification = new Notification({
-        title: "Struq Voice is listening",
-        body: "Release Ctrl+Space when done."
-      });
+      const notification = meeting
+        ? new Notification({ title: t(locale, "overlay.meetingRecording") })
+        : new Notification({
+            title: "Struq Voice is listening",
+            body: "Release Ctrl+Space when done."
+          });
       notification.show();
       fallbackNotification = notification;
     } catch {
@@ -271,24 +289,52 @@ export const createOverlayWindowController = (
   storedPosition = options.initialPosition ?? null;
   persistPosition = options.onPositionChange ?? null;
 
+  let meetingErrorVisible = false;
+  let meetingErrorTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const syncVisibility = (): void => {
+    const captureActive = isActiveCapture(lastState);
+    const meetingActive = isMeetingActive(lastMeetingState);
+    const height = captureActive
+      ? overlayHeight(lastLiveTranscription)
+      : OVERLAY_HEIGHT_MEETING;
+    const window = ensureOverlayWindow(height, options);
+    const visible = captureActive || meetingActive || meetingErrorVisible;
+    if (window === null) {
+      setFallbackNotification(
+        visible,
+        !captureActive && (meetingActive || meetingErrorVisible),
+        options.locale ?? "en"
+      );
+      return;
+    }
+    if (fallbackNotification !== null) {
+      fallbackNotification = null;
+    }
+    setOverlayVisible(window, visible);
+  };
+
   return {
     update: (state: CaptureState): void => {
       const live = options.isLiveTranscriptionEnabled?.() ?? false;
       broadcastState(state, live);
-
-      const active = isActiveCapture(state);
-      const window = ensureOverlayWindow(overlayHeight(live), options);
-      if (window === null) {
-        // Overlay construction blocked (always-on-top policy). Fall back to a
-        // Notification so the user still has a cross-app signal.
-        setFallbackNotification(active);
-        return;
+      syncVisibility();
+    },
+    updateMeeting: (state: MeetingState): void => {
+      lastMeetingState = state;
+      meetingErrorVisible = state.phase === "error";
+      if (meetingErrorTimer !== null) {
+        clearTimeout(meetingErrorTimer);
+        meetingErrorTimer = null;
       }
-      if (fallbackNotification !== null) {
-        fallbackNotification = null;
+      if (meetingErrorVisible) {
+        meetingErrorTimer = setTimeout(() => {
+          meetingErrorTimer = null;
+          meetingErrorVisible = false;
+          syncVisibility();
+        }, 4000);
       }
-
-      setOverlayVisible(window, active);
+      syncVisibility();
     },
     getWindow: () => overlayWindow,
     moveTo: (x: number, y: number): void => {
@@ -315,6 +361,10 @@ export const createOverlayWindowController = (
       persistPosition?.(next);
     },
     dispose: () => {
+      if (meetingErrorTimer !== null) {
+        clearTimeout(meetingErrorTimer);
+        meetingErrorTimer = null;
+      }
       if (overlayWindow !== null && !overlayWindow.isDestroyed()) {
         overlayWindow.destroy();
       }

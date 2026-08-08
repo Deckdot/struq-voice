@@ -172,6 +172,12 @@ export interface OverlayWindowApi {
       sequence: number;
     }) => void
   ) => () => void;
+  readonly onMeetingStateChanged: (
+    listener: (state: MeetingState) => void
+  ) => () => void;
+  readonly onMeetingLevels: (
+    listener: (event: MeetingLevelsEvent) => void
+  ) => () => void;
   /**
    * Move the panel to absolute screen coordinates. The overlay cannot be
    * dragged by the OS (focusable: false keeps paste delivery working), so the

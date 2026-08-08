@@ -48,6 +48,10 @@ export const en = {
   "overlay.listening": "Listening...",
   "overlay.working": "Working on the transcript...",
   "overlay.errorCopied": "Copied. Press Ctrl + V to paste.",
+  "overlay.meetingStarting": "Starting meeting...",
+  "overlay.meetingRecording": "Meeting recording",
+  "overlay.meetingPaused": "Meeting paused",
+  "overlay.meetingSaving": "Saving meeting...",
 
   // Dictate View
   "dictate.blocker.localMissing.message": "{model} is not on this computer yet.",

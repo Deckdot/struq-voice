@@ -39,6 +39,10 @@ export const de: Partial<Record<MessageKey, unknown>> = {
   "overlay.listening": "Zuhören...",
   "overlay.working": "Transkription wird verarbeitet...",
   "overlay.errorCopied": "Kopiert. Drücken Sie Strg + V zum Einfügen.",
+  "overlay.meetingStarting": "Besprechung wird gestartet...",
+  "overlay.meetingRecording": "Besprechung wird aufgenommen",
+  "overlay.meetingPaused": "Besprechung pausiert",
+  "overlay.meetingSaving": "Besprechung wird gespeichert...",
 
   "dictate.blocker.localMissing.message": "{model} befindet sich noch nicht auf diesem Computer.",
   "dictate.blocker.localMissing.action": "Herunterladen",

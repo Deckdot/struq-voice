@@ -39,6 +39,10 @@ export const ptBR: Partial<Record<MessageKey, unknown>> = {
   "overlay.listening": "Ouvindo...",
   "overlay.working": "Processando a transcrição...",
   "overlay.errorCopied": "Copiado. Pressione Ctrl + V para colar.",
+  "overlay.meetingStarting": "Iniciando reunião...",
+  "overlay.meetingRecording": "Gravando reunião",
+  "overlay.meetingPaused": "Reunião pausada",
+  "overlay.meetingSaving": "Salvando reunião...",
 
   "dictate.blocker.localMissing.message": "{model} ainda não está neste computador.",
   "dictate.blocker.localMissing.action": "Baixar",

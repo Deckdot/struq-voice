@@ -63,6 +63,15 @@ const sendToMainWindow = (channel: string, payload: unknown): void => {
   }
 };
 
+const sendToFeedbackWindows = (channel: string, payload: unknown): void => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    const url = window.webContents.getURL();
+    if (url.includes("main/index.html") || url.includes("overlay/index.html")) {
+      window.webContents.send(channel, payload);
+    }
+  }
+};
+
 /**
  * The audio data plane carries raw PCM straight into the worker, so only the
  * hidden meeting window may speak on it. Any other renderer is refused rather
@@ -242,7 +251,7 @@ export const registerMeetingIpcHandlers = (
 
   ipcMain.on(meetingAudioLevelsChannel, (event, levels) => {
     if (!isMeetingWindow(event.sender)) return;
-    sendToMainWindow(meetingLevelsChannel, levels);
+    sendToFeedbackWindows(meetingLevelsChannel, levels);
   });
 
   assets.subscribe((result) => {

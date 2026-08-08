@@ -178,8 +178,10 @@ as `pnpm test:e2e`).
 ### Platform
 - NSIS one-click per-user installer, app icon, tray icons.
 - Autostart with Windows, hidden to tray; close hides rather than quits.
-- Tray: three icon states, tooltip with engine/state, recent transcripts,
-  capture toggle, engine radio group, pause, quit.
+- Tray: three icon states with live animation for dictation and meetings,
+  tooltip with engine/state, recent transcripts, capture toggle, engine radio
+  group, pause, quit. Starting a meeting also opens the non-focusable floating
+  feedback panel with a timer and live system-audio and microphone meters.
 
 ## Known gaps and deferred work
 

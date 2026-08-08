@@ -131,6 +131,11 @@ const stateEvents = (): { state: { phase: string } }[] =>
     .filter((message) => message.channel === "capture:state-changed")
     .map((message) => message.payload as { state: { phase: string } });
 
+const meetingStateEvents = (): { phase: string }[] =>
+  sent
+    .filter((message) => message.channel === "meeting:state-changed")
+    .map((message) => message.payload as { phase: string });
+
 describe("overlay cold start", () => {
   it("replays the current state once the renderer has loaded", async () => {
     const controller = await freshController({ e2e: true });
@@ -192,5 +197,26 @@ describe("overlay cold start", () => {
     loadHandlers[0]?.();
 
     expect(sent).toHaveLength(0);
+  });
+
+  it("replays an active meeting when the feedback panel loads", async () => {
+    const controller = await freshController({ e2e: true });
+    controller.updateMeeting({
+      phase: "recording",
+      meetingId: 7,
+      startedAtMs: 1000,
+      system: { live: true },
+      microphone: { live: true },
+      backlogSeconds: 0,
+      segmentCount: 0,
+      speakerCount: 1
+    });
+
+    sent.length = 0;
+    loadHandlers[0]?.();
+
+    expect(meetingStateEvents()).toEqual([
+      expect.objectContaining({ phase: "recording" })
+    ]);
   });
 });

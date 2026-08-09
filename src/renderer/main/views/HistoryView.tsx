@@ -95,11 +95,15 @@ const insideTranscriptText = (node: Node | null): boolean => {
  * sit inside transcript text. Collapsed selections and anything else yield
  * null. When a target node is given (right-click), it must also fall inside
  * the selection range, so a right-click elsewhere cannot reopen the popover.
+ * The record id lets the caller re-expand the owning row: the popover's
+ * autofocus can collapse the selection, and a double-click's first click
+ * collapses the row before the word is even selected.
  */
 const readSelectionCandidate = (
   target?: EventTarget | null
 ): {
   readonly text: string;
+  readonly recordId: number;
   readonly x: number;
   readonly y: number;
 } | null => {
@@ -112,10 +116,13 @@ const readSelectionCandidate = (
   if (target !== undefined && (!(target instanceof Node) || !range.intersectsNode(target))) {
     return null;
   }
+  const rowElement = range.startContainer.parentElement?.closest("[data-record-id]");
+  const recordId = Number(rowElement?.getAttribute("data-record-id") ?? NaN);
+  if (!Number.isFinite(recordId)) return null;
   const normalized = normalizeRuleFrom(selection.toString());
   if (normalized === null) return null;
   const rect = range.getBoundingClientRect();
-  return { text: normalized, x: rect.left, y: rect.bottom };
+  return { text: normalized, recordId, x: rect.left, y: rect.bottom };
 };
 
 export function HistoryView(): JSX.Element {
@@ -132,6 +139,7 @@ export function HistoryView(): JSX.Element {
   const [searching, setSearching] = useState(false);
   const [ruleCandidate, setRuleCandidate] = useState<{
     readonly text: string;
+    readonly recordId: number;
     readonly x: number;
     readonly y: number;
   } | null>(null);
@@ -228,6 +236,28 @@ export function HistoryView(): JSX.Element {
   }, [query]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Open the rule popover and guarantee the owning row stays expanded.
+   * Without the second half, the popover's autofocus collapsing the document
+   * selection lets the drag's trailing click toggle the row shut underneath
+   * it, and a double-click's first click collapses before the word is even
+   * selected.
+   */
+  const openRulePopover = (candidate: {
+    readonly text: string;
+    readonly recordId: number;
+    readonly x: number;
+    readonly y: number;
+  }): void => {
+    setRuleCandidate(candidate);
+    setExpanded((current) => {
+      if (current.has(candidate.recordId)) return current;
+      const next = new Set(current);
+      next.add(candidate.recordId);
+      return next;
+    });
+  };
 
   const getItemKey = useCallback(
     (index: number): string | number => entries[index]?.id ?? index,
@@ -384,12 +414,12 @@ export function HistoryView(): JSX.Element {
         onMouseUp={(event) => {
           if (event.button !== 0) return;
           const candidate = readSelectionCandidate();
-          if (candidate !== null) setRuleCandidate(candidate);
+          if (candidate !== null) openRulePopover(candidate);
         }}
         onContextMenu={(event) => {
           event.preventDefault();
           const candidate = readSelectionCandidate(event.target);
-          if (candidate !== null) setRuleCandidate(candidate);
+          if (candidate !== null) openRulePopover(candidate);
         }}
         onScroll={() => {
           setRuleCandidate(null);

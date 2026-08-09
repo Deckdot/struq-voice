@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
 import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { TranscriptRecord } from "../../../../shared/ipc";
@@ -7,6 +7,14 @@ import { cn } from "../../lib/cn";
 import { countWords, formatAbsoluteTime, formatRelativeTime } from "../../lib/format";
 
 const formatSeconds = (durationMs: number): string => `${(durationMs / 1000).toFixed(1)}s`;
+
+/**
+ * A pointer that moved less than this between mousedown and mouseup counts as
+ * a click. A text drag moves further, and its trailing click must not toggle
+ * the row, because the rule popover's autofocus can collapse the document
+ * selection before that click runs, which would defeat a selection check.
+ */
+const DRAG_THRESHOLD_PX = 4;
 
 /**
  * One row in the History list. The transcript text is the dominant element;
@@ -52,9 +60,11 @@ export const TranscriptRow = memo(function TranscriptRow({
     }),
     [record]
   );
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
 
   return (
     <article
+      data-record-id={record.id}
       className={cn(
         "group relative flex items-start gap-3 overflow-hidden rounded-md border bg-surface px-4 py-3",
         "transition-colors duration-hover",
@@ -66,12 +76,22 @@ export const TranscriptRow = memo(function TranscriptRow({
       )}
       <button
         type="button"
-        onClick={() => {
-          // A finished drag-select fires click on the button; do not let it
-          // collapse the row or copy the text.
+        onMouseDown={(event) => {
+          pointerStartRef.current = { x: event.clientX, y: event.clientY };
+        }}
+        onClick={(event) => {
+          // A click that is really a finished drag-select must not collapse
+          // the row: the selection check below can be defeated by the rule
+          // popover's autofocus collapsing the selection first, so the drag
+          // distance is the load-bearing guard.
+          const start = pointerStartRef.current;
+          pointerStartRef.current = null;
+          const dragged =
+            start !== null &&
+            Math.hypot(event.clientX - start.x, event.clientY - start.y) > DRAG_THRESHOLD_PX;
+          if (dragged) return;
           const selection = window.getSelection();
           if (selection !== null && selection.toString().trim().length > 0) return;
-          onCopy(record.id, record.text);
           onToggleExpanded(record.id);
         }}
         aria-expanded={expanded}

@@ -255,9 +255,12 @@
     box-shadow: none !important;
   }
 
+  /* Selected text wears the solid accent, never a tint: a rule candidate is
+     a deliberate, visible act, and a selection that reads as a shadow gets
+     mistaken for nothing. Inverse text keeps the glyphs readable on it. */
   ::selection {
-    background-color: var(--sv-accent-soft);
-    color: var(--sv-text);
+    background-color: var(--sv-accent-solid);
+    color: var(--sv-text-inverse);
   }
 
   /* Sleek custom scrollbars */

@@ -67,6 +67,10 @@ export const TranscriptRow = memo(function TranscriptRow({
       <button
         type="button"
         onClick={() => {
+          // A finished drag-select fires click on the button; do not let it
+          // collapse the row or copy the text.
+          const selection = window.getSelection();
+          if (selection !== null && selection.toString().trim().length > 0) return;
           onCopy(record.id, record.text);
           onToggleExpanded(record.id);
         }}
@@ -79,6 +83,7 @@ export const TranscriptRow = memo(function TranscriptRow({
             expanded ? "whitespace-pre-wrap" : "line-clamp-2"
           )}
           data-selectable={expanded ? "" : undefined}
+          data-transcript-text=""
         >
           {record.text}
         </p>

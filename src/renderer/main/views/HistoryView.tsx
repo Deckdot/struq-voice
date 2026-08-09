@@ -3,11 +3,14 @@ import type { JSX, KeyboardEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, useReducedMotion } from "motion/react";
 import type { MainWindowApi } from "../../../shared/api";
+import { normalizeRuleFrom } from "../../../shared/dictionary";
 import type { TranscriptRecord } from "../../../shared/ipc";
+import { RuleFromSelection } from "../components/RuleFromSelection";
 import { Badge, EmptyState, SearchInput, TranscriptRow } from "../components/ui";
 import { formatDayHeading } from "../lib/format";
 
 import { useTranslation } from "../lib/useTranslation";
+import { useMainStore } from "../store/use-main-store";
 
 const SEARCH_INPUT_ID = "history-search";
 
@@ -72,6 +75,49 @@ const groupRecords = (
 const ROW_HEIGHT = 93;
 const HEADER_HEIGHT = 36;
 
+/**
+ * True when a node sits inside a transcript text element. Selections whose
+ * ends bleed into metadata or other rows must not become rule candidates.
+ */
+const insideTranscriptText = (node: Node | null): boolean => {
+  if (node === null) return false;
+  const element =
+    node.nodeType === Node.TEXT_NODE
+      ? node.parentElement
+      : node.nodeType === Node.ELEMENT_NODE
+        ? (node as Element)
+        : null;
+  return element !== null && element.closest("[data-transcript-text]") !== null;
+};
+
+/**
+ * Turn the current document selection into a rule candidate when both ends
+ * sit inside transcript text. Collapsed selections and anything else yield
+ * null. When a target node is given (right-click), it must also fall inside
+ * the selection range, so a right-click elsewhere cannot reopen the popover.
+ */
+const readSelectionCandidate = (
+  target?: EventTarget | null
+): {
+  readonly text: string;
+  readonly x: number;
+  readonly y: number;
+} | null => {
+  const selection = window.getSelection();
+  if (selection === null || selection.isCollapsed || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!insideTranscriptText(range.startContainer) || !insideTranscriptText(range.endContainer)) {
+    return null;
+  }
+  if (target !== undefined && (!(target instanceof Node) || !range.intersectsNode(target))) {
+    return null;
+  }
+  const normalized = normalizeRuleFrom(selection.toString());
+  if (normalized === null) return null;
+  const rect = range.getBoundingClientRect();
+  return { text: normalized, x: rect.left, y: rect.bottom };
+};
+
 export function HistoryView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const { t } = useTranslation();
@@ -84,7 +130,14 @@ export function HistoryView(): JSX.Element {
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const [resultRevision, setResultRevision] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [ruleCandidate, setRuleCandidate] = useState<{
+    readonly text: string;
+    readonly x: number;
+    readonly y: number;
+  } | null>(null);
+  const pendingFocusRef = useRef<number | null>(null);
   const reducedMotion = useReducedMotion();
+  const historySearch = useMainStore((state) => state.historySearch);
 
   // Stable within a calendar day, so the grouping memo survives every scroll.
   const todayStart = startOfDay(Date.now());
@@ -139,6 +192,18 @@ export function HistoryView(): JSX.Element {
     };
   }, [copyArmed]);
 
+  // The command palette hands over a search intent: apply the query and, when
+  // a specific transcript was picked, remember its id until the search lands.
+  // Reactive rather than mount-only, so a pick made while already on History
+  // is consumed immediately instead of replaying on the next mount.
+  useEffect(() => {
+    if (historySearch === null) return;
+    setQuery(historySearch.query);
+    document.getElementById(SEARCH_INPUT_ID)?.focus();
+    if (historySearch.focusId !== null) pendingFocusRef.current = historySearch.focusId;
+    useMainStore.getState().consumeHistorySearch();
+  }, [historySearch]);
+
   // Escape clears the query rather than only blurring, because a stale filter
   // is the reason a list looks empty. Ctrl+F belongs to the global search.
   useEffect(() => {
@@ -146,6 +211,12 @@ export function HistoryView(): JSX.Element {
     // DOM one has to be named explicitly here.
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
       if (event.key === "Escape" && query.length > 0) {
+        const target = event.target;
+        if (target instanceof Element) {
+          const insideTransientSurface =
+            target.closest("[cmdk-root]") !== null || target.closest("[data-rule-popover]") !== null;
+          if (insideTransientSurface) return;
+        }
         event.preventDefault();
         setQuery("");
       }
@@ -174,6 +245,28 @@ export function HistoryView(): JSX.Element {
     estimateSize,
     overscan: 6
   });
+
+  // Once the searched records are loaded, jump to the palette-picked
+  // transcript: expand it, focus its row and centre it in the viewport.
+  useEffect(() => {
+    const focusId = pendingFocusRef.current;
+    if (focusId === null) return;
+    if (loading) return;
+    const index = entries.findIndex(
+      (entry) => entry.kind === "row" && entry.record.id === focusId
+    );
+    if (index >= 0) {
+      setExpanded((current) => {
+        if (current.has(focusId)) return current;
+        const next = new Set(current);
+        next.add(focusId);
+        return next;
+      });
+      setFocusedIndex(index);
+      rowVirtualizer.scrollToIndex(index, { align: "center" });
+    }
+    pendingFocusRef.current = null;
+  }, [records, entries, loading, rowVirtualizer]);
 
   // Find the first row index so key navigation lands on a row, not a header.
   const rowIndices = useMemo(() => {
@@ -264,6 +357,14 @@ export function HistoryView(): JSX.Element {
           placeholder={t("history.searchPlaceholder")}
           clearLabel={t("search.clear")}
           className="w-[280px]"
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && query.trim().length > 0) {
+              event.preventDefault();
+              rowVirtualizer.scrollToIndex(firstRowIndex, { align: "auto" });
+              setFocusedIndex(firstRowIndex);
+              scrollRef.current?.focus();
+            }
+          }}
         />
         {!loading && records.length > 0 && (
           <Badge tone="neutral" className="h-7 whitespace-nowrap font-normal tabular-nums">
@@ -280,6 +381,19 @@ export function HistoryView(): JSX.Element {
         role="list"
         aria-label="Transcripts"
         aria-busy={searching}
+        onMouseUp={(event) => {
+          if (event.button !== 0) return;
+          const candidate = readSelectionCandidate();
+          if (candidate !== null) setRuleCandidate(candidate);
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          const candidate = readSelectionCandidate(event.target);
+          if (candidate !== null) setRuleCandidate(candidate);
+        }}
+        onScroll={() => {
+          setRuleCandidate(null);
+        }}
       >
         {loading && <p className="px-4 py-6 text-sm text-text-muted">{t("history.loading")}</p>}
 
@@ -370,6 +484,17 @@ export function HistoryView(): JSX.Element {
           </motion.div>
         )}
       </div>
+
+      {ruleCandidate !== null && (
+        <RuleFromSelection
+          text={ruleCandidate.text}
+          anchorX={ruleCandidate.x}
+          anchorY={ruleCandidate.y}
+          onClose={() => {
+            setRuleCandidate(null);
+          }}
+        />
+      )}
     </div>
   );
 }

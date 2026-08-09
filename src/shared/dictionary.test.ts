@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { DictionaryRule } from "./dictionary";
 import {
+  MAX_RULE_FROM_LENGTH,
   applyDictionary,
   buildRulePattern,
   countRuleHits,
   escapeRegExp,
-  findRuleMatches
+  findRuleByFrom,
+  findRuleMatches,
+  normalizeRuleFrom,
+  upsertRule
 } from "./dictionary";
 
 describe("dictionary matching primitives", () => {
@@ -128,5 +132,121 @@ describe("dictionary matching primitives", () => {
     // Note: $1 in replace string resolves to capture group if present or empty string if not bounded
     const pattern = buildRulePattern(rule);
     expect("cost".replace(pattern, rule.to)).toBe("$100");
+  });
+});
+
+describe("dictionary rule editing helpers", () => {
+  const makeRule = (from: string, to = "replacement"): DictionaryRule => ({
+    from,
+    to,
+    matchCase: false,
+    wholeWord: true,
+    enabled: true
+  });
+
+  describe("normalizeRuleFrom", () => {
+    it("passes plain text through unchanged", () => {
+      expect(normalizeRuleFrom("hello world")).toBe("hello world");
+    });
+
+    it("trims leading and trailing whitespace", () => {
+      expect(normalizeRuleFrom("  hello world  ")).toBe("hello world");
+    });
+
+    it("collapses newlines to a single space", () => {
+      expect(normalizeRuleFrom("hello\n\nworld")).toBe("hello world");
+    });
+
+    it("collapses tabs to a single space", () => {
+      expect(normalizeRuleFrom("hello\t\tworld")).toBe("hello world");
+    });
+
+    it("collapses mixed whitespace runs to a single space", () => {
+      expect(normalizeRuleFrom("hello \n\t world")).toBe("hello world");
+    });
+
+    it("returns null for empty input", () => {
+      expect(normalizeRuleFrom("")).toBeNull();
+    });
+
+    it("returns null for whitespace-only input", () => {
+      expect(normalizeRuleFrom("  \t\n  ")).toBeNull();
+    });
+
+    it("returns null when longer than MAX_RULE_FROM_LENGTH", () => {
+      expect(normalizeRuleFrom("x".repeat(MAX_RULE_FROM_LENGTH + 1))).toBeNull();
+    });
+
+    it("accepts text exactly at MAX_RULE_FROM_LENGTH", () => {
+      const text = "x".repeat(MAX_RULE_FROM_LENGTH);
+      expect(normalizeRuleFrom(text)).toBe(text);
+    });
+  });
+
+  describe("findRuleByFrom", () => {
+    it("finds an existing rule by from", () => {
+      const rules = [makeRule("alpha"), makeRule("beta")];
+      expect(findRuleByFrom(rules, "beta")).toBe(rules[1]);
+    });
+
+    it("returns undefined when the from is absent", () => {
+      const rules = [makeRule("alpha")];
+      expect(findRuleByFrom(rules, "omega")).toBeUndefined();
+    });
+
+    it("matches case-insensitively", () => {
+      const rules = [makeRule("Struq")];
+      expect(findRuleByFrom(rules, "struq")).toBe(rules[0]);
+    });
+
+    it("returns undefined for an empty rules array", () => {
+      expect(findRuleByFrom([], "anything")).toBeUndefined();
+    });
+  });
+
+  describe("upsertRule", () => {
+    it("appends when no rule matches and reports updated false", () => {
+      const rules = [makeRule("alpha")];
+      const added = makeRule("beta", "B");
+      const { rules: next, updated } = upsertRule(rules, added);
+      expect(updated).toBe(false);
+      expect(next).toEqual([makeRule("alpha"), added]);
+    });
+
+    it("replaces the matching rule in place and reports updated true", () => {
+      const rules = [makeRule("alpha"), makeRule("Struq"), makeRule("omega")];
+      const replacement = makeRule("struq", "written");
+      const { rules: next, updated } = upsertRule(rules, replacement);
+      expect(updated).toBe(true);
+      expect(next).toHaveLength(3);
+      expect(next[1]).toBe(replacement);
+      expect(next.map((rule) => rule.from)).toEqual(["alpha", "struq", "omega"]);
+    });
+
+    it("reports updated true only when a match exists", () => {
+      expect(upsertRule([], makeRule("alpha")).updated).toBe(false);
+      expect(upsertRule([makeRule("Alpha")], makeRule("alpha")).updated).toBe(true);
+    });
+
+    it("does not mutate the input array", () => {
+      const rules = [makeRule("alpha"), makeRule("Struq")];
+      const before = [...rules];
+      upsertRule(rules, makeRule("struq", "written"));
+      expect(rules).toEqual(before);
+    });
+
+    it("returns a new array rather than mutating in place", () => {
+      const rules = [makeRule("alpha")];
+      const { rules: next } = upsertRule(rules, makeRule("alpha", "A"));
+      expect(next).not.toBe(rules);
+    });
+
+    it("preserves the position of the replaced rule", () => {
+      const rules = [makeRule("alpha"), makeRule("Struq"), makeRule("omega")];
+      const { rules: next } = upsertRule(rules, makeRule("struq", "written"));
+      expect(next[1]?.to).toBe("written");
+      expect(next[0]).toBe(rules[0]);
+      expect(next[2]).toBe(rules[2]);
+    });
   });
 });

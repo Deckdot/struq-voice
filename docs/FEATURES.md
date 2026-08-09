@@ -114,7 +114,9 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
 - Application shell: branded custom title bar, left navigation rail with
   Dictate, Meetings, History, Dictionary, and Models at the top, Settings pinned at the bottom,
   and a flexible content region. Ctrl+1..6 jumps between
-  pages, Ctrl+F or the title-bar search button opens global search, Esc closes
+  pages, Ctrl+F or the title-bar search button opens global search (input
+  autofocused, live transcript results, Enter lands in History pre-filtered
+  and scrolled to the picked record), Esc closes
   any overlay.
   First paint reveals via a two-sheet curtain with trailing soft accent band.
 - Shared component layer in `src/renderer/main/components/ui/`: the
@@ -132,7 +134,11 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   chart with a weighted draw-in sweep.
 - History is a virtualized list grouped by day (Today, Yesterday, then
   weekday + date), with a search field, copy and a two-step delete per
-  row. Roving tabindex, Enter to copy, Delete to remove. Highly optimized
+  row. Selecting a misheard phrase in an expanded transcript opens a
+  one-step rule popover: the selection is the "heard as" side, only the
+  replacement is typed, and an existing rule for the same phrase is
+  updated in place instead of duplicated. Roving tabindex, Enter to copy,
+  Delete to remove. Highly optimized
   scroll performance with memoized grouping and static Intl formatters.
 - Dictionary is a dedicated view for correction rules: add/edit rules,
   matchCase and wholeWord toggles, rule enable/disable switches, a live

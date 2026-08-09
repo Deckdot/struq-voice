@@ -30,10 +30,11 @@ Implemented on 2026-08-09:
   guidance.
 - Public GitHub metadata, discovery topics, Issues, private vulnerability
   reporting, and v0.5.0 release guidance. Projects and Wiki are disabled.
+- All implementation commits pushed to public `main`, with the Windows CI
+  workflow green.
 
 Remaining launch gates:
 
-- Push the implementation commits and confirm the Windows CI workflow is green.
 - Run one meeting on real Windows 10 hardware when a tester is available. The
   unverified loopback path now fails clearly and does not affect dictation.
 

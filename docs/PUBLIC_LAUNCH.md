@@ -68,8 +68,8 @@ release tags that the update channel depends on.
 
 ### The "Windows 11 only" claim is not enforced by anything
 
-`AGENTS.md`, the README badge, and `docs/IMPLEMENTATION_PLAN.md` all state
-Windows 11 x64 only. There is **no Windows version check anywhere** in `src/`
+`AGENTS.md`, the README badge, and the since-retired
+`docs/IMPLEMENTATION_PLAN.md` all state Windows 11 x64 only. There is **no Windows version check anywhere** in `src/`
 or `scripts/`. The only `process.platform` uses are win32/darwin branches in
 `src/main/index.ts`, not version gates.
 
@@ -211,6 +211,7 @@ The claim changes in exactly these places, found by a repository-wide sweep:
 | `.claude/skills/project-context/SKILL.md` | 9 | same sentence |
 | `docs/IMPLEMENTATION_PLAN.md` | 8 | "Windows 11 x64. Sole supported platform for v1." |
 | `docs/PLAN-meetings.md` | 2542 | "The product is Windows 11 x64 anyway." |
+| | | *(both plan docs were retired after launch; the rows are kept because this is a record of what was audited, not a live index)* |
 | `scripts/generate-readme-art.mjs` | 140 | `<dd>Windows 11 x64</dd>` |
 
 New wording: **Windows 10 and 11, 64-bit.** State 64-bit explicitly, because

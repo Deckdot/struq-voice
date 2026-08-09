@@ -14,6 +14,8 @@
     "brand:generate": "node scripts/generate-brand-assets.mjs && node scripts/generate-tray-icons.mjs",
     "docs:art": "node scripts/generate-readme-art.mjs",
     "docs:shots": "node scripts/capture-screenshots.mjs",
+    "skills:sync": "node scripts/sync-skills.mjs",
+    "skills:check": "node scripts/sync-skills.mjs --check",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint .",
     "format": "prettier --write .",

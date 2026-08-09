@@ -492,6 +492,76 @@ describe("meeting session", () => {
     });
   });
 
+  // dispose runs from will-quit, including the quit that quitAndInstall
+  // triggers. An exception escaping it reaches Electron as a JavaScript error
+  // dialog, which on the update path replaces the install with a crash.
+  describe("dispose", () => {
+    it("kills the worker even when destroying the window throws", () => {
+      const window = makeWindow();
+      window.destroy = vi.fn(() => {
+        throw new Error("Object has been destroyed");
+      });
+      const { session, worker } = makeSession({ window });
+
+      expect(() => {
+        session.dispose();
+      }).not.toThrow();
+      expect(worker.kill).toHaveBeenCalled();
+    });
+
+    it("kills the worker even when the archive refuses to close", () => {
+      const archive = makeArchive();
+      archive.isOpen = () => true;
+      archive.close = vi.fn(() => {
+        throw new Error("archive is already closed");
+      });
+      const { session, worker } = makeSession({ archive });
+
+      expect(() => {
+        session.dispose();
+      }).not.toThrow();
+      expect(worker.kill).toHaveBeenCalled();
+    });
+
+    it("still tears down when the worker itself throws on kill", () => {
+      const worker = makeWorker();
+      worker.kill = vi.fn(() => {
+        throw new Error("child already exited");
+      });
+      const { session, window } = makeSession({ worker });
+
+      expect(() => {
+        session.dispose();
+      }).not.toThrow();
+      expect(window.destroy).toHaveBeenCalled();
+    });
+
+    it("reports each failed step rather than swallowing it", () => {
+      const logError = vi.fn();
+      const window = makeWindow();
+      window.destroy = vi.fn(() => {
+        throw new Error("Object has been destroyed");
+      });
+      const { session } = makeSession({
+        window,
+        deps: { mkdir: () => Promise.resolve(), logError }
+      });
+
+      session.dispose();
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining("destroy the meeting window"),
+        expect.any(Error)
+      );
+    });
+
+    it("is idempotent, so a second quit signal is harmless", () => {
+      const { session, worker } = makeSession();
+      session.dispose();
+      session.dispose();
+      expect(worker.kill).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("forwards archive chunks to the writer", () => {
     const { session } = makeSession();
     const bytes = new ArrayBuffer(8);

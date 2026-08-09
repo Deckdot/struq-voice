@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "electron-vite build && playwright test",
+    "smoke:boot": "electron-vite build && node scripts/boot-smoke.mjs",
     "pack": "electron-vite build && electron-builder --dir",
     "dist": "node scripts/build-installer.mjs",
     "release": "pnpm dist && pnpm release:sign && pnpm release:verify",

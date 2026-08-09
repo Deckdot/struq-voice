@@ -233,7 +233,7 @@ const launchEnv = { ...process.env, STRUQ_VOICE_E2E: "1", STRUQ_VOICE_USERDATA: 
 delete launchEnv["ELECTRON_RUN_AS_NODE"];
 
 const app = await _electron.launch({
-  args: ["--headless", "out/main/index.cjs"],
+  args: ["out/main/index.cjs"],
   cwd: root,
   env: launchEnv
 });

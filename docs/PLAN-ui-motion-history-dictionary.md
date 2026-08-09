@@ -1952,17 +1952,7 @@ Do **not** run `pnpm test:e2e` unprompted; `hook.spec.ts` needs a real
 microphone and real OS focus. If you want boot confidence:
 
 ```bash
-pnpm exec electron-vite build
-STRUQ_VOICE_E2E=1 STRUQ_VOICE_ENGINE=mock \
-  STRUQ_VOICE_USERDATA=$(mktemp -d) \
-  timeout 12 npx electron --headless out/main/index.cjs
-```
-
-then always:
-
-```bash
-taskkill //F //IM electron.exe
-taskkill //F //IM "Struq Voice.exe"
+pnpm smoke:boot
 ```
 
 Before finishing, grep your own diff:

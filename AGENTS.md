@@ -152,18 +152,16 @@ The suite is headless and slow, and `hook.spec.ts` needs a real microphone
 and real OS focus, so it is flaky in isolation. The user runs e2e
 themselves. Do not "fix" the e2e specs without being asked.
 
-A boot smoke (launch headless, confirm no uncaught errors) is a reasonable
+A boot smoke (launch hidden, confirm it stays healthy) is a reasonable
 substitute when you want confidence without the full suite:
 
 ```bash
-pnpm exec electron-vite build
-STRUQ_VOICE_E2E=1 STRUQ_VOICE_ENGINE=mock \
-  STRUQ_VOICE_USERDATA=$(mktemp -d) \
-  timeout 12 npx electron --headless out/main/index.cjs
+pnpm smoke:boot
 ```
 
-Always kill stray processes afterwards:
-`taskkill //F //IM electron.exe` and `taskkill //F //IM "Struq Voice.exe"`.
+The script uses isolated user data, hides the window, kills only the process
+tree it started, and removes its temporary files. Electron 39 for Windows does
+not accept a `--headless` command-line switch.
 
 ## 8. Environment switches
 
@@ -263,4 +261,3 @@ Invoke the relevant skill when a task matches its description.
 - **Handoff**: Main passes `--struq-locale=<tag>` and `--struq-dir=<ltr|rtl>` in window `additionalArguments` so preloads and React initialize without an English flash.
 - **IPC Rule**: Main process NEVER sends translated strings to the renderer for display. Main sends machine-readable error/state codes with typed parameters; renderer translates using `t()`. Main translates only native OS chrome (tray menu, OS notifications, native dialog titles).
 - **RTL and Layout**: Directional Tailwind utilities use logical properties (`ps-`, `pe-`, `ms-`, `me-`, `text-start`). CSS font stacks in `theme.css` include Windows script fallback chains for CJK, Indic, and Thai.
-

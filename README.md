@@ -301,6 +301,7 @@ cases.
 | `pnpm test` | Vitest unit tests |
 | `pnpm test:coverage` | Audit risk-area coverage without enforcing a vanity threshold |
 | `pnpm test:e2e` | Build, then Playwright end to end, headless |
+| `pnpm smoke:boot` | Build and verify a hidden app boot with isolated user data |
 | `pnpm pack` | Build and unpack to `release/win-unpacked` |
 | `pnpm dist` | Build the NSIS installer |
 | `pnpm release:auto` | Cut a version, build, sign, verify and publish |

@@ -1,6 +1,6 @@
 ---
 name: verification-gates
-description: "The exact commands and rules for gating work in Struq Voice. Use whenever finishing a slice, before a commit, or when asked to 'verify', 'run the gates', 'typecheck', 'lint', 'run tests', or 'check it works'. Runs pnpm typecheck, pnpm lint, pnpm test and a headless boot smoke; knows that pnpm test:e2e must NOT be run unprompted (slow, flaky hook spec) and how to clean up stray Electron processes. NOT for understanding the codebase (use project-context) or fixing a specific e2e spec."
+description: "The exact commands and rules for gating work in Struq Voice. Use whenever finishing a slice, before a commit, or when asked to 'verify', 'run the gates', 'typecheck', 'lint', 'run tests', or 'check it works'. Runs pnpm typecheck, pnpm lint, pnpm test and a hidden boot smoke; knows that pnpm test:e2e must NOT be run unprompted (slow, flaky hook spec) and how to clean up stray Electron processes. NOT for understanding the codebase (use project-context) or fixing a specific e2e spec."
 argument-hint: "[typecheck | lint | test | smoke]"
 ---
 
@@ -22,15 +22,13 @@ All three must pass with zero errors. There is no softer bar.
 ## Boot smoke (when you want confidence without the full suite)
 
 ```bash
-pnpm exec electron-vite build
-STRUQ_VOICE_E2E=1 STRUQ_VOICE_ENGINE=mock \
-  STRUQ_VOICE_USERDATA=$(mktemp -d) \
-  timeout 12 npx electron --headless out/main/index.cjs
+pnpm smoke:boot
 ```
 
-Expect no `throw`, `ZodError`, or uncaught `error:` lines (ignore GPU and
-network-service noise). Windows: `timeout` may be absent in bash; use
-`timeout` if present, otherwise a fixed sleep + taskkill.
+The script expects the production bundle to stay alive for ten seconds. It
+uses isolated user data, hides the window, kills only its own process tree, and
+removes its temporary files. Electron 39 for Windows does not accept a
+`--headless` command-line switch.
 
 ## e2e: do NOT run unprompted
 

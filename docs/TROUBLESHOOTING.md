@@ -64,9 +64,6 @@ Ctrl+V, restore clipboard.
   mutes. A dead mic never silently produces empty text.
 - Check that no other app has exclusive hold of the microphone (conference
   tools, browser tabs).
-- In Settings, verify the engine is not Mock. The Mock engine returns a fixed
-  fake transcript on every capture.
-
 ## A capture never ends
 
 - The stuck-key watchdog force-stops any capture at `maxCaptureMs` (default

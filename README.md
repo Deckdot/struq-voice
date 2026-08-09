@@ -9,6 +9,8 @@
 **On-device transcription · Works in every application · Never steals focus**
 
 [![Release](https://img.shields.io/github/v/release/Deckdot/struq-voice?style=flat-square&color=A65332&label=release)](https://github.com/Deckdot/struq-voice/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/Deckdot/struq-voice/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/Deckdot/struq-voice/actions/workflows/ci.yml)
+[![MIT License](https://img.shields.io/github/license/Deckdot/struq-voice?style=flat-square&color=294638)](LICENSE)
 [![Windows 10 and 11](https://img.shields.io/badge/Windows_10_%C2%B7_11-64--bit-294638?style=flat-square&logo=windows&logoColor=white)](#install)
 [![Electron 39](https://img.shields.io/badge/Electron-39-294638?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![React 19](https://img.shields.io/badge/React_19-Tailwind_v4-294638?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
@@ -54,14 +56,13 @@ saved to disk as audio, and the window you were working in never loses focus.
 - **Rebind anything** in Settings with a key-capture widget. New keys register
   at runtime, with no restart.
 
-### Four engines, and a router that knows the difference
+### Three engines, and a router that knows the difference
 
 | Engine | Where it runs | What it is for |
 |---|---|---|
 | **Parakeet TDT 0.6B** | On your machine | The default. 25 European languages, loaded once and kept warm in the background. |
 | **Whisper.cpp** | On your machine | 99 languages and difficult audio. GPU capable through a `whisper-cli.exe` sidecar, with a CPU fallback. |
 | **OpenRouter** | Cloud | Zero setup and no local load. Needs an API key, and the cost of every transcription is recorded. |
-| **Mock** | Nowhere | Fixed text, for development and the test suite. |
 
 The router cascades from a primary engine to a fallback when one is not ready,
 errors, or times out. **A local engine never falls back to a cloud engine
@@ -145,9 +146,10 @@ means a genuinely signed older build cannot be replayed as a downgrade.
 
 ### 🔒 Privacy
 
-Parakeet and Whisper.cpp run entirely on your machine. Audio is held in memory
-as PCM, cut into a WAV in memory, transcribed, and dropped. Nothing is written
-to disk as audio and nothing is sent anywhere.
+Parakeet and Whisper.cpp run entirely on your machine. Dictation audio is held
+in memory as PCM, cut into a WAV in memory, transcribed, and dropped. It is not
+written to disk or sent anywhere. Meetings can keep an explicit local recording
+when archiving is enabled; that file stays in the meeting library until removed.
 
 Audio leaves the machine only when you choose OpenRouter yourself, and that
 choice is never made for you by a fallback. The API key is stored encrypted with
@@ -257,6 +259,13 @@ All of them are rebindable in Settings.
 3. Struq Voice starts in the tray and walks you through four short steps. The
    recommended model downloads while you read them.
 
+The installer does not yet have a commercial Windows code-signing certificate.
+SmartScreen may therefore show **Windows protected your PC** on the first
+install. Confirm that the installer came from the official release above. If
+you are comfortable continuing, choose **More info**, then **Run anyway**. The
+certificate is a recurring cost for a free project; application updates use the
+independent Ed25519 verification described in [Releasing](docs/RELEASING.md).
+
 Updates are checked in the background and verified against the release signature
 before they are installed. You can also check by hand in Settings under
 Delivery.
@@ -275,6 +284,9 @@ pnpm install     # native modules are rebuilt for Electron 39 automatically
 pnpm dev
 ```
 
+The deterministic Mock engine is registered only by the test harness. It is not
+shown as a selectable engine in normal or packaged builds.
+
 If a native module fails to load, `docs/TROUBLESHOOTING.md` covers the known
 cases.
 
@@ -287,6 +299,7 @@ cases.
 | `pnpm typecheck` | TypeScript across the node, web and e2e projects |
 | `pnpm lint` | ESLint on `strictTypeChecked` |
 | `pnpm test` | Vitest unit tests |
+| `pnpm test:coverage` | Audit risk-area coverage without enforcing a vanity threshold |
 | `pnpm test:e2e` | Build, then Playwright end to end, headless |
 | `pnpm pack` | Build and unpack to `release/win-unpacked` |
 | `pnpm dist` | Build the NSIS installer |

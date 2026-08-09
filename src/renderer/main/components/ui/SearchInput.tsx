@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import type { JSX, KeyboardEvent } from "react";
 import { TextInput } from "./TextInput";
 import { cn } from "../../lib/cn";
 
@@ -14,6 +14,8 @@ export interface SearchInputProps {
   readonly clearLabel?: string;
   readonly id?: string;
   readonly className?: string;
+  readonly autoFocus?: boolean;
+  readonly onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }
 
 export function SearchInput({
@@ -23,7 +25,9 @@ export function SearchInput({
   placeholder = "Search",
   clearLabel = "Clear search",
   id,
-  className
+  className,
+  autoFocus,
+  onKeyDown
 }: SearchInputProps): JSX.Element {
   return (
     <TextInput
@@ -31,6 +35,8 @@ export function SearchInput({
       type="text"
       value={value}
       placeholder={placeholder}
+      {...(autoFocus !== undefined ? { autoFocus } : {})}
+      {...(onKeyDown !== undefined ? { onKeyDown } : {})}
       onChange={(event) => {
         onChange(event.target.value);
       }}

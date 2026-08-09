@@ -3,7 +3,7 @@ import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../shared/api";
 import type { DictionaryRule } from "../../../shared/dictionary";
-import { applyDictionary, countRuleHits, findRuleMatches } from "../../../shared/dictionary";
+import { applyDictionary, countRuleHits, findRuleByFrom, findRuleMatches } from "../../../shared/dictionary";
 import type { Settings } from "../../../shared/settings";
 import { DEFAULT_SETTINGS } from "../../../shared/settings";
 import { PageBody } from "../components/PageHeader";
@@ -130,22 +130,17 @@ export function DictionaryView(): JSX.Element {
     [hits]
   );
 
-  const checkDuplicate = (from: string, ignoreFrom: string | null = null): boolean => {
-    const normalized = from.trim().toLowerCase();
-    return dictionary.some(
-      (entry) =>
-        entry.from.toLowerCase() === normalized &&
-        (ignoreFrom === null || entry.from.toLowerCase() !== ignoreFrom.toLowerCase())
-    );
-  };
-
   const handleAddOrUpdateRule = (): void => {
     const trimmedFrom = draft.from.trim();
     if (trimmedFrom.length === 0) {
       setError(t("dictionary.err.emptyFrom"));
       return;
     }
-    if (checkDuplicate(trimmedFrom, editingFrom)) {
+    const existing = findRuleByFrom(dictionary, trimmedFrom);
+    if (
+      existing !== undefined &&
+      (editingFrom === null || existing.from.toLowerCase() !== editingFrom.toLowerCase())
+    ) {
       setError(t("dictionary.err.duplicate", { from: trimmedFrom }));
       return;
     }

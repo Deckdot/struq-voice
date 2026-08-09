@@ -51,6 +51,49 @@ type FlexibleRule = {
   readonly enabled?: boolean;
 };
 
+/** Longest allowed rule "from" value, enforced by normalizeRuleFrom. */
+export const MAX_RULE_FROM_LENGTH = 200;
+
+/**
+ * Normalize selected misheard text into a rule "from" value: collapse every
+ * run of whitespace to a single space and trim. Returns null when the result
+ * is empty or longer than MAX_RULE_FROM_LENGTH.
+ */
+export const normalizeRuleFrom = (text: string): string | null => {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0 || normalized.length > MAX_RULE_FROM_LENGTH) {
+    return null;
+  }
+  return normalized;
+};
+
+/** First rule whose from matches case-insensitively, or undefined. */
+export const findRuleByFrom = (
+  rules: readonly FlexibleRule[],
+  from: string
+): FlexibleRule | undefined =>
+  rules.find((rule) => rule.from.toLowerCase() === from.toLowerCase());
+
+/**
+ * Add a rule, or replace the existing rule with the same from in place.
+ * Returns the new rules array and whether an existing entry was replaced.
+ * Never mutates the input array.
+ */
+export const upsertRule = (
+  rules: readonly FlexibleRule[],
+  rule: FlexibleRule
+): { readonly rules: readonly FlexibleRule[]; readonly updated: boolean } => {
+  const existing = findRuleByFrom(rules, rule.from);
+  if (existing === undefined) {
+    return { rules: [...rules, rule], updated: false };
+  }
+  const index = rules.findIndex((entry) => entry.from.toLowerCase() === rule.from.toLowerCase());
+  return {
+    rules: rules.map((entry, i) => (i === index ? rule : entry)),
+    updated: true
+  };
+};
+
 /** Where a rule fires in this text, for highlighting the preview. */
 export const findRuleMatches = (text: string, rule: FlexibleRule): readonly RuleMatch[] => {
   if (rule.from.length === 0) return [];

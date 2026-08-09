@@ -60,6 +60,10 @@ export interface MainWindowState {
    * entrance animation read it so their motion is not spent behind a cover.
    */
   shellRevealed: boolean;
+  /** Search intent handed from the command palette to the History view. */
+  historySearch: { readonly query: string; readonly focusId: number | null } | null;
+  setHistorySearch: (payload: { readonly query: string; readonly focusId: number | null }) => void;
+  consumeHistorySearch: () => void;
   setRoute: (next: Route) => void;
   setCapture: (next: CaptureState) => void;
   setMeeting: (next: MeetingState) => void;
@@ -86,6 +90,13 @@ export const useMainStore = create<MainWindowState>((set, get) => ({
   locale: bootApi?.initialLocale ?? "en",
   dir: bootApi?.initialDir ?? "ltr",
   shellRevealed: false,
+  historySearch: null,
+  setHistorySearch: (historySearch) => {
+    set({ historySearch });
+  },
+  consumeHistorySearch: () => {
+    set({ historySearch: null });
+  },
   setRoute: (next) => {
     const prev = get().route;
     const delta = ROUTE_ORDER.indexOf(next) - ROUTE_ORDER.indexOf(prev);

@@ -100,6 +100,12 @@ export const en = {
   "history.day.today": "Today",
   "history.day.yesterday": "Yesterday",
   "history.row.words": { one: "{count} word", other: "{count} words" },
+  "history.rule.heardAs": "Heard as",
+  "history.rule.shouldBe": "Should be",
+  "history.rule.add": "Add rule",
+  "history.rule.update": "Update rule",
+  "history.rule.saved": "Saved",
+  "history.rule.exists": "Rule exists: {from} → {to}",
 
   // Models View
   "models.lightPcWarning.title": "Local transcription may feel slow on this PC",
@@ -406,6 +412,8 @@ export const en = {
   // Command Palette & Update Dialog
   "commandPalette.searchPlaceholder": "Type a command or search...",  "commandPalette.empty": "No results",
   "commandPalette.group.pages": "Pages",
+  "commandPalette.group.transcripts": "Transcripts",
+  "commandPalette.searchInHistory": "Search history for “{query}”",
   "commandPalette.group.actions": "Actions",
   "commandPalette.group.settings": "Settings",
   "commandPalette.action.copyLast": "Copy last transcript",

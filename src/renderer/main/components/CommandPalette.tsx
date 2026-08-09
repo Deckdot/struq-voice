@@ -9,6 +9,7 @@ import type { Route } from "../store/use-main-store";
 
 import { useTranslation } from "../lib/useTranslation";
 import type { MessageKey } from "../../../shared/i18n";
+import type { TranscriptRecord } from "../../../shared/ipc";
 
 export interface CommandPaletteProps {
   readonly open: boolean;
@@ -54,14 +55,47 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
   const api = window.struqVoice as MainWindowApi;
   const { t } = useTranslation();
   const setRoute = useMainStore((state) => state.setRoute);
+  const setHistorySearch = useMainStore((state) => state.setHistorySearch);
   const [copied, setCopied] = useState(false);
   const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<readonly TranscriptRecord[]>([]);
+  const [searching, setSearching] = useState(false);
+  const trimmed = query.trim();
 
   useEffect(() => {
     if (!open) return;
     setCopied(false);
     setQuery("");
+    setHits([]);
   }, [open]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (trimmed.length === 0) {
+      setHits([]);
+      setSearching(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setSearching(true);
+    const timer = window.setTimeout(() => {
+      void api.history
+        .search({ query: trimmed, limit: 5 })
+        .then(({ items }) => {
+          if (cancelled) return;
+          setHits(items);
+          setSearching(false);
+        })
+        .catch(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [trimmed, api]);
 
   const close = (): void => {
     onOpenChange(false);
@@ -122,6 +156,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                   aria-hidden="true"
                 />
                 <Command.Input
+                  autoFocus
                   value={query}
                   onValueChange={setQuery}
                   placeholder={t("commandPalette.searchPlaceholder")}
@@ -145,6 +180,52 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                 <Command.Empty className="px-4 py-6 text-center text-sm text-text-muted">
                   {t("commandPalette.empty")}
                 </Command.Empty>
+
+                {trimmed.length > 0 && (
+                  <Command.Group heading={t("commandPalette.group.transcripts")}>
+                    <Command.Item
+                      value={`search-history ${trimmed}`}
+                      onSelect={() => {
+                        setRoute("history");
+                        setHistorySearch({ query: trimmed, focusId: null });
+                        close();
+                      }}
+                      className={ITEM_CLASS}
+                    >
+                      <Icon
+                        icon={searching ? "ph:circle-notch" : "ph:magnifying-glass"}
+                        className={`h-4 w-4 shrink-0 text-text-muted ${searching ? "motion-safe:animate-spin" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {t("commandPalette.searchInHistory", { query: trimmed })}
+                    </Command.Item>
+                    {hits.map((hit) => {
+                      const collapsed = hit.text.replace(/\s+/g, " ").trim();
+                      const label = collapsed.length > 90 ? `${collapsed.slice(0, 90)}…` : collapsed;
+                      return (
+                        <Command.Item
+                          key={String(hit.id)}
+                          value={`transcript-${String(hit.id)}`}
+                          keywords={[collapsed]}
+                          title={hit.text}
+                          onSelect={() => {
+                            setRoute("history");
+                            setHistorySearch({ query: trimmed, focusId: hit.id });
+                            close();
+                          }}
+                          className={ITEM_CLASS}
+                        >
+                          <Icon
+                            icon="ph:article"
+                            className="h-4 w-4 shrink-0 text-text-muted"
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 truncate">{label}</span>
+                        </Command.Item>
+                      );
+                    })}
+                  </Command.Group>
+                )}
 
                 <Command.Group heading={t("commandPalette.group.pages")}>
                   {ROUTE_ORDER.map((route, index) => {

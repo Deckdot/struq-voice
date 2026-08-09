@@ -144,7 +144,7 @@ compiled into the app before anything is installed. A failed check aborts the
 install instead of warning about it, and the version inside the signed message
 means a genuinely signed older build cannot be replayed as a downgrade.
 
-### 🔒 Privacy
+###  Privacy
 
 Parakeet and Whisper.cpp run entirely on your machine. Dictation audio is held
 in memory as PCM, cut into a WAV in memory, transcribed, and dropped. It is not

@@ -1,6 +1,6 @@
 {
   "name": "struq-voice",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "license": "MIT",
   "description": "Tray-resident Windows dictation. Hold a key, speak, release, text lands at the caret.",

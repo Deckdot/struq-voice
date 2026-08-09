@@ -12,7 +12,8 @@ permissions:
 jobs:
   gates:
     name: Typecheck, lint, and test
-    runs-on: windows-latest
+    # node-gyp 11 does not recognize Visual Studio 18 on windows-latest.
+    runs-on: windows-2022
     timeout-minutes: 20
     steps:
       - name: Check out repository

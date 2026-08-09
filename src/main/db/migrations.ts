@@ -3,6 +3,21 @@
  * FTS5 gives real full-text search over every transcript ever dictated.
  * Segment text is never updated after insert, so meeting_segments has no
  * 'after update' FTS trigger; the absence is deliberate.
+ *
+ * These are written by hand rather than generated, and that is the decision
+ * rather than an omission. `schema.ts` describes the tables in Drizzle for
+ * typed queries, but a generated diff needs one known database to diff
+ * against. This app has one per user, each arriving from whatever version
+ * they last ran and sometimes skipping several, so the only safe shape is an
+ * append-only list where each version runs exactly once against whatever it
+ * finds. `schema_migrations` records which have run.
+ *
+ * The FTS5 virtual tables and their triggers below are also outside what the
+ * Drizzle SQLite dialect models, so the load-bearing half of every migration
+ * would be hand-written regardless.
+ *
+ * Adding one: append a new version, never edit a shipped entry. An edited
+ * migration silently does not re-run on a machine that already applied it.
  */
 
 import type Database from "better-sqlite3";

@@ -61,6 +61,9 @@ export default tseslint.config(
         __dirname: "readonly",
         // Node 18+ ships fetch; the release scripts read published manifests.
         fetch: "readonly",
+        // The docs capture drives a levels loop inside the app's own process.
+        setInterval: "readonly",
+        clearInterval: "readonly",
         // The pcm-collector worklet runs in the AudioWorklet global scope.
         AudioWorkletProcessor: "readonly",
         registerProcessor: "readonly"

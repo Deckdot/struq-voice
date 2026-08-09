@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "resources", "tray");
 const symbolSvg = join(root, "resources", "brand", "struq-symbol.svg");
-const blocksWaveSvg = join(root, "blocks-wave.svg");
+const blocksWaveSvg = join(root, "resources", "brand", "blocks-wave.svg");
 
 /** oklch to sRGB hex, matching the token values in theme.css. */
 const oklchToHex = (L, C, H) => {

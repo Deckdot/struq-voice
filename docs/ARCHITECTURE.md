@@ -1,9 +1,9 @@
 # Struq Voice: architecture
 
 Tray-resident Windows dictation. Hold a key, speak, release, and the transcript
-lands at the caret in whatever app was focused. This document is the Phase 0
-record; see `IMPLEMENTATION_PLAN.md` for the full specification and
-`DESIGN_SYSTEM.md` for the binding visual system.
+lands at the caret in whatever app was focused. This document owns the process
+and window model; see `DESIGN_SYSTEM.md` for the binding visual system and
+`FEATURES.md` for what is built.
 
 ## Process and window model
 

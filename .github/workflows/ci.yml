@@ -41,3 +41,22 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  docs:
+    name: Skill mirror is in sync
+    # A byte comparison of two directories, so it needs neither Windows nor a
+    # dependency install. Kept separate from the gates job so a drifted mirror
+    # reads as its own failure rather than hiding behind a typecheck error.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Verify .agents/skills mirrors .claude/skills
+        run: node scripts/sync-skills.mjs --check

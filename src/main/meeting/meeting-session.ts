@@ -663,27 +663,52 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     handleAudioState,
     subscribe,
     onSegment,
+    /**
+     * Runs on quit, so no step may abort the ones after it.
+     *
+     * Killing the worker is the step that matters most and it is nearly last:
+     * a database write or a window teardown that throws would otherwise leave
+     * the utilityProcess running, and a surviving child both outlives the app
+     * and holds files an update installer is about to replace. Each step is
+     * isolated so the kill always runs.
+     */
     dispose: (): void => {
       if (disposed) return;
       disposed = true;
+      const step = (name: string, run: () => void): void => {
+        try {
+          run();
+        } catch (error) {
+          logError(`[meeting] dispose: ${name} failed.`, error);
+        }
+      };
+
       if (laneLiveTimer !== null) clearTimeout(laneLiveTimer);
       if (windowStopTimer !== null) clearTimeout(windowStopTimer);
       if (autoStopTimer !== null) clearTimeout(autoStopTimer);
-      if (activeMeetingId !== null && options.store !== null) {
-        options.store.finalizeMeeting(activeMeetingId, {
-          endedAtMs: Date.now(),
-          durationMs: 0,
-          audioBytes: 0,
-          speakerCount,
-          state: "interrupted"
-        });
-      }
-      if (options.archive.isOpen()) {
-        void options.archive.close();
-      }
-      options.window.destroy();
+      step("finalize the interrupted meeting", () => {
+        if (activeMeetingId !== null && options.store !== null) {
+          options.store.finalizeMeeting(activeMeetingId, {
+            endedAtMs: Date.now(),
+            durationMs: 0,
+            audioBytes: 0,
+            speakerCount,
+            state: "interrupted"
+          });
+        }
+      });
+      step("close the archive", () => {
+        if (options.archive.isOpen()) {
+          void options.archive.close();
+        }
+      });
+      step("destroy the meeting window", () => {
+        options.window.destroy();
+      });
       meetingWindow = null;
-      options.worker.kill();
+      step("kill the worker", () => {
+        options.worker.kill();
+      });
       stateListeners.clear();
       segmentListeners.clear();
     }

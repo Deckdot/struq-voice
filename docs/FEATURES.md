@@ -3,12 +3,13 @@
 What is built, what is current, and what is still open. This is the
 project-status index any agent or human should read first, after AGENTS.md.
 
-## Status: all 7 plan phases built
+## Status: shipped
 
-The build plan (`docs/IMPLEMENTATION_PLAN.md`) is fully implemented and
-committed. All gates green: `pnpm typecheck`, `pnpm lint`, `pnpm test`
-and the dev e2e suite (headless, green when run as `pnpm test:e2e`). The
-risk-weighted test policy lives in `docs/TESTING.md`.
+The original seven-phase build plan is fully implemented, and meetings,
+the dictionary and internationalization landed after it. All gates green:
+`pnpm typecheck`, `pnpm lint`, `pnpm test` and the dev e2e suite (headless,
+green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
+`docs/TESTING.md`.
 
 ## The product loop, end to end
 
@@ -186,10 +187,10 @@ risk-weighted test policy lives in `docs/TESTING.md`.
 
 ## Known gaps and deferred work
 
-- `e2e/settings.spec.ts` and `e2e/a11y.spec.ts` from the plan's spec table
-  are not written. The user runs e2e and adds these when they want them.
-- The manual checklist in `docs/IMPLEMENTATION_PLAN.md` section 7.3 is
-  inherently manual and has not been run.
+- `e2e/settings.spec.ts` and `e2e/a11y.spec.ts` are not written. The user
+  runs e2e and adds these when they want them.
+- The pre-release manual checklist in `docs/RELEASING.md` is inherently
+  manual and is run by hand before a release.
 - shadcn/ui components were not adopted; views are hand-built on theme
   tokens, now through the shared layer in `components/ui/`. The "default
   shadcn skin ships by accident" risk is therefore moot, but it is a

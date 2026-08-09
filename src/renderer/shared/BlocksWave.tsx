@@ -1,7 +1,7 @@
 import { useId } from "react";
 import type { JSX } from "react";
 import { useReducedMotion } from "motion/react";
-import blocksWaveSvg from "../../../blocks-wave.svg?raw";
+import blocksWaveSvg from "../../../resources/brand/blocks-wave.svg?raw";
 
 export interface BlocksWaveProps {
   readonly className?: string;

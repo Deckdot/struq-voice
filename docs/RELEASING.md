@@ -42,6 +42,29 @@ Preflight also fails early on a wrong branch, a missing or unauthenticated
 `gh`, or a missing signing key. Each of those would otherwise surface after a
 116MB build.
 
+### The manual checklist
+
+The automated gates cover the pure logic. They cannot cover a synthesized
+paste landing in someone else's window, a keyboard hook that stops firing on
+the tenth press, or a mic unplugged mid-sentence. That is exactly where this
+app breaks, so this list is run by hand before every release.
+
+- [ ] Hold the hotkey in Notepad, speak, release. Text lands at the caret.
+- [ ] The same in Chrome, VS Code, Slack, Windows Terminal, and an Office app.
+- [ ] The same while the main window is open but unfocused.
+- [ ] Main window focused: it inserts in-app and does **not** synthesize a paste.
+- [ ] **Ten consecutive captures; the hook still fires on the tenth.**
+- [ ] Typing normally while idle: zero perceptible input lag.
+- [ ] `Escape` mid-capture: nothing pasted, nothing in history.
+- [ ] Clipboard contents restored after a paste.
+- [ ] Unplug the mic mid-capture: clear error, no crash, recovers on replug.
+- [ ] Kill the network on the cloud engine: clear error, offers local.
+- [ ] Second launch focuses the existing window instead of starting a copy.
+- [ ] Overlay on the correct monitor in a multi-display setup.
+- [ ] `prefers-reduced-motion` removes motion without breaking layout.
+- [ ] Overlay holds 60fps while Parakeet runs.
+- [ ] Install over an existing copy: the update applies and the app relaunches.
+
 ### Flags
 
 | Flag | When |

@@ -163,12 +163,22 @@ never crosses IPC back into a renderer.
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="./docs/images/dictate.png" alt="The Dictate view: readiness rows for microphone and engine, and the last transcript" />
-      <p><strong>Dictate</strong><br/>A readiness home rather than a dashboard. Each row states what is true now, and a row that is not ready names the cause and offers the fix in the same place.</p>
+      <img src="./docs/images/dictate.png" alt="The Dictate view: words, time spoken, pace and streak above an activity chart and the recent transcripts" />
+      <p><strong>Dictate</strong><br/>Words, time spoken, pace and streak over an activity chart, with the hold-to-speak binding and your recent transcripts underneath.</p>
     </td>
+    <td width="50%" valign="top">
+      <img src="./docs/images/meetings.png" alt="A finished meeting: the transcript split by speaker with a named speaker list" />
+      <p><strong>Meetings</strong><br/>Record a whole conversation, not a sentence. The microphone is always you; the system audio is clustered into speakers you can rename, and the transcript exports as Markdown, text or SRT.</p>
+    </td>
+  </tr>
+  <tr>
     <td width="50%" valign="top">
       <img src="./docs/images/history.png" alt="The History view: transcripts in a serif reading face with full-text search" />
       <p><strong>History</strong><br/>Every transcript, searchable through FTS5, virtualized, and set in the reading face the words deserve.</p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="./docs/images/dictionary.png" alt="The Dictionary view: replacement rules with a live sample showing which ones fire" />
+      <p><strong>Dictionary</strong><br/>Rules for what a model reliably mishears, with a sample box that shows which ones fire and what the text becomes before it is ever delivered.</p>
     </td>
   </tr>
   <tr>
@@ -177,8 +187,8 @@ never crosses IPC back into a renderer.
       <p><strong>Models</strong><br/>The one model this machine should run, named with the hardware that chose it, above the full catalog for anyone who wants to choose.</p>
     </td>
     <td width="50%" valign="top">
-      <img src="./docs/images/settings-transcription.png" alt="The Settings view: engine selection with local and cloud markers" />
-      <p><strong>Settings</strong><br/>Capture, Transcription, Delivery and Text behind a sub-nav, with timing values under Advanced. Everything applies immediately.</p>
+      <img src="./docs/images/settings-transcription.png" alt="The Settings view: voice service selection with local and cloud markers" />
+      <p><strong>Settings</strong><br/>General, Capture, Transcription, Delivery, Text, Appearance and Meetings behind a sub-nav. Everything applies immediately.</p>
     </td>
   </tr>
 </table>
@@ -202,7 +212,8 @@ hotkeys, session            AudioWorklet to PCM        transcribing, delivered
 engines, paste, history     streamed to main
 settings, updater
                                                        MAIN WINDOW (on demand)
-                                                       Dictate, History,
+                                                       Dictate, Meetings,
+                                                       History, Dictionary,
                                                        Models, Settings
 ```
 
@@ -314,7 +325,7 @@ cases.
 |---|---|
 | `src/main/` | Lifecycle, hotkeys, capture session, engines, models, paste, database, updater |
 | `src/preload/` | One sandboxed bridge per window type |
-| `src/renderer/main/` | The main window: Dictate, History, Models, Settings |
+| `src/renderer/main/` | The main window: Dictate, Meetings, History, Dictionary, Models, Settings |
 | `src/renderer/overlay/` | The capture pill and its waveform |
 | `src/renderer/recorder/` | The warm microphone and the PCM worklet |
 | `src/shared/` | Types, IPC channel names, settings schema, model catalog |
@@ -356,7 +367,9 @@ interface, and no error message that names a problem without naming the fix.
 
 | Document | What it covers |
 |---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build it, the verification tiers, how to open a pull request |
 | [`AGENTS.md`](AGENTS.md) | The source of truth: what this project is, the rules, how work is gated |
+| [`docs/README.md`](docs/README.md) | Index of every document, and when to read it |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Process and window model, boundaries |
 | [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md) | Evergreen and Ember, binding on every view |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | What is built, current state, known gaps |
@@ -365,9 +378,10 @@ interface, and no error message that names a problem without naming the fix.
 | [`docs/TESTING.md`](docs/TESTING.md) | Risk-weighted test strategy, layers, and review standard |
 | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Known failures and their fixes |
 
-AI agents can load the invokable skills in `.agents/skills/` and the mirrored
-`.claude/skills/` for project context, verification gates, IPC architecture,
-native modules and the capture session.
+AI agents route through the table in [`AGENTS.md`](AGENTS.md) section 2, which
+maps a task to one of eight invokable skills in `.claude/skills/`: project
+context, verification gates, the git workflow, releasing, IPC architecture,
+native modules, the capture session and the meeting pipeline.
 
 ---
 

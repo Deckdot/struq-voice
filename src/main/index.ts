@@ -349,7 +349,13 @@ if (!gotLock) {
       window: {
         create: () => Promise.resolve(createMeetingWindow()),
         destroy: () => {
+          // Runs during quit as well as on stop, and by then Electron may have
+          // torn windows down already. Reading webContents off a destroyed
+          // window throws "Object has been destroyed", which on the quit path
+          // aborted the rest of shutdown and surfaced as a JavaScript error
+          // dialog during an update install.
           for (const window of BrowserWindow.getAllWindows()) {
+            if (window.isDestroyed()) continue;
             if (window.webContents.getURL().includes("meeting/index.html")) {
               window.destroy();
             }
@@ -842,20 +848,33 @@ if (!gotLock) {
     }
   });
 
-  app.on("will-quit", () => {
-    overlay?.dispose();
-    hotkeys?.dispose();
-    meetingSession?.dispose();
-    // Release the native session and checkpoint the WAL. Both are hygiene
-    // rather than correctness (the OS reclaims either way), so neither is
-    // allowed to throw and hold up the quit.
+  /**
+   * Shutdown steps are independent, so one failure must not skip the rest.
+   *
+   * Every step here is hygiene: the OS reclaims windows, hooks, native memory
+   * and file handles regardless. What is NOT recoverable is an exception
+   * escaping will-quit, because Electron surfaces that as a JavaScript error
+   * dialog. On the update path that dialog appears instead of the installer
+   * running, so a throw in a cleanup step turns a working update into a
+   * visible crash. Each step is therefore isolated and merely logged.
+   */
+  const shutdownStep = (name: string, run: () => void): void => {
     try {
-      void primaryLocalEngine?.dispose();
+      run();
     } catch (error) {
-      console.warn("[quit] Engine dispose failed.", error);
+      console.warn(`[quit] ${name} failed.`, error);
     }
+  };
+
+  app.on("will-quit", () => {
+    shutdownStep("Overlay dispose", () => overlay?.dispose());
+    shutdownStep("Hotkey dispose", () => hotkeys?.dispose());
+    shutdownStep("Meeting dispose", () => meetingSession?.dispose());
+    shutdownStep("Engine dispose", () => {
+      void primaryLocalEngine?.dispose();
+    });
     primaryLocalEngine = null;
-    database?.close();
+    shutdownStep("Database close", () => database?.close());
     database = null;
   });
 }

@@ -2,9 +2,12 @@
 
 Read this file completely before doing anything in this repo. It is the
 source of truth for what this project is, how it is built, how to gate work,
-and what must never be broken. Supplementary docs live in `docs/`; the
-skills in `.agents/skills/` and `.claude/skills/` encode the deep knowledge
+and what must never be broken. Supplementary docs live in `docs/` (start at
+`docs/README.md`); the skills in `.claude/skills/` encode the deep knowledge
 as invokable skills.
+
+**Route first.** Section 2 maps a task to the one or two skills that own it.
+Loading the right skill beats reading the tree.
 
 ---
 
@@ -21,7 +24,30 @@ The one design document that matters more than any other is
 `docs/DESIGN_SYSTEM.md` (Evergreen and Ember). Every UI decision in this
 repo is bound by it. If you build a view that fights it, you have a bug.
 
-## 2. The product loop
+## 2. Domain routing
+
+Find the row that matches the task, load that skill, and start there. Most
+tasks need one skill plus this file, not the whole tree.
+
+| Signal | Skill |
+|---|---|
+| capture state, phases, PTT, hotkey, Escape, recorder window, worklet, pre-roll, levels | `capture-session` |
+| meetings, speakers, diarization, loopback, the meeting worker, VAD, archive, export | `meeting-pipeline` |
+| IPC, a channel, a payload type, preload, `window.struqVoice`, `PRELOAD_CHANNELS` | `ipc-architecture` |
+| better-sqlite3, uiohook, sherpa-onnx, rebuild, "module failed to load", Electron bump | `native-modules` |
+| verify, gates, typecheck, lint, test, "is this done", which tier | `verification-gates` |
+| branch, commit, PR, merge, "ship this", "land this" | `github-workflow` |
+| version bump, "ship it", publish, "the update never arrives" | `shipping-a-release` |
+| "what is this project", "where is X", onboard me, load context | `project-context` |
+
+No row fits, or the task crosses three of them? Read this file end to end,
+then `docs/README.md`. Cross-cutting work is the one case that earns a full
+read.
+
+Skills live in `.claude/skills/` and are mirrored to `.agents/skills/` by
+`pnpm skills:sync`. **Edit the canonical copy only**; CI fails on drift.
+
+## 3. The product loop
 
 1. User holds `Ctrl+Space` (configurable). A low-level hook (uiohook-napi)
    detects key-down and key-up; `globalShortcut` cannot, so PTT needs a hook.
@@ -35,7 +61,7 @@ repo is bound by it. If you build a view that fights it, you have a bug.
    waveform. Because it can never take focus, the foreground window never
    changes and the paste lands in the right app.
 
-## 3. Architecture at a glance
+## 4. Architecture at a glance
 
 ```
 MAIN PROCESS            RECORDER (hidden)      OVERLAY (never focused)
@@ -74,7 +100,7 @@ Key files:
 | Windows | `src/main/windows/{main,overlay,recorder,meeting}-window.ts` |
 | Main window UI | `src/renderer/main/` |
 
-## 4. Boundaries (enforced by lint, never violated)
+## 5. Boundaries (enforced by lint, never violated)
 
 - The renderer never imports from `src/main/`.
 - `src/shared/` has no side effects and no Electron imports. It must run in
@@ -86,7 +112,7 @@ Key files:
   channel names from `PRELOAD_CHANNELS` (in `src/shared/ipc.ts`) into the
   window's `additionalArguments`. Each preload reads them from argv.
 
-## 5. The capture state machine
+## 6. The capture state machine
 
 Single authority in `capture-session.ts`. Tray, overlay and main window all
 render from broadcasts of it. Nothing else owns capture state.
@@ -103,7 +129,7 @@ idle ──arm──▶ arming ──ready──▶ listening ──stop──�
 - Captures under `minCaptureMs` (350ms) are discarded silently.
 - A `maxCaptureMs` (300s) watchdog force-stops a stuck-key capture.
 
-## 5b. The meeting state machine
+## 6b. The meeting state machine
 
 Single authority in `meeting-session.ts`, in the same shape as the capture
 session: a factory taking injected dependencies, returning commands and a
@@ -124,7 +150,7 @@ idle ──start──▶ starting ──lanes live──▶ recording ──sto
   clustered. Dictation always wins: the capture session's state is mirrored
   into `setDictationActive`, which yields the worker.
 
-## 6. Engines
+## 7. Engines
 
 Interface in `src/main/engines/types.ts`. Router cascades primary to
 fallback on not-ready/error/timeout. **Never cascade local to cloud without
@@ -137,33 +163,42 @@ explicit opt-in** (that sends audio off the machine).
 | `openrouter` | cloud | Needs API key, cost recorded per transcription |
 | `mock` | test | Deterministic fake transcript |
 
-## 7. Verification gates (the ONLY acceptable definition of "done")
+## 8. Verification policy
 
-Every slice must pass these before commit:
+Match the tier to the risk. The tier decides the proof AND who may merge, so
+guessing low is not a shortcut. Full detail in the `verification-gates` skill.
+
+| Tier | Scope | Proof | Merges |
+|---|---|---|---|
+| T1 | docs, copy, screenshots, comments | `pnpm typecheck && pnpm lint` | agent, once CI is green |
+| T2 | renderer views, state machines, IPC, engines, post-processing | T1 + `pnpm test` | Roy |
+| T3 | native modules, updater, paste, meeting worker, release scripts | T2 + `pnpm smoke:boot` | Roy |
+
+- A branch takes the **highest** tier it touches.
+- A change to a skill, to this file, or to this table is **never T1**.
+- Tier up when unsure.
+- Report what was run **and** what was deliberately not run.
 
 ```bash
 pnpm typecheck    # tsc -p tsconfig.{node,web,e2e}.json
 pnpm lint         # eslint . (strictTypeChecked)
 pnpm test         # vitest unit tests
+pnpm smoke:boot   # T3: hidden boot on isolated user data
 ```
 
-`pnpm test:e2e` builds and runs Playwright. **Do not run it unprompted.**
-The suite is headless and slow, and `hook.spec.ts` needs a real microphone
-and real OS focus, so it is flaky in isolation. The user runs e2e
-themselves. Do not "fix" the e2e specs without being asked.
+`pnpm test:e2e` is a deliberate probe, never automatic. It is slow and
+`hook.spec.ts` needs a real microphone and real OS focus, so it is flaky in
+isolation. **Do not run it unprompted at any tier**, and do not "fix" the e2e
+specs without being asked. Roy runs it himself.
 
-A boot smoke (launch hidden, confirm it stays healthy) is a reasonable
-substitute when you want confidence without the full suite:
+Kill strays after any smoke or manual launch:
 
 ```bash
-pnpm smoke:boot
+taskkill //F //IM electron.exe
+taskkill //F //IM "Struq Voice.exe"
 ```
 
-The script uses isolated user data, hides the window, kills only the process
-tree it started, and removes its temporary files. Electron 39 for Windows does
-not accept a `--headless` command-line switch.
-
-## 8. Environment switches
+## 9. Environment switches
 
 | Env var | Effect |
 |---|---|
@@ -174,7 +209,7 @@ not accept a `--headless` command-line switch.
 | `STRUQ_VOICE_START_HIDDEN=0` | Show the main window even at login |
 | `STRUQ_VOICE_PACKAGED=<exe>` | e2e harness targets the packaged build instead of dev output |
 
-## 9. Native modules
+## 10. Native modules
 
 `better-sqlite3`, `uiohook-napi`, `sherpa-onnx-node` all target Electron 39.
 `scripts/rebuild-native-modules.mjs` runs on `postinstall`. Every native
@@ -182,7 +217,7 @@ module degrades rather than preventing boot: history unavailable, PTT falls
 back to toggle, Parakeet reports "runtime not installed". Do not upgrade
 Electron without the user's explicit request.
 
-## 10. Coding rules (non-negotiable)
+## 11. Coding rules (non-negotiable)
 
 - **Never use em dashes (U+2014), en dashes (U+2013) or horizontal bars
   (U+2015) anywhere**: code, comments, docs, commit messages, chat. Use
@@ -196,7 +231,7 @@ Electron without the user's explicit request.
 - The renderer never imports from `src/main/`.
 - TypeScript strict + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`.
 
-## 11. Commit conventions
+## 12. Commit conventions
 
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`,
   `chore:`.
@@ -204,7 +239,7 @@ Electron without the user's explicit request.
   an explicit instruction to commit slices.
 - Before committing, check `git status`, `git diff`, `git log --oneline -5`.
 
-## 12. Releasing and updates
+## 13. Releasing and updates
 
 `pnpm release:cut patch` then `pnpm ship`. Nothing else is typed: every step
 after the cut reads the version from `package.json`.
@@ -227,33 +262,38 @@ before anything installs. A failed check aborts rather than warns.
 
 Full detail, including the manual gate check, in `docs/RELEASING.md`.
 
-## 13. Docs
+## 14. Docs
 
-- `docs/IMPLEMENTATION_PLAN.md` - the full build plan (7 phases). The
-  definitive reference for intended behavior.
-- `docs/DESIGN_SYSTEM.md` - Evergreen and Ember, binding.
+`docs/README.md` indexes every document and says when to read it. The ones
+that bind behavior:
+
+- `docs/DESIGN_SYSTEM.md` - Evergreen and Ember, binding on every view.
 - `docs/FEATURES.md` - what is built, current state, known gaps.
-- `docs/MODELS.md` - engines, catalog, download pipeline.
-- `docs/TROUBLESHOOTING.md` - known failures and fixes.
 - `docs/ARCHITECTURE.md` - process/window model and boundaries.
-- `docs/RELEASING.md` - cut, sign, verify, publish, and why updates are signed.
+- `docs/MODELS.md` - engines, catalog, download pipeline.
+- `docs/RELEASING.md` - cut, sign, verify, publish, and the manual gate.
+- `docs/TESTING.md` - risk-weighted test strategy.
+- `docs/TROUBLESHOOTING.md` - known failures and fixes.
 - `README.md` - product-facing summary.
 
-## 14. Skills
+## 15. Skills
 
-`src/../.agents/skills/` (and the mirrored `.claude/skills/`) hold invokable
-skills for this repo:
+`.claude/skills/` is canonical. `.agents/skills/` is a generated mirror:
+edit the canonical copy, then run `pnpm skills:sync`. CI fails on drift.
 
 - `project-context` - load the full picture before starting any task.
-- `verification-gates` - the exact commands and rules for gating work.
+- `verification-gates` - the tiers, the gate commands, what "done" means.
+- `github-workflow` - branch, commit, PR, merge, and who may merge what.
+- `shipping-a-release` - cut, sign, verify and publish a version.
 - `ipc-architecture` - how to add an IPC channel end to end.
 - `native-modules` - native module handling and degradation paths.
-- `capture-session` - the state machine, hotkeys and audio pipeline.
+- `capture-session` - the capture state machine, hotkeys and audio pipeline.
 - `meeting-pipeline` - the meeting state machine, loopback capture and worker.
 
-Invoke the relevant skill when a task matches its description.
+Route via section 2. Each skill's description names what it does NOT cover
+and which skill to use instead, so a wrong first pick self-corrects.
 
-## 15. Internationalization
+## 16. Internationalization
 
 - Hand-rolled typed catalog in `src/shared/i18n/`. No external i18n framework.
 - Two independent axes: UI language (`settings.locale`) and Speech language (`settings.speechLanguage`). Never derive one from the other.

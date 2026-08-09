@@ -128,6 +128,11 @@ contradicts shipping a free application.
 | `UsersRoyheAppDataLocalTempopencode*` (3 dirs) | Delete from working tree | Debug-run junk. Untracked, so no history impact. |
 | `blocks-wave.svg`, `bouncing-ball.svg` | **Keep** | Load-bearing: imported by `src/renderer/shared/BlocksWave.tsx` and `scripts/generate-tray-icons.mjs`. |
 
+*Correction, made during a later root cleanup: only `blocks-wave.svg` was
+load-bearing, and it now lives in `resources/brand/`. Nothing imported
+`bouncing-ball.svg`; `RecordingBall.tsx` draws that ellipse inline and the
+only matches were CSS class names, so the file was deleted.*
+
 Add a `.gitignore` rule for the temp-dir pattern so debug runs cannot litter
 the root again.
 

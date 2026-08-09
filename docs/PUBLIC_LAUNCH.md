@@ -14,6 +14,32 @@ Decisions locked before writing this plan:
 - **Standard community set.** License, security policy, issue and PR templates,
   and CI. No CONTRIBUTING or code of conduct yet.
 
+## Execution status
+
+Implemented on 2026-08-09:
+
+- MIT licensing, repository cleanup, community health files, and Windows CI.
+- Windows 10 and 11 labelling, x64 startup enforcement, and actionable meeting
+  loopback failures.
+- Five-minute default dictation captures, with the existing ten-minute setting
+  ceiling preserved.
+- A risk-based test audit, deterministic concurrency coverage, coverage tooling,
+  and a documented testing policy. The focused suite contains 437 tests across
+  49 files.
+- README badges, privacy wording, engine visibility, and unsigned-installer
+  guidance.
+- Public GitHub metadata, discovery topics, Issues, private vulnerability
+  reporting, and v0.5.0 release guidance. Projects and Wiki are disabled.
+
+Remaining launch gates:
+
+- Push the implementation commits and confirm the Windows CI workflow is green.
+- Run one meeting on real Windows 10 hardware when a tester is available. The
+  unverified loopback path now fails clearly and does not affect dictation.
+
+The repository was already public when implementation began. No visibility
+change was required. The companion site repository remains private.
+
 ---
 
 ## What the audit found
@@ -130,8 +156,9 @@ publicly, along with a private disclosure route (GitHub private vulnerability
 reporting) so a finder does not open a public issue.
 
 Also state the privacy posture plainly, since a dictation app that hears
-everything invites the question: audio never leaves the machine on local
-engines, the cloud engine is explicit opt-in, and no audio is written to disk.
+everything invites the question: dictation audio never leaves the machine on
+local engines, the cloud engine is explicit opt-in, and meeting audio is only
+written to the local archive when that feature is enabled.
 
 ### 2.2 Issue templates
 

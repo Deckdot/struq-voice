@@ -367,7 +367,9 @@ interface, and no error message that names a problem without naming the fix.
 
 | Document | What it covers |
 |---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Build it, the verification tiers, how to open a pull request |
 | [`AGENTS.md`](AGENTS.md) | The source of truth: what this project is, the rules, how work is gated |
+| [`docs/README.md`](docs/README.md) | Index of every document, and when to read it |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Process and window model, boundaries |
 | [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md) | Evergreen and Ember, binding on every view |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | What is built, current state, known gaps |
@@ -376,9 +378,10 @@ interface, and no error message that names a problem without naming the fix.
 | [`docs/TESTING.md`](docs/TESTING.md) | Risk-weighted test strategy, layers, and review standard |
 | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Known failures and their fixes |
 
-AI agents can load the invokable skills in `.agents/skills/` and the mirrored
-`.claude/skills/` for project context, verification gates, IPC architecture,
-native modules and the capture session.
+AI agents route through the table in [`AGENTS.md`](AGENTS.md) section 2, which
+maps a task to one of eight invokable skills in `.claude/skills/`: project
+context, verification gates, the git workflow, releasing, IPC architecture,
+native modules, the capture session and the meeting pipeline.
 
 ---
 

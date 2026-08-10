@@ -9,11 +9,14 @@
 
 const SAMPLE_RATE = 16000;
 const RING_SECONDS = 30;
+const CAPTURE_TAIL_MS = 300;
+const CAPTURE_TAIL_SAMPLES = Math.ceil((SAMPLE_RATE * CAPTURE_TAIL_MS) / 1000);
 const DEFAULT_MAX_CAPTURE_MS = 300000;
 const ring = new Float32Array(SAMPLE_RATE * RING_SECONDS);
 let ringPos = 0;
 let armed = false;
 let active = [];
+let tailSamplesRemaining = 0;
 let maxActiveSamples = SAMPLE_RATE * (RING_SECONDS + DEFAULT_MAX_CAPTURE_MS / 1000);
 
 class PcmCollectorProcessor extends AudioWorkletProcessor {
@@ -24,6 +27,7 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
       if (message.type === "arm") {
         armed = true;
         active = [];
+        tailSamplesRemaining = 0;
         const maxCaptureMs = Math.max(5000, Math.min(600000, message.maxCaptureMs));
         maxActiveSamples =
           Math.ceil((SAMPLE_RATE * maxCaptureMs) / 1000) + SAMPLE_RATE * RING_SECONDS;
@@ -35,14 +39,14 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
           }
         }
       } else if (message.type === "disarm") {
-        armed = false;
-        const samples = Float32Array.from(active);
-        active = [];
-        this.port.postMessage({ type: "capture", samples }, [samples.buffer]);
+        if (armed) {
+          tailSamplesRemaining = CAPTURE_TAIL_SAMPLES;
+        }
       } else if (message.type === "discard") {
         // Abort the capture: release the buffer without sending anything.
         armed = false;
         active = [];
+        tailSamplesRemaining = 0;
       } else if (message.type === "snapshot") {
         // A partial read for the live transcript: copy what has been captured
         // so far and leave the capture running. Float32Array.from copies, so
@@ -70,6 +74,15 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
       if (armed) {
         if (active.length < maxActiveSamples) {
           active.push(sample);
+        }
+        if (tailSamplesRemaining > 0) {
+          tailSamplesRemaining--;
+          if (tailSamplesRemaining === 0) {
+            armed = false;
+            const samples = Float32Array.from(active);
+            active = [];
+            this.port.postMessage({ type: "capture", samples }, [samples.buffer]);
+          }
         }
       }
     }

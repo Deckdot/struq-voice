@@ -10,6 +10,7 @@ import type {
   HistoryDeleteResult,
   HistoryClearResult,
   HistoryStatsResult,
+  CaptureStateChangedEvent,
   MeetingAssetsResult,
   MeetingAssetProgressEvent,
   MeetingExportRequest,
@@ -114,8 +115,11 @@ const api: MainWindowApi = {
     }
   },
   onCaptureStateChanged: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, state: unknown): void => {
-      listener(state as never);
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: CaptureStateChangedEvent
+    ): void => {
+      listener(payload.state);
     };
     ipcRenderer.on(channels.captureStateChanged, handler);
     return () => {

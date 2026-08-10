@@ -59,7 +59,7 @@ export interface CaptureSessionOptions {
   readonly transcribingEngineId?: string;
   /** Called once the transcript exists, before delivering. */
   readonly onTranscript?: (text: string, meta: TranscriptMeta) => void;
-  /** Called synchronously when a real listening capture ends. */
+  /** Called once the real capture buffer is sealed, or immediately on abort. */
   readonly onListeningEnd?: () => void;
   /** Deliver the transcript into the focused window. Omitted in tests. */
   readonly deliver?: (text: string) => Promise<PasteOutcome>;
@@ -164,7 +164,6 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       toIdle();
       return;
     }
-    options.onListeningEnd?.();
     void finishCapture(startedAt);
   };
 
@@ -185,11 +184,13 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       try {
         audio = await options.source.endCapture();
       } catch (error) {
+        options.onListeningEnd?.();
         fail("Microphone lost. Check the device connection and try again.", null);
         void error;
         return;
       }
     }
+    options.onListeningEnd?.();
 
     // The capture may have been cancelled or failed while we waited.
     if (currentPhase() !== "transcribing") return;

@@ -95,10 +95,21 @@ describe("capture session", () => {
     expect(session.state.phase).toBe("idle");
   });
 
-  it("fires listening-end feedback before transcription starts", () => {
+  it("fires listening-end feedback once the capture buffer is sealed", async () => {
     const phases: string[] = [];
+    const deferred: { resolve?: (audio: CaptureAudio) => void } = {};
+    const audio = {
+      pcm: new Int16Array([1, 2, 3]),
+      durationMs: 500,
+      sampleRate: 16_000,
+    };
     const session = createCaptureSession({
       ...OPTIONS,
+      source: stubSource({
+        endCapture: () => new Promise((resolve) => {
+          deferred.resolve = resolve;
+        }),
+      }),
       onListeningEnd: () => {
         phases.push(session.state.phase);
       },
@@ -109,8 +120,14 @@ describe("capture session", () => {
     vi.advanceTimersByTime(500);
     session.stop();
 
-    expect(phases).toEqual(["listening"]);
+    expect(phases).toEqual([]);
     expect(session.state.phase).toBe("transcribing");
+    const resolveAudio = deferred.resolve;
+    if (resolveAudio === undefined) throw new Error("capture did not request audio");
+    resolveAudio(audio);
+    await Promise.resolve();
+
+    expect(phases).toEqual(["transcribing"]);
   });
 
   it("does not fire listening-end feedback for a discarded tap", () => {

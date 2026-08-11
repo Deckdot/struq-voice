@@ -15,7 +15,16 @@ const DEFAULT_MAX_CAPTURE_MS = 300000;
 const ring = new Float32Array(SAMPLE_RATE * RING_SECONDS);
 let ringPos = 0;
 let armed = false;
-let active = [];
+/**
+ * The capture, in a preallocated typed array rather than a growing JS array.
+ * This runs on the audio thread, and a plain array of five minutes of samples
+ * is millions of boxed numbers that then have to be copied out one by one at
+ * the end. That copy is what made releasing the key after a long dictation
+ * feel unresponsive, and it risked glitching the very audio it was collecting.
+ * Reused across captures, so arming does not allocate megabytes each time.
+ */
+let active = new Float32Array(0);
+let activeLength = 0;
 let tailSamplesRemaining = 0;
 let maxActiveSamples = SAMPLE_RATE * (RING_SECONDS + DEFAULT_MAX_CAPTURE_MS / 1000);
 
@@ -26,16 +35,20 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
       const message = event.data;
       if (message.type === "arm") {
         armed = true;
-        active = [];
+        activeLength = 0;
         tailSamplesRemaining = 0;
         const maxCaptureMs = Math.max(5000, Math.min(600000, message.maxCaptureMs));
         maxActiveSamples =
           Math.ceil((SAMPLE_RATE * maxCaptureMs) / 1000) + SAMPLE_RATE * RING_SECONDS;
+        if (active.length < maxActiveSamples) {
+          active = new Float32Array(maxActiveSamples);
+        }
         const preroll = Math.max(0, Math.min(SAMPLE_RATE * RING_SECONDS, message.prerollSamples));
         if (preroll > 0) {
           const start = (ringPos - preroll + ring.length) % ring.length;
           for (let i = 0; i < preroll; i++) {
-            active.push(ring[(start + i) % ring.length]);
+            active[activeLength] = ring[(start + i) % ring.length];
+            activeLength++;
           }
         }
       } else if (message.type === "disarm") {
@@ -45,14 +58,14 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
       } else if (message.type === "discard") {
         // Abort the capture: release the buffer without sending anything.
         armed = false;
-        active = [];
+        activeLength = 0;
         tailSamplesRemaining = 0;
       } else if (message.type === "snapshot") {
         // A partial read for the live transcript: copy what has been captured
-        // so far and leave the capture running. Float32Array.from copies, so
-        // transferring the copy cannot disturb the buffer the real capture
-        // will hand over at disarm.
-        const samples = Float32Array.from(active);
+        // so far and leave the capture running. slice copies, so transferring
+        // the copy cannot disturb the buffer the real capture will hand over
+        // at disarm.
+        const samples = active.slice(0, activeLength);
         this.port.postMessage(
           { type: "snapshot", samples, sequence: message.sequence },
           [samples.buffer]
@@ -72,15 +85,16 @@ class PcmCollectorProcessor extends AudioWorkletProcessor {
       ring[ringPos] = sample;
       ringPos = (ringPos + 1) % ring.length;
       if (armed) {
-        if (active.length < maxActiveSamples) {
-          active.push(sample);
+        if (activeLength < maxActiveSamples) {
+          active[activeLength] = sample;
+          activeLength++;
         }
         if (tailSamplesRemaining > 0) {
           tailSamplesRemaining--;
           if (tailSamplesRemaining === 0) {
             armed = false;
-            const samples = Float32Array.from(active);
-            active = [];
+            const samples = active.slice(0, activeLength);
+            activeLength = 0;
             this.port.postMessage({ type: "capture", samples }, [samples.buffer]);
           }
         }

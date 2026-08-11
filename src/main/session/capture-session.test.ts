@@ -95,7 +95,10 @@ describe("capture session", () => {
     expect(session.state.phase).toBe("idle");
   });
 
-  it("fires listening-end feedback once the capture buffer is sealed", async () => {
+  it("fires listening-end feedback on release, not when the buffer arrives", async () => {
+    // Sealing a capture costs more the longer it ran, so waiting for the audio
+    // before making a sound left a long dictation feeling like the key press
+    // had not registered. The sound and the phase change land together now.
     const phases: string[] = [];
     const deferred: { resolve?: (audio: CaptureAudio) => void } = {};
     const audio = {
@@ -120,14 +123,39 @@ describe("capture session", () => {
     vi.advanceTimersByTime(500);
     session.stop();
 
-    expect(phases).toEqual([]);
+    // Audio has not been handed over yet, and the feedback has already fired.
+    expect(deferred.resolve).toBeDefined();
+    expect(phases).toEqual(["transcribing"]);
     expect(session.state.phase).toBe("transcribing");
+
     const resolveAudio = deferred.resolve;
     if (resolveAudio === undefined) throw new Error("capture did not request audio");
     resolveAudio(audio);
     await Promise.resolve();
 
+    // And exactly once: the handover must not sound a second time.
     expect(phases).toEqual(["transcribing"]);
+  });
+
+  it("fires listening-end feedback once even when the microphone is lost", async () => {
+    const onListeningEnd = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      source: stubSource({
+        endCapture: () => Promise.reject(new Error("device gone")),
+      }),
+      onListeningEnd,
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(500);
+    session.stop();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onListeningEnd).toHaveBeenCalledTimes(1);
+    expect(session.state.phase).toBe("error");
   });
 
   it("does not fire listening-end feedback for a discarded tap", () => {

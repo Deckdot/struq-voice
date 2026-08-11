@@ -179,18 +179,24 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       startedAtMs: captureStartedAt,
     });
 
+    // Feedback belongs to the release, not to the buffer handover. Sealing the
+    // capture means waiting out the audio tail and then copying the whole
+    // recording out of the worklet, which costs more the longer the capture
+    // ran, so playing the close sound afterwards made a long dictation feel
+    // like it had not registered the key at all. The phase is already
+    // broadcast above, so the overlay and this sound now land together.
+    options.onListeningEnd?.();
+
     let audio: CaptureAudio | null = null;
     if (options.source !== undefined) {
       try {
         audio = await options.source.endCapture();
       } catch (error) {
-        options.onListeningEnd?.();
         fail("Microphone lost. Check the device connection and try again.", null);
         void error;
         return;
       }
     }
-    options.onListeningEnd?.();
 
     // The capture may have been cancelled or failed while we waited.
     if (currentPhase() !== "transcribing") return;

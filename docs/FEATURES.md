@@ -83,6 +83,13 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   lane is always "You"; the system lane is attributed by incremental speaker
   clustering with a CAM++ embedding model, refined per long turn by a
   pyannote segmentation model.
+- Speaker clustering represents a voice by its recent utterances rather than
+  by one running average, embeds only the speech inside an utterance, and
+  refuses to let anything under `minSpeakerAudioMs` (3s by default) register
+  a new speaker: a CAM++ embedding scores about 0.15 against its own voice at
+  one second and 0.89 at eight, so short remarks carry no identity. Speakers
+  that turn out to be one voice are merged, and main rewrites the segments it
+  already stored.
 - Live transcript view (virtualized, pinned to live with jump-to-live),
   searchable library, renameable speakers, Markdown/Text/SRT export, playable
   recording revealed in Explorer.

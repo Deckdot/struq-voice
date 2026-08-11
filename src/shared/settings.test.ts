@@ -88,8 +88,10 @@ describe("settings migration", () => {
     expect(settings.meeting.accelerator).toBe(DEFAULT_MEETING_ACCELERATOR);
     expect(settings.meeting.engineId).toBe("parakeet");
     expect(settings.meeting.diarization).toBe(true);
-    expect(settings.meeting.diarizationRefineOverMs).toBe(6000);
+    expect(settings.meeting.diarizationRefineOverMs).toBe(15_000);
     expect(settings.meeting.speakerThreshold).toBe(0.55);
+    expect(settings.meeting.speakerMergeThreshold).toBe(0.55);
+    expect(settings.meeting.minSpeakerAudioMs).toBe(3000);
     expect(settings.meeting.maxSpeakers).toBe(0);
     expect(settings.meeting.archiveAudio).toBe(true);
     expect(settings.meeting.archiveBitrateKbps).toBe(32);

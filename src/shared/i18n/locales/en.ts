@@ -199,6 +199,8 @@ export const en = {
   "settings.meetings.speakers.sensitivity.hint": "How alike two voices must be to count as one person.",
   "settings.meetings.speakers.sensitivity.merge": "Merge similar voices",
   "settings.meetings.speakers.sensitivity.keepApart": "Keep voices apart",
+  "settings.meetings.speakers.minAudio.label": "Minimum speech per speaker",
+  "settings.meetings.speakers.minAudio.hint": "Speech shorter than this is labelled but never registers a new speaker. Short remarks carry too little voice to identify anyone.",
   "settings.meetings.speakers.max.label": "Expected speakers",
   "settings.meetings.speakers.max.hint": "0 lets the clustering decide.",
   "settings.meetings.advanced.title": "Advanced",

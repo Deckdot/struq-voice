@@ -26,6 +26,7 @@ import type {
   MeetingSearchRequest,
   MeetingSearchResult,
   MeetingSegmentAppendedEvent,
+  MeetingSpeakersMergedEvent,
   MeetingSegmentsRequest,
   MeetingSegmentsResult,
   MeetingSimpleResult,
@@ -336,6 +337,18 @@ const api: MainWindowApi = {
       ipcRenderer.on(channels.meeting.segmentAppended, handler);
       return () => {
         ipcRenderer.removeListener(channels.meeting.segmentAppended, handler);
+      };
+    },
+    onSpeakersMerged: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: MeetingSpeakersMergedEvent
+      ): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(channels.meeting.speakersMerged, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.meeting.speakersMerged, handler);
       };
     },
     onLevels: (listener) => {

@@ -39,6 +39,37 @@ own event loop, crash isolation and memory that is genuinely released on
 kill. The queue is hard-capped at 600 seconds of backlog; over the cap emits
 a `gap` marker instead of growing.
 
+## Speaker clustering
+
+`worker/speaker-clusterer.ts`. A voice is a bounded ring of its recent
+embeddings, scored by the mean of the top few similarities. A single running
+mean was tried and does not work: one voice split into two clusters whose
+means were 0.494 apart while two genuinely different voices sat at 0.391, so
+no threshold separates them.
+
+Three rules keep one person from becoming several, which is what the 1.2.x
+releases did:
+
+- **Duration is the dominant factor.** CAM++ scores about 0.05 against its own
+  voice at 300ms, 0.15 at one second and 0.89 at eight. Anything under
+  `minSpeakerAudioMs` (3s) is *provisional*: it takes the nearest speaker's
+  label but may never found or define one. Backchannels were minting speakers.
+- **Embed the speech, not the utterance.** The VAD hands back padding; embed
+  `trimSilence`'d audio or the fingerprint is partly the room.
+- **Two thresholds and a merge.** At or above `threshold` the embedding is
+  kept, below `createThreshold` it is somebody new, and in between it joins the
+  nearest speaker without defining them. Converged speakers merge, which emits
+  `speakers-merged` so main can rewrite stored segments.
+
+`speakerMergeThreshold` is *not* on the same scale as `speakerThreshold`: it
+averages every pair across two rings, where assignment takes the best few
+against one. Scoring a merge with top-k instead of the mean fused a male and a
+female voice.
+
+Measure changes, do not guess them: `node scripts/make-two-speaker-fixture.mjs
+--speakers 1` then `node scripts/diarization-bench.mjs`. The one-speaker
+fixture must yield exactly one speaker and the two-speaker fixture exactly two.
+
 ## The lane split (do not relitigate)
 
 - The microphone lane is you by construction: it gets the speaker key `me`

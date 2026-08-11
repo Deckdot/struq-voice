@@ -471,6 +471,13 @@ export const meetingRevealRecordingChannel = "meeting:reveal-recording" as const
  */
 export const meetingSegmentAppendedChannel = "meeting:segment-appended" as const;
 
+/**
+ * Push channel: the clustering decided two speakers were one voice. Sent with
+ * the already-persisted segments rewritten, so the live view relabels in place
+ * instead of showing a speaker who no longer exists.
+ */
+export const meetingSpeakersMergedChannel = "meeting:speakers-merged" as const;
+
 /** Push channel: input levels for both lanes, for the live meters. */
 export const meetingLevelsChannel = "meeting:levels" as const;
 
@@ -567,6 +574,13 @@ export interface MeetingExportResult {
 export interface MeetingSegmentAppendedEvent {
   readonly meetingId: number;
   readonly segment: MeetingSegment;
+  readonly speakerCount: number;
+}
+
+export interface MeetingSpeakersMergedEvent {
+  readonly meetingId: number;
+  /** Retired key to surviving key, oldest merge first. */
+  readonly merges: readonly { readonly from: string; readonly into: string }[];
   readonly speakerCount: number;
 }
 
@@ -781,6 +795,7 @@ export const PRELOAD_CHANNELS = {
     export: meetingExportChannel,
     revealRecording: meetingRevealRecordingChannel,
     segmentAppended: meetingSegmentAppendedChannel,
+    speakersMerged: meetingSpeakersMergedChannel,
     levels: meetingLevelsChannel,
     assets: meetingAssetsChannel,
     installAssets: meetingInstallAssetsChannel,

@@ -34,6 +34,7 @@ import type {
   MeetingAudioFrames,
   MeetingAudioStateEvent,
   MeetingSegmentAppendedEvent,
+  MeetingSpeakersMergedEvent,
   MeetingStartResult
 } from "../../shared/ipc";
 import type { ArchiveWriter } from "./archive-writer";
@@ -92,6 +93,9 @@ export interface MeetingSession {
   onSegment: (
     listener: (event: MeetingSegmentAppendedEvent) => void
   ) => () => void;
+  onSpeakersMerged: (
+    listener: (event: MeetingSpeakersMergedEvent) => void
+  ) => () => void;
   dispose: () => void;
 }
 
@@ -99,6 +103,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   let state: MeetingState = INITIAL_MEETING_STATE;
   const stateListeners = new Set<(state: MeetingState) => void>();
   const segmentListeners = new Set<(event: MeetingSegmentAppendedEvent) => void>();
+  const speakersMergedListeners = new Set<(event: MeetingSpeakersMergedEvent) => void>();
 
   let activeMeetingId: number | null = null;
   let startedAtMs: number | null = null;
@@ -164,7 +169,14 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   const handleWorkerEvent = (event: unknown): void => {
     if (disposed) return;
     const workerEvent = event as {
-      readonly type: "segment" | "gap" | "heartbeat" | "failure" | "ready" | "drained";
+      readonly type:
+        | "segment"
+        | "gap"
+        | "speakers-merged"
+        | "heartbeat"
+        | "failure"
+        | "ready"
+        | "drained";
     };
     const meetingId = activeMeetingId;
     const store = options.store;
@@ -229,6 +241,24 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         });
         break;
       }
+      case "speakers-merged": {
+        if (meetingId === null || store === null) return;
+        const payload = event as {
+          readonly type: "speakers-merged";
+          readonly merges: readonly { readonly from: string; readonly into: string }[];
+        };
+        for (const merge of payload.merges) {
+          store.mergeSpeaker(meetingId, merge.from, merge.into);
+        }
+        speakerCount = Math.max(1, speakerCount - payload.merges.length);
+        if (state.phase === "recording") {
+          setState({ ...state, speakerCount });
+        }
+        for (const listener of speakersMergedListeners) {
+          listener({ meetingId, merges: payload.merges, speakerCount });
+        }
+        break;
+      }
       case "heartbeat": {
         const payload = event as {
           readonly type: "heartbeat";
@@ -236,7 +266,9 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
           readonly speakerCount: number;
         };
         backlogSeconds = payload.queuedSeconds;
-        speakerCount = Math.max(speakerCount, payload.speakerCount);
+        // The worker's count is authoritative and can fall after a merge, so
+        // this tracks it rather than ratcheting to the high-water mark.
+        speakerCount = payload.speakerCount;
         if (state.phase === "recording") {
           setState({ ...state, backlogSeconds, speakerCount });
         }
@@ -333,6 +365,8 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       diarization: settings.diarization,
       diarizationRefineOverMs: settings.diarizationRefineOverMs,
       speakerThreshold: settings.speakerThreshold,
+      speakerMergeThreshold: settings.speakerMergeThreshold,
+      minSpeakerAudioMs: settings.minSpeakerAudioMs,
       maxSpeakers: settings.maxSpeakers,
       vadMinSpeechMs: settings.vadMinSpeechMs,
       vadMinSilenceMs: settings.vadMinSilenceMs,
@@ -648,6 +682,15 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     };
   };
 
+  const onSpeakersMerged = (
+    listener: (event: MeetingSpeakersMergedEvent) => void
+  ): (() => void) => {
+    speakersMergedListeners.add(listener);
+    return () => {
+      speakersMergedListeners.delete(listener);
+    };
+  };
+
   options.worker.onEvent(handleWorkerEvent);
 
   return {
@@ -663,6 +706,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     handleAudioState,
     subscribe,
     onSegment,
+    onSpeakersMerged,
     /**
      * Runs on quit, so no step may abort the ones after it.
      *

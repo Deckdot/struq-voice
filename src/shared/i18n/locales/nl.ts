@@ -435,6 +435,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
     "Hoe gelijk twee stemmen moeten zijn om als een persoon te tellen.",
   "settings.meetings.speakers.sensitivity.merge": "Gelijkende stemmen samenvoegen",
   "settings.meetings.speakers.sensitivity.keepApart": "Stemmen gescheiden houden",
+  "settings.meetings.speakers.minAudio.label": "Minimale spraak per spreker",
+  "settings.meetings.speakers.minAudio.hint": "Spraak korter dan dit krijgt wel een label, maar registreert nooit een nieuwe spreker. Korte opmerkingen bevatten te weinig stem om iemand te herkennen.",
   "settings.meetings.speakers.max.label": "Verwachte sprekers",
   "settings.meetings.speakers.max.hint": "0 laat de clustering beslissen.",
   "settings.meetings.advanced.title": "Geavanceerd",

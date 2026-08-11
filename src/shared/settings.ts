@@ -65,12 +65,27 @@ export const meetingSettingsSchema = z.object({
    * where two people overlap is not collapsed onto one speaker. 0 disables
    * the refinement stage and skips the segmentation model entirely.
    */
-  diarizationRefineOverMs: z.number().int().min(0).max(60_000).default(6000),
+  diarizationRefineOverMs: z.number().int().min(0).max(60_000).default(15_000),
   /**
-   * Cosine similarity above which a voice is judged to be a speaker already
-   * heard. Higher splits one person into several; lower merges two people.
+   * Similarity above which a voice is judged to be a speaker already heard.
+   * Higher splits one person into several; lower merges two people. Scored
+   * against a speaker's recent utterances, not against a single average.
    */
   speakerThreshold: z.number().min(0.2).max(0.95).default(0.55),
+  /**
+   * Mean similarity between two speakers' recent utterances above which they
+   * are judged to be the same person and folded together. A different measure
+   * from speakerThreshold, so the two numbers are not comparable.
+   */
+  speakerMergeThreshold: z.number().min(0.2).max(0.95).default(0.55),
+  /**
+   * Speech shorter than this can be labelled but never registers a speaker.
+   * A speaker embedding taken from under roughly three seconds carries almost
+   * no identity: measured against a ten second reference of the same voice,
+   * CAM++ scores 0.05 at 300ms and 0.15 at one second. Letting those found
+   * speakers is what turned a two person call into six.
+   */
+  minSpeakerAudioMs: z.number().int().min(500).max(10_000).default(3000),
   /** Hard cap on distinct speakers. 0 lets the clustering decide. */
   maxSpeakers: z.number().int().min(0).max(32).default(0),
   /** Keep the mixed opus recording beside the transcript. */
@@ -173,8 +188,10 @@ export const settingsSchema = z.object({
     accelerator: DEFAULT_MEETING_ACCELERATOR,
     engineId: "parakeet",
     diarization: true,
-    diarizationRefineOverMs: 6000,
+    diarizationRefineOverMs: 15_000,
     speakerThreshold: 0.55,
+    speakerMergeThreshold: 0.55,
+    minSpeakerAudioMs: 3000,
     maxSpeakers: 0,
     archiveAudio: true,
     archiveBitrateKbps: 32,

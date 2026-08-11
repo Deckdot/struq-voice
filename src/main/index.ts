@@ -36,6 +36,8 @@ import type { AppReadiness, CapturePartialTranscriptEvent } from "../shared/ipc"
 import {
   appReadinessChangedChannel,
   capturePartialTranscriptChannel,
+  meetingSegmentAppendedChannel,
+  meetingSpeakersMergedChannel,
   meetingStateChangedChannel,
   updatesChangedChannel
 } from "../shared/ipc";
@@ -693,6 +695,25 @@ if (!gotLock) {
         }
       }
       overlay?.updateMeeting(state);
+    });
+
+    const sendToMainWindow = (channel: string, payload: unknown): void => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (window.isDestroyed()) continue;
+        if (!window.webContents.getURL().includes("main/index.html")) continue;
+        window.webContents.send(channel, payload);
+      }
+    };
+
+    // The session has always emitted these and the Meetings view has always
+    // listened for them, but nothing joined the two, so a live transcript only
+    // appeared once the meeting ended and the view refetched.
+    meetings.onSegment((event) => {
+      sendToMainWindow(meetingSegmentAppendedChannel, event);
+    });
+
+    meetings.onSpeakersMerged((event) => {
+      sendToMainWindow(meetingSpeakersMergedChannel, event);
     });
 
     settingsStore.subscribe((latest) => {

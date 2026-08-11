@@ -390,6 +390,8 @@ export const pl: Partial<Record<MessageKey, unknown>> = {
   "settings.meetings.speakers.sensitivity.hint": "Jak podobne muszą być dwa głosy, by liczyć się jako jedna osoba.",
   "settings.meetings.speakers.sensitivity.merge": "Łącz podobne głosy",
   "settings.meetings.speakers.sensitivity.keepApart": "Rozdzielaj głosy",
+  "settings.meetings.speakers.minAudio.label": "Minimalna mowa na mówcę",
+  "settings.meetings.speakers.minAudio.hint": "Krótsza mowa zostaje oznaczona, ale nigdy nie rejestruje nowego mówcy. Krótkie wtrącenia zawierają zbyt mało głosu, by kogokolwiek rozpoznać.",
   "settings.meetings.speakers.max.label": "Spodziewani mówcy",
   "settings.meetings.speakers.max.hint": "0 pozwala zdecydować klastrowaniu.",
   "settings.meetings.advanced.title": "Zaawansowane",

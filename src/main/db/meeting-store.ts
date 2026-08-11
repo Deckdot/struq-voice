@@ -32,6 +32,12 @@ export interface MeetingStore {
   setTitle: (id: number, title: string) => boolean;
   setAudioPath: (id: number, audioPath: string) => void;
   setSpeakerLabel: (id: number, speakerKey: string, label: string) => void;
+  /**
+   * Relabels every segment already written under `from` to `into`, for when
+   * the clustering discovers two speakers were one voice. Returns the number
+   * of segments moved.
+   */
+  mergeSpeaker: (id: number, from: string, into: string) => number;
   listMeetings: (limit: number, offset: number) => MeetingRecord[];
   countMeetings: () => number;
   getMeeting: (id: number) => MeetingRecord | null;
@@ -199,6 +205,29 @@ export const createMeetingStore = (db: Database.Database): MeetingStore => {
     ).run(id, speakerKey, label);
   };
 
+  const mergeSpeaker = (id: number, from: string, into: string): number => {
+    if (from === into) return 0;
+    const moved = db
+      .prepare(
+        "UPDATE meeting_segments SET speaker_key = ? WHERE meeting_id = ? AND speaker_key = ?"
+      )
+      .run(into, id, from).changes;
+    // A label the user typed against the retired key follows the segments,
+    // but only into an empty slot: a name they gave the surviving speaker is
+    // the one they meant and must not be overwritten by the merge.
+    db.prepare(
+      `INSERT INTO meeting_speakers (meeting_id, speaker_key, label)
+       SELECT ?, ?, label FROM meeting_speakers
+       WHERE meeting_id = ? AND speaker_key = ?
+       ON CONFLICT (meeting_id, speaker_key) DO NOTHING`
+    ).run(id, into, id, from);
+    db.prepare("DELETE FROM meeting_speakers WHERE meeting_id = ? AND speaker_key = ?").run(
+      id,
+      from
+    );
+    return moved;
+  };
+
   const listMeetings = (limit: number, offset: number): MeetingRecord[] => {
     const rows = db
       .prepare("SELECT * FROM meetings ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?")
@@ -292,6 +321,7 @@ export const createMeetingStore = (db: Database.Database): MeetingStore => {
     setTitle,
     setAudioPath,
     setSpeakerLabel,
+    mergeSpeaker,
     listMeetings,
     countMeetings,
     getMeeting,

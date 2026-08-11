@@ -388,6 +388,8 @@ export const ptBR: Partial<Record<MessageKey, unknown>> = {
   "settings.meetings.speakers.sensitivity.hint": "O quanto duas vozes devem ser parecidas para contar como uma pessoa.",
   "settings.meetings.speakers.sensitivity.merge": "Unir vozes semelhantes",
   "settings.meetings.speakers.sensitivity.keepApart": "Manter vozes separadas",
+  "settings.meetings.speakers.minAudio.label": "Fala mínima por participante",
+  "settings.meetings.speakers.minAudio.hint": "Uma fala mais curta que isso é rotulada, mas nunca registra um novo participante. Falas breves contêm voz de menos para identificar alguém.",
   "settings.meetings.speakers.max.label": "Participantes esperados",
   "settings.meetings.speakers.max.hint": "0 deixa o agrupamento decidir.",
   "settings.meetings.advanced.title": "Avançado",

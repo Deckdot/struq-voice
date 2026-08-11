@@ -28,6 +28,7 @@ import type {
   MeetingSearchRequest,
   MeetingSearchResult,
   MeetingSegmentAppendedEvent,
+  MeetingSpeakersMergedEvent,
   MeetingSegmentsRequest,
   MeetingSegmentsResult,
   MeetingSimpleResult,
@@ -147,6 +148,9 @@ export interface MainWindowApi {
     onStateChanged: (listener: (state: MeetingState) => void) => () => void;
     onSegmentAppended: (
       listener: (event: MeetingSegmentAppendedEvent) => void
+    ) => () => void;
+    onSpeakersMerged: (
+      listener: (event: MeetingSpeakersMergedEvent) => void
     ) => () => void;
     onLevels: (listener: (event: MeetingLevelsEvent) => void) => () => void;
     onAssetProgress: (

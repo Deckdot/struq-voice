@@ -41,6 +41,7 @@ const makeStore = (): FakeStore => {
     searchSegments: () => [],
     removeMeeting: () => true,
     markInterruptedOnBoot: () => 0,
+    mergeSpeaker: () => 0,
     listExpired: () => []
   };
   return store;
@@ -133,8 +134,10 @@ const makeSession = (
       accelerator: "CommandOrControl+Shift+M",
       engineId: "parakeet",
       diarization: true,
-      diarizationRefineOverMs: 6000,
+      diarizationRefineOverMs: 15_000,
       speakerThreshold: 0.55,
+      speakerMergeThreshold: 0.55,
+      minSpeakerAudioMs: 3000,
       maxSpeakers: 0,
       archiveAudio: true,
       archiveBitrateKbps: 32,
@@ -449,8 +452,10 @@ describe("meeting session", () => {
           accelerator: "CommandOrControl+Shift+M",
           engineId: "parakeet",
           diarization: true,
-          diarizationRefineOverMs: 6000,
+          diarizationRefineOverMs: 15_000,
           speakerThreshold: 0.55,
+          speakerMergeThreshold: 0.55,
+          minSpeakerAudioMs: 3000,
           maxSpeakers: 0,
           archiveAudio: true,
           archiveBitrateKbps: 32,

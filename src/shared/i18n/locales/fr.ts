@@ -388,6 +388,8 @@ export const fr: Partial<Record<MessageKey, unknown>> = {
   "settings.meetings.speakers.sensitivity.hint": "À quel point deux voix doivent se ressembler pour compter comme une personne.",
   "settings.meetings.speakers.sensitivity.merge": "Fusionner les voix similaires",
   "settings.meetings.speakers.sensitivity.keepApart": "Garder les voix séparées",
+  "settings.meetings.speakers.minAudio.label": "Parole minimale par intervenant",
+  "settings.meetings.speakers.minAudio.hint": "Une parole plus courte est étiquetée mais n'enregistre jamais un nouvel intervenant. Les brèves interventions contiennent trop peu de voix pour identifier quelqu'un.",
   "settings.meetings.speakers.max.label": "Intervenants attendus",
   "settings.meetings.speakers.max.hint": "0 laisse le regroupement décider.",
   "settings.meetings.advanced.title": "Avancé",

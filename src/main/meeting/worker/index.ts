@@ -87,6 +87,7 @@ let diarizer: DiarizerLike | null = null;
 let clusterer: SpeakerClusterer | null = null;
 let speechLanguage: string | null = null;
 let diarizationRefineOverMs = 6000;
+let minSpeakerAudioMs = 3000;
 
 interface QueuedUtterance {
   readonly source: "system" | "microphone";
@@ -133,6 +134,41 @@ const embed = (samples: Float32Array): Float32Array => {
   return computeSpeakerEmbedding(activeExtractor, samples, SAMPLE_RATE);
 };
 
+/**
+ * The speech inside a VAD utterance, without the padding either side of it.
+ * Transcription has always trimmed; embedding used not to, and an embedding
+ * computed over leading and trailing room tone is partly a fingerprint of the
+ * room rather than of the voice.
+ */
+const speechOnly = (samples: Float32Array): Float32Array => {
+  const bounds = trimSilence(toInt16(samples), SAMPLE_RATE);
+  return samples.subarray(bounds.start, bounds.end);
+};
+
+const flushMerges = (): void => {
+  const merges = clusterer?.takeMerges() ?? [];
+  if (merges.length === 0) return;
+  post({ type: "speakers-merged", merges });
+};
+
+/**
+ * Labels one span of system audio. Speech too short to fingerprint is passed
+ * as provisional: it still gets the nearest speaker's label, but it cannot
+ * found a speaker or shape one, which is what stopped a single voice from
+ * fragmenting into half a dozen.
+ */
+const assignSpeaker = (samples: Float32Array): string => {
+  const active = clusterer;
+  if (active === null) return "s1";
+  const speech = speechOnly(samples);
+  if (speech.length === 0) return "s1";
+  const key = active.assign(embed(speech), {
+    provisional: sampleCountToMs(speech.length) < minSpeakerAudioMs
+  });
+  flushMerges();
+  return key;
+};
+
 const buildVad = (config: object): VadLike => {
   if (sherpa === null) {
     throw new Error("sherpa-onnx-node is not loaded.");
@@ -167,8 +203,9 @@ const transcribeUtterance = async (utterance: QueuedUtterance): Promise<void> =>
     if (clusterer !== null && diarizationRefineOverMs > 0) {
       if (durationMs > diarizationRefineOverMs && diarizer !== null) {
         segmentsToTranscribe = refineSystemLongTurn(utterance.startSample, samples);
+        flushMerges();
       } else {
-        const key = clusterer.assign(embed(samples));
+        const key = assignSpeaker(samples);
         segmentsToTranscribe = [{ startSample: utterance.startSample, samples, key }];
       }
     } else {
@@ -227,7 +264,11 @@ const refineSystemLongTurn = (
     utteranceStartSample,
     samples,
     sampleRate: SAMPLE_RATE,
-    minSubSegmentSeconds: 0.4,
+    // Was 0.4s. A slice that short is below the floor where an embedding means
+    // anything, so refinement was manufacturing exactly the fragments the
+    // clusterer then turned into phantom speakers.
+    minSubSegmentSeconds: 1,
+    minIdentifyingSeconds: minSpeakerAudioMs / 1000,
     diarizer,
     clusterer,
     embed
@@ -387,10 +428,12 @@ const onInit = (init: Extract<WorkerCommand, { type: "init" }>): void => {
 
     clusterer = createSpeakerClusterer({
       threshold: init.speakerThreshold,
+      mergeThreshold: init.speakerMergeThreshold,
       maxSpeakers: init.maxSpeakers
     });
     speechLanguage = init.speechLanguage;
     diarizationRefineOverMs = init.diarizationRefineOverMs;
+    minSpeakerAudioMs = init.minSpeakerAudioMs;
 
     heartbeatTimer = setInterval(() => {
       post({

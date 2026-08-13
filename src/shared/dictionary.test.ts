@@ -250,3 +250,52 @@ describe("dictionary rule editing helpers", () => {
     });
   });
 });
+
+/**
+ * Whole-word matching used \b, which is ASCII-only: every accented or
+ * non-Latin character counts as a non-word character to it, so a rule whose
+ * first or last character was one never fired, in the preview or in
+ * delivery. "Müller" worked only because its boundaries happen to be ASCII.
+ */
+describe("whole-word rules on non-ASCII text", () => {
+  const rule = (from: string, to: string): DictionaryRule => ({
+    from,
+    to,
+    matchCase: false,
+    wholeWord: true,
+    enabled: true
+  });
+
+  it("fires for a rule ending in an accented character", () => {
+    expect(applyDictionary("I want a café now", [rule("café", "coffee")])).toBe(
+      "I want a coffee now"
+    );
+  });
+
+  it("fires for a rule written entirely in a non-Latin script", () => {
+    expect(applyDictionary("I flew to 東京 today", [rule("東京", "Tokyo")])).toBe(
+      "I flew to Tokyo today"
+    );
+  });
+
+  it("fires for a rule with an accent in the middle", () => {
+    expect(applyDictionary("Mr Müller arrived", [rule("Müller", "Miller")])).toBe(
+      "Mr Miller arrived"
+    );
+  });
+
+  it("still refuses to match inside a larger word", () => {
+    expect(applyDictionary("cafés everywhere", [rule("café", "coffee")])).toBe(
+      "cafés everywhere"
+    );
+    expect(
+      applyDictionary("underground struckley", [rule("struck", "Struq")])
+    ).toBe("underground struckley");
+  });
+
+  it("matches a rule bounded by punctuation", () => {
+    expect(applyDictionary("a café, please", [rule("café", "coffee")])).toBe(
+      "a coffee, please"
+    );
+  });
+});

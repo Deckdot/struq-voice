@@ -57,7 +57,13 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
 - Target decision (our window focused -> renderer inserts, else clipboard +
   synthesized Ctrl+V).
 - `uIOhook.keyTap` primary (~2ms) with a PowerShell SendKeys fallback.
-- Optional clipboard save/restore with configurable delay.
+- Optional clipboard save/restore with configurable delay. A clipboard
+  holding anything other than text (an image, a file selection) is never
+  overwritten: only text survives the restore round trip, so delivery falls
+  back to the manual path rather than destroying it.
+- The overlay reports the outcome honestly: a check mark only when the
+  transcript reached the target app, and "Copied. Press Ctrl + V" whenever
+  it reached the clipboard but not the field.
 
 ### Data
 - History: better-sqlite3 + Drizzle + FTS5 search, virtualized reader,
@@ -188,7 +194,7 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
 - Strict IPC discipline: main process translates native OS chrome (tray, notifications, dialogs) while sending machine-readable codes to renderer for client-side translation via `t()`.
 - RTL layout support with Tailwind v4 logical properties (`ps-`, `pe-`, `ms-`, `me-`, `text-start`) and per-script font fallback stacks in `theme.css`.
 - Cached `Intl.DateTimeFormat` and `Intl.NumberFormat` factories to maintain virtualized list performance.
-- Speech Language axis with per-speech-language filler word removal in text cleanup (NFC normalized, Unicode case-folded).
+- Speech Language axis with per-speech-language filler word removal in text cleanup (NFC normalized, Unicode case-folded). A language with no filler table removes nothing rather than falling back to English: the English list contains "er", which is the verb "is" in Danish and Norwegian. Elongated spellings ("ummm") are matched, and a filler removed from the start of a sentence hands its capital to the word that takes its place.
 
 ### Platform
 - NSIS one-click per-user installer, app icon, tray icons.

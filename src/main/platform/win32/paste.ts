@@ -49,6 +49,12 @@ export interface PasteOutcome {
 export interface PasteDeps {
   readonly getFocusedWindow: () => BrowserWindow | null;
   readonly clipboard: Pick<typeof clipboard, "readText" | "writeText">;
+  /**
+   * What the clipboard currently holds. Writing text clears every other
+   * format, so this is what tells us whether an overwrite would destroy
+   * something we cannot put back.
+   */
+  readonly availableFormats?: () => string[];
   readonly keyTap: () => void;
   readonly keyTapEnter?: () => void;
   readonly execPowershell: () => Promise<void>;
@@ -100,6 +106,7 @@ const createDefaultDeps = (): PasteDeps => ({
       clipboard.writeText(text);
     },
   },
+  availableFormats: () => clipboard.availableFormats(),
   keyTap: () => {
     uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]);
   },
@@ -110,6 +117,26 @@ const createDefaultDeps = (): PasteDeps => ({
   execPowershellEnter: sendEnterKeystroke,
   delay: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
+
+/**
+ * Whether overwriting the clipboard would destroy something we cannot put
+ * back. `writeText` is the only restore tool available here, so text is the
+ * only content that survives a round trip.
+ *
+ * A runtime without `availableFormats` (an older injected fake) keeps the
+ * previous behaviour rather than blocking delivery: unknown is treated as
+ * text-only, which is what it always assumed.
+ */
+const holdsUnrestorableContent = (deps: PasteDeps, stashedText: string): boolean => {
+  const formats = deps.availableFormats?.();
+  if (formats === undefined) return false;
+  return formats.some((format) => {
+    if (format.startsWith("text/")) return false;
+    // Some apps advertise a text flavour alongside rich content. If the text
+    // we stashed round-trips the meaningful part, the overwrite is safe.
+    return stashedText.length === 0 || !format.startsWith("public.utf8");
+  });
+};
 
 /**
  * Deliver a transcript to whatever the user is focused on.
@@ -136,6 +163,16 @@ export const insertTextIntoActiveApp = async (
 
   const stashed = deps.clipboard.readText();
   const stashedSomething = stashed.length > 0;
+
+  // Writing text clears every other clipboard format, and `readText` cannot
+  // see them, so an image or a file selection used to be destroyed silently
+  // and reported as a successful paste. We can only put text back, so when
+  // the clipboard holds anything else, leave it alone and let the renderer
+  // deliver instead. Losing the user's copied image to paste a transcript is
+  // not a trade the app gets to make on their behalf.
+  if (options.restoreClipboard && holdsUnrestorableContent(deps, stashed)) {
+    return ok({ inserted: false });
+  }
 
   try {
     deps.clipboard.writeText(text);
@@ -179,7 +216,13 @@ export const insertTextIntoActiveApp = async (
     // Some apps read the clipboard asynchronously; restoring too fast makes
     // the paste land empty.
     await deps.delay(options.restoreClipboardDelayMs);
-    deps.clipboard.writeText(stashed);
+    try {
+      deps.clipboard.writeText(stashed);
+    } catch {
+      // The restore is best effort. A throw here used to reject out of the
+      // whole function with the transcript already delivered, turning a
+      // successful paste into a reported failure.
+    }
   }
 
   return ok({ inserted: true });

@@ -170,7 +170,9 @@ export function Overlay(): JSX.Element | null {
                 />
               )}
 
-              {state.phase === "delivering" && <DeliveringView key="delivering" />}
+              {state.phase === "delivering" && (
+                <DeliveringView key="delivering" state={state} locale={locale} />
+              )}
 
               {state.phase === "error" && (
                 <ErrorView key="error" state={state} locale={locale} />
@@ -261,7 +263,39 @@ function TranscribingView({
   );
 }
 
-function DeliveringView(): JSX.Element {
+/**
+ * The end of a capture. A check mark means the transcript is in the app the
+ * user was typing into; it must not be shown when nothing was inserted.
+ *
+ * Delivery reports `inserted: false` whenever the transcript reached the
+ * clipboard but not the target: one of our own windows had focus, the target
+ * was elevated and Windows dropped the synthesized keystroke, or the
+ * clipboard held content we refused to overwrite. All three used to draw the
+ * same check, so a dictation that went nowhere looked delivered.
+ */
+function DeliveringView({
+  state,
+  locale
+}: {
+  readonly state: Extract<CaptureState, { phase: "delivering" }>;
+  readonly locale: string;
+}): JSX.Element {
+  if (!state.inserted) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        className="flex min-h-0 flex-1 items-center gap-2.5"
+      >
+        <Icon icon="ph:clipboard-text" className="h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
+        <p className="min-w-0 flex-1 truncate text-xs text-text">
+          {t(locale, "overlay.errorCopied")}
+        </p>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97 }}

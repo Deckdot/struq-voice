@@ -36,7 +36,7 @@ import type {
   ModelsDownloadProgressEvent,
   TranscriptRecord
 } from "./ipc";
-import type { ModelsListResult, ModelsModelResult } from "./ipc";
+import type { ModelsListResult, ModelsModelResult, SettingsUpdateResult } from "./ipc";
 import type { OnboardingProfileResult, OnboardingStartRecommendedResult } from "./ipc";
 import type { MeetingState } from "./meeting";
 import type { Settings } from "./settings";
@@ -100,7 +100,7 @@ export interface MainWindowApi {
   };
   readonly settings: {
     get: () => Promise<{ settings: Settings }>;
-    update: (patch: Partial<Settings>) => Promise<{ settings: Settings }>;
+    update: (patch: Partial<Settings>) => Promise<SettingsUpdateResult>;
     onChange: (listener: (settings: Settings) => void) => () => void;
   };
   readonly dictionary: {

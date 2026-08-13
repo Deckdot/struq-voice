@@ -155,6 +155,7 @@ export const ptBR: Partial<Record<MessageKey, unknown>> = {
   "models.speed.balanced": "Equilibrado",
   "models.speed.highAccuracy": "Alta precisão",
 
+  "settings.saveFailed": "Não foi possível salvar as configurações. Sua alteração vale agora, mas será perdida ao reiniciar o app.",
   "settings.category.general": "Geral",
   "settings.category.capture": "Gravação",
   "settings.category.transcription": "Transcrição",

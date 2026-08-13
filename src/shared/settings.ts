@@ -233,12 +233,44 @@ export type OnboardingState = z.infer<typeof onboardingSchema>;
 export const DEFAULT_SETTINGS: Settings = settingsSchema.parse({});
 
 /**
+ * Take every field of `candidate` that validates on top of `base`, one key
+ * at a time, and drop only the ones that do not.
+ *
+ * The whole-object `safeParse` is all-or-nothing: one bad field discards
+ * every good one alongside it. That is how a single unrecognised value in
+ * settings.json reset an entire configured profile, and how one rejected
+ * key in a patch used to do the same.
+ */
+const salvageFields = (
+  base: Settings,
+  candidate: Record<string, unknown>
+): Settings => {
+  const accepted: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(candidate)) {
+    const probe = settingsSchema.safeParse({ ...accepted, [key]: value });
+    if (probe.success) {
+      accepted[key] = value;
+    }
+  }
+  const settled = settingsSchema.safeParse(accepted);
+  return settled.success ? settled.data : { ...base };
+};
+
+/**
  * Validate and upgrade an arbitrary persisted value to the current schema.
  * Unknown fields are dropped, missing fields get defaults.
+ *
+ * A file that fails as a whole is salvaged field by field rather than
+ * thrown away. A truncated write or one stale value used to cost the user
+ * their theme, hotkeys, speech language, dictionary and onboarding state in
+ * one silent step, and the next write committed that loss permanently.
  */
 export const migrateSettings = (raw: unknown): Settings => {
   const parsed = settingsSchema.safeParse(raw);
   if (parsed.success) return parsed.data;
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    return salvageFields(DEFAULT_SETTINGS, raw as Record<string, unknown>);
+  }
   return settingsSchema.parse({});
 };
 
@@ -257,14 +289,7 @@ export const applySettingsPatch = (
 ): Settings => {
   const merged = settingsSchema.safeParse({ ...current, ...patch });
   if (merged.success) return merged.data;
-  const accepted: Record<string, unknown> = { ...current };
-  for (const [key, value] of Object.entries(patch)) {
-    const candidate = settingsSchema.safeParse({ ...accepted, [key]: value });
-    if (candidate.success) {
-      accepted[key] = value;
-    }
-  }
-  return migrateSettings(accepted);
+  return salvageFields(current, patch);
 };
 
 /**

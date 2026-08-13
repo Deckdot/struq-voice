@@ -53,6 +53,7 @@ export function SettingsView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [category, setCategory] = useState<Category>("general");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>(INITIAL_UPDATE_STATE);
   const [currentVersion, setCurrentVersion] = useState("");
   const [devices, setDevices] = useState<readonly RecorderDevice[]>([]);
@@ -106,8 +107,11 @@ export function SettingsView(): JSX.Element {
   }, []);
 
   const update = (patch: Partial<Settings>): void => {
-    void api.settings.update(patch).then(({ settings: updated }) => {
+    void api.settings.update(patch).then(({ settings: updated, writeError }) => {
       setSettings(updated);
+      // A change that only reached memory must not look saved. It applies
+      // for this session and is gone at the next boot.
+      setSaveError(writeError ?? null);
     });
   };
 
@@ -122,6 +126,16 @@ export function SettingsView(): JSX.Element {
           }}
           className="border-b border-border"
         />
+
+        {saveError !== null && (
+          <div
+            role="alert"
+            className="mx-auto mt-4 w-full max-w-[800px] rounded-md border border-warning bg-warning-soft px-4 py-3"
+          >
+            <p className="text-sm text-text">{t("settings.saveFailed")}</p>
+            <p className="mt-1 text-xs text-text-muted">{saveError}</p>
+          </div>
+        )}
 
         <div className="mx-auto mt-5 w-full max-w-[800px]" role="tabpanel">
             {category === "general" && (

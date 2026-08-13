@@ -170,6 +170,7 @@ export const en = {
   "models.speed.highAccuracy": "High accuracy",
 
   // Settings Tabs & Categories
+  "settings.saveFailed": "Settings could not be saved to disk. Your change applies now but will be lost when the app restarts.",
   "settings.category.general": "General",
   "settings.category.capture": "Capture",
   "settings.category.transcription": "Transcription",

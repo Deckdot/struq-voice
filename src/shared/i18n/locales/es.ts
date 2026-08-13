@@ -155,6 +155,7 @@ export const es: Partial<Record<MessageKey, unknown>> = {
   "models.speed.balanced": "Equilibrado",
   "models.speed.highAccuracy": "Alta precisión",
 
+  "settings.saveFailed": "No se pudo guardar la configuración. El cambio se aplica ahora, pero se perderá al reiniciar la aplicación.",
   "settings.category.general": "General",
   "settings.category.capture": "Grabación",
   "settings.category.transcription": "Transcripción",

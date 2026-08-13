@@ -167,6 +167,7 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "models.speed.balanced": "Gebalanceerd",
   "models.speed.highAccuracy": "Hoge nauwkeurigheid",
 
+  "settings.saveFailed": "Instellingen konden niet worden opgeslagen. Je wijziging geldt nu, maar verdwijnt zodra de app opnieuw start.",
   "settings.category.general": "Algemeen",
   "settings.category.capture": "Opname",
   "settings.category.transcription": "Transcriptie",

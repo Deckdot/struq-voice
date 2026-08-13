@@ -416,6 +416,12 @@ export interface SettingsUpdateRequest {
 
 export interface SettingsUpdateResult {
   readonly settings: Settings;
+  /**
+   * Set when the change reached memory but not disk (a read-only file, a
+   * full volume). The setting applies for this session and is gone at the
+   * next boot, so the UI must not report it as saved.
+   */
+  readonly writeError?: string;
 }
 
 export interface SettingsChangedEvent {

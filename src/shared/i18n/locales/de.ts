@@ -155,6 +155,7 @@ export const de: Partial<Record<MessageKey, unknown>> = {
   "models.speed.balanced": "Ausgewogen",
   "models.speed.highAccuracy": "Hohe Genauigkeit",
 
+  "settings.saveFailed": "Einstellungen konnten nicht gespeichert werden. Die Änderung gilt jetzt, geht beim Neustart der App aber verloren.",
   "settings.category.general": "Allgemein",
   "settings.category.capture": "Aufnahme",
   "settings.category.transcription": "Transkription",

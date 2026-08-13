@@ -25,6 +25,7 @@ import type {
   OverlayMoveRequest,
   RecorderDevice,
   SettingsUpdateRequest,
+  SettingsUpdateResult,
   UpdatesInstallResult,
   UpdatesStateResult
 } from "../shared/ipc";
@@ -390,9 +391,13 @@ export const registerIpcHandlers = (
 
   ipcMain.handle(
     settingsUpdateChannel,
-    (_event, request: SettingsUpdateRequest) => {
+    (_event, request: SettingsUpdateRequest): SettingsUpdateResult => {
       settingsStore?.update(request.patch);
-      return { settings: settingsStore?.get() ?? migrateSettings({}) };
+      const writeError = settingsStore?.lastWriteError() ?? null;
+      return {
+        settings: settingsStore?.get() ?? migrateSettings({}),
+        ...(writeError !== null ? { writeError } : {})
+      };
     }
   );
 

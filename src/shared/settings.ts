@@ -203,6 +203,28 @@ export const settingsSchema = z.object({
   })
 });
 
+/**
+ * The speech language as an engine hint.
+ *
+ * "auto" is the sentinel for "let the engine decide", not a language, so it
+ * becomes null and the engine's own detection runs. Anything else is passed
+ * to the decoder, which is what stops a Dutch dictation coming back with
+ * English words: per-utterance auto-detect on a few seconds of speech is a
+ * far weaker signal than the language the user already told us.
+ *
+ * Shared because dictation and meetings must not disagree about what "auto"
+ * means. Engines without a language parameter (Parakeet is one fixed
+ * multilingual model) ignore the hint.
+ */
+export const speechLanguageHint = (language: string): string | null => {
+  if (language === "auto") return null;
+  // Decoders want the base subtag: whisper.cpp rejects "pt-BR" where it
+  // accepts "pt". The picker offers base codes today, but the setting is a
+  // free string and a migrated or hand-edited profile can hold a full tag.
+  const base = language.split("-")[0]?.trim().toLowerCase() ?? "";
+  return base.length === 0 ? null : base;
+};
+
 export type Settings = z.infer<typeof settingsSchema>;
 export type MeetingSettings = z.infer<typeof meetingSettingsSchema>;
 export type DictionaryEntry = z.infer<typeof dictionaryEntrySchema>;

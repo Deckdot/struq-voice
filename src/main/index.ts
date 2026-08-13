@@ -94,7 +94,7 @@ import {
   isAutostartLaunch
 } from "./platform/win32/autostart";
 import { MOCK_ENGINE, MOCK_ENGINE_ID } from "../shared/engines";
-import { ONBOARDING_VERSION } from "../shared/settings";
+import { ONBOARDING_VERSION, speechLanguageHint } from "../shared/settings";
 import type { HardwareProfile } from "../shared/hardware";
 import { detectHardware } from "./hardware/detect";
 import { getArchitectureSupportError } from "./platform/win32/architecture";
@@ -580,10 +580,17 @@ if (!gotLock) {
         const trimmedDurationMs = Math.round(
           (pcm.length / 16000) * 1000
         );
+        // The configured speech language is a decoder hint, not just a
+        // post-processing detail. Without it Whisper and OpenRouter detect
+        // per utterance, which on a few seconds of dictation is weak enough
+        // to return English words in the middle of Dutch speech. "auto"
+        // resolves to null and leaves detection on for people who want it.
+        const languageHint = speechLanguageHint(settingsStore.get().speechLanguage);
         const outcome = await router.transcribe(
           {
             pcm,
             durationMs: Math.max(trimmedDurationMs, 1),
+            ...(languageHint !== null ? { language: languageHint } : {}),
           },
           resolvePrimaryEngineId(),
           settingsStore.get().engine.fallback,
@@ -701,9 +708,14 @@ if (!gotLock) {
         if (pcm.length === 0) {
           return fail({ code: "APP_NOT_READY", message: "Nothing to decode yet." });
         }
+        // The same hint the final pass uses. A partial decoded in a
+        // different language than the transcript that replaces it would
+        // rewrite itself on screen as the user speaks.
+        const partialLanguage = speechLanguageHint(settingsStore.get().speechLanguage);
         return engine.transcribe({
           pcm,
           durationMs: Math.max(Math.round((pcm.length / 16000) * 1000), 1),
+          ...(partialLanguage !== null ? { language: partialLanguage } : {}),
           signal
         });
       },

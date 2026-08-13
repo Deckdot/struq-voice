@@ -23,6 +23,7 @@ import type { BrowserWindow } from "electron";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { MeetingSettings } from "../../shared/settings";
+import { speechLanguageHint } from "../../shared/settings";
 import type {
   MeetingLaneErrorCode,
   MeetingLaneHealth,
@@ -371,7 +372,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       vadMinSpeechMs: settings.vadMinSpeechMs,
       vadMinSilenceMs: settings.vadMinSilenceMs,
       vadMaxSpeechMs: settings.vadMaxSpeechMs,
-      speechLanguage: normalizeSpeechLanguage(options.speechLanguage())
+      speechLanguage: speechLanguageHint(options.speechLanguage())
     };
     const workerStarted = await options.worker.start(init);
     if (!workerStarted.ok) {
@@ -771,10 +772,3 @@ const defaultTitle = (date: Date): string => {
   return `Meeting ${String(date.getFullYear())}-${month}-${day} ${hours}:${minutes}`;
 };
 
-/**
- * The dictation speech language is "auto" when the engine decides. Meetings
- * need a language the VAD and engines can rely on, so "auto" becomes null
- * (engine default), anything else passes through.
- */
-const normalizeSpeechLanguage = (language: string): string | null =>
-  language === "auto" ? null : language;

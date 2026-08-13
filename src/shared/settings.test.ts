@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applySettingsPatch,
+  speechLanguageHint,
   DEFAULT_SETTINGS,
   dictionaryFileSchema,
   meetingSettingsSchema,
@@ -213,5 +214,31 @@ describe("applySettingsPatch", () => {
   it("drops only the rejected field and keeps the previous value", () => {
     const next = applySettingsPatch(configured, { whisperModelId: "" });
     expect(next.whisperModelId).toBe("whisper-small-q8_0");
+  });
+});
+
+/**
+ * The speech language is a decoder hint, not only a post-processing detail.
+ * Dictation used to send nothing, so Whisper and OpenRouter auto-detected
+ * every utterance and a Dutch dictation could come back with English words
+ * in it. Dictation and meetings must agree on what the setting means.
+ */
+describe("speechLanguageHint", () => {
+  it("returns null for the auto sentinel so the engine detects", () => {
+    expect(speechLanguageHint("auto")).toBeNull();
+  });
+
+  it("passes a plain language code through", () => {
+    expect(speechLanguageHint("nl")).toBe("nl");
+  });
+
+  it("reduces a regional tag to the base subtag the decoders accept", () => {
+    expect(speechLanguageHint("pt-BR")).toBe("pt");
+    expect(speechLanguageHint("en-US")).toBe("en");
+  });
+
+  it("treats an empty or whitespace value as no hint", () => {
+    expect(speechLanguageHint("")).toBeNull();
+    expect(speechLanguageHint("   ")).toBeNull();
   });
 });

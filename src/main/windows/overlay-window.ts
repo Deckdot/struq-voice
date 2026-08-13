@@ -40,6 +40,7 @@ import { t } from "../../shared/i18n";
 import type { OverlayPosition, Rect } from "../../shared/overlay-position";
 import {
   clampToWorkArea,
+  defaultPosition,
   findHostWorkArea,
   resolveOverlayPosition
 } from "../../shared/overlay-position";
@@ -91,6 +92,8 @@ export interface OverlayWindowController {
   getWindow: () => BrowserWindow | null;
   /** Move the panel to a screen position, clamped to a visible display. */
   moveTo: (x: number, y: number) => void;
+  /** Forget the saved position and move the panel back to its default spot. */
+  resetPosition: () => void;
   /** Call on app before-quit. */
   dispose: () => void;
 }
@@ -118,6 +121,24 @@ let lastMeetingState: MeetingState = INITIAL_MEETING_STATE;
  */
 let storedPosition: OverlayPosition | null = null;
 let persistPosition: ((position: OverlayPosition) => void) | null = null;
+// The settings write is trailing-debounced: a drag moves the panel per
+// animation frame, and persisting every frame meant up to 60 synchronous
+// settings-file writes (plus full settings broadcasts) per second on the
+// main thread, which made the drag stutter. One write when the panel
+// settles is the same guarantee with none of the churn.
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+const schedulePersist = (): void => {
+  if (persistTimer !== null) {
+    clearTimeout(persistTimer);
+  }
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    if (storedPosition !== null) {
+      persistPosition?.(storedPosition);
+    }
+  }, 250);
+};
 
 const workAreas = (): Rect[] =>
   screen.getAllDisplays().map((display) => display.workArea);
@@ -358,12 +379,40 @@ export const createOverlayWindowController = (
 
       window.setPosition(next.x, next.y);
       storedPosition = next;
-      persistPosition?.(next);
+      schedulePersist();
+    },
+    resetPosition: (): void => {
+      if (persistTimer !== null) {
+        clearTimeout(persistTimer);
+        persistTimer = null;
+      }
+      storedPosition = null;
+      // The window keeps living across captures, so moving it now makes the
+      // reset visible immediately instead of only after a restart.
+      if (overlayWindow !== null && !overlayWindow.isDestroyed()) {
+        const cursor = screen.getCursorScreenPoint();
+        const { workArea } = screen.getDisplayNearestPoint(cursor);
+        const next = defaultPosition(
+          workArea,
+          OVERLAY_WIDTH,
+          overlayWindow.getBounds().height
+        );
+        overlayWindow.setPosition(next.x, next.y);
+      }
     },
     dispose: () => {
       if (meetingErrorTimer !== null) {
         clearTimeout(meetingErrorTimer);
         meetingErrorTimer = null;
+      }
+      // A drag that ended a moment before quit must still land in settings:
+      // flush the debounced write now instead of losing the position.
+      if (persistTimer !== null) {
+        clearTimeout(persistTimer);
+        persistTimer = null;
+        if (storedPosition !== null) {
+          persistPosition?.(storedPosition);
+        }
       }
       if (overlayWindow !== null && !overlayWindow.isDestroyed()) {
         overlayWindow.destroy();

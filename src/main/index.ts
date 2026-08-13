@@ -206,8 +206,27 @@ if (!gotLock) {
       app.quit();
       return;
     }
-    // The app draws its own chrome, so suppress Electron's default menu.
-    Menu.setApplicationMenu(null);
+    // The app draws its own chrome, so there is no visible menu bar. A null
+    // application menu, though, also removes the Edit roles, and those roles
+    // are what deliver Ctrl+C/V/X/A/Z to the renderer on Windows. Without
+    // them nothing can be pasted into the app's own inputs, so keep a menu
+    // with the roles: frameless windows never render it.
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        {
+          label: "Edit",
+          submenu: [
+            { role: "undo" },
+            { role: "redo" },
+            { type: "separator" },
+            { role: "cut" },
+            { role: "copy" },
+            { role: "paste" },
+            { role: "selectAll" }
+          ]
+        }
+      ])
+    );
     installLoopbackHandler();
 
     const settingsStore = createSettingsStore(join(app.getPath("userData"), "settings.json"));
@@ -407,6 +426,41 @@ if (!gotLock) {
       void updater.check();
     }
 
+    // Start hidden to the tray when launched at login; otherwise show the
+    // main window. A tray-resident app popping a window over the desktop on
+    // every boot is exactly the kind of interruption the product is against.
+    //
+    // The window is created here, before the engine bootstrap and warmup
+    // further down. Those used to run before any window existed, and the
+    // synchronous native loads they paid meant the icon click showed nothing
+    // for seconds and then a splash that met a main process still doing
+    // heavy work. Creating the window first puts the splash on screen while
+    // that work happens, and the warmup now loads the model on the addon's
+    // worker thread anyway.
+    const startedAtLogin =
+      !e2e &&
+      !hookTest &&
+      isAutostartLaunch() &&
+      process.env["STRUQ_VOICE_START_HIDDEN"] !== "0";
+    if (startedAtLogin) {
+      mainWindow = null;
+    } else {
+      mainWindow = createMainWindow(getLocaleOptions(settingsStore.get()));
+      mainWindow.on("close", (event) => {
+        if (!isQuitting) {
+          // Close hides, it does not quit. Quit from the tray or Ctrl+Q.
+          event.preventDefault();
+          if (mainWindow !== null) {
+            mainWindow.hide();
+          }
+          if (!settingsStore.get().firstHideNotified) {
+            settingsStore.update({ firstHideNotified: true });
+            tray.notifyFirstHide();
+          }
+        }
+      });
+    }
+
     const recorderWindow = createRecorderWindow({ e2e });
     const bridge = createRecorderBridge();
     const source = e2e
@@ -446,12 +500,14 @@ if (!gotLock) {
 
     const envEngineOverride = process.env["STRUQ_VOICE_ENGINE"];
     const settings = settingsStore.get();
-    // Bootstrap promotion: a profile still pointing at the retired mock is
-    // moved onto a real engine, preferring the local one once its model is on
-    // disk and OpenRouter once a key exists. Skipped in test modes: the
-    // readiness check loads the sherpa native module, which is exactly the
-    // native interference the hook spec isolates against.
-    if (!e2e && !hookTest) {
+    /**
+     * Bootstrap promotion: a profile still pointing at the retired mock is
+     * moved onto a real engine, preferring the local one once its model is on
+     * disk and OpenRouter once a key exists. Skipped in test modes: the
+     * readiness check loads the sherpa native module, which is exactly the
+     * native interference the hook spec isolates against.
+     */
+    const promoteFromMock = (): void => {
       void parakeetEngine.readiness().then((readiness) => {
         const latest = settingsStore.get();
         if (readiness.ready && latest.engine.primary === MOCK_ENGINE_ID) {
@@ -468,7 +524,24 @@ if (!gotLock) {
           });
         }
       });
-    }
+    };
+
+    /**
+     * Run engine bootstrap once the splash has settled. The native module
+     * load blocks the event loop for a moment and must never land in the
+     * window's first frames; the reveal is where every view fires its first
+     * IPC queries, so the delay keeps that burst clean too. At login there is
+     * no window, and a fixed delay still keeps the work away from boot.
+     */
+    const afterSplash = (run: () => void): void => {
+      if (mainWindow !== null && !mainWindow.isDestroyed()) {
+        mainWindow.once("ready-to-show", () => {
+          setTimeout(run, 1800);
+        });
+      } else {
+        setTimeout(run, 3000);
+      }
+    };
     const primaryEngineId = envEngineOverride ?? settings.engine.primary;
 
     const sounds = createCaptureSoundPlayer({
@@ -577,6 +650,21 @@ if (!gotLock) {
       isLiveTranscriptionEnabled: () => settingsStore.get().liveTranscription,
       locale: currentLocOpt.locale,
       dir: currentLocOpt.dir
+    });
+
+    // The reset control writes overlayPosition: null through the settings
+    // store. That must also clear the controller's in-memory position and
+    // move the live panel, otherwise the reset only applies after a restart.
+    // Only a non-null to null transition counts: every other settings write
+    // carries overlayPosition unchanged and must not yank the panel back to
+    // its default spot.
+    let lastPersistedOverlayPosition = settingsStore.get().overlayPosition;
+    settingsStore.subscribe((latest) => {
+      const next = latest.overlayPosition;
+      if (lastPersistedOverlayPosition !== null && next === null) {
+        overlay?.resetPosition();
+      }
+      lastPersistedOverlayPosition = next;
     });
 
     /**
@@ -809,38 +897,17 @@ if (!gotLock) {
     setTimeout(maybeStartHotkeys, 5000);
 
     // Parakeet warmup: loading the int8 encoder takes 1-3 seconds, and it
-    // must never land in the user's first capture. Background at app start,
-    // before the first hotkey press. Skipped in test modes: the sherpa
-    // native load is exactly the kind of native interference the hook spec
-    // isolates against. Fails silently; the engine reports readiness itself.
+    // must never land in the user's first capture. Runs in the background
+    // after the splash has settled, before the first hotkey press: the
+    // recognizer is built through the addon's async factory, so the load
+    // happens on its worker thread and never stalls the UI. Skipped in test
+    // modes: the sherpa native load is exactly the kind of native
+    // interference the hook spec isolates against. Fails silently; the
+    // engine reports readiness itself.
     if (!e2e && !hookTest) {
-      void parakeetEngine.warmup();
-    }
-
-    // Start hidden to the tray when launched at login; otherwise show the
-    // main window. A tray-resident app popping a window over the desktop on
-    // every boot is exactly the kind of interruption the product is against.
-    const startedAtLogin =
-      !e2e &&
-      !hookTest &&
-      isAutostartLaunch() &&
-      process.env["STRUQ_VOICE_START_HIDDEN"] !== "0";
-    if (startedAtLogin) {
-      mainWindow = null;
-    } else {
-      mainWindow = createMainWindow(getLocaleOptions(settingsStore.get()));
-      mainWindow.on("close", (event) => {
-        if (!isQuitting) {
-          // Close hides, it does not quit. Quit from the tray or Ctrl+Q.
-          event.preventDefault();
-          if (mainWindow !== null) {
-            mainWindow.hide();
-          }
-          if (!settingsStore.get().firstHideNotified) {
-            settingsStore.update({ firstHideNotified: true });
-            tray.notifyFirstHide();
-          }
-        }
+      afterSplash(() => {
+        promoteFromMock();
+        void parakeetEngine.warmup();
       });
     }
 

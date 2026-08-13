@@ -39,7 +39,7 @@ const makeStore = (): FakeStore => {
     listSegments: () => [],
     countSegments: () => 0,
     searchSegments: () => [],
-    removeMeeting: () => true,
+    removeMeeting: () => ({ removed: true, audioPath: null }),
     markInterruptedOnBoot: () => 0,
     mergeSpeaker: () => 0,
     listExpired: () => []

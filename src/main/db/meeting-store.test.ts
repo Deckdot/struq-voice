@@ -109,10 +109,43 @@ describe("meeting store", () => {
       gap: false
     });
     store.setSpeakerLabel(id, "s1", "Sarah");
-    expect(store.removeMeeting(id)).toBe(true);
+    expect(store.removeMeeting(id).removed).toBe(true);
     expect(store.getMeeting(id)).toBeNull();
     expect(store.countSegments(id)).toBe(0);
     expect(store.listSpeakers(id)).toHaveLength(0);
+  });
+
+  /**
+   * The recording has to go with the row. Deleting only the row left the
+   * audio in userData/meetings/<id>/ forever, with no UI or channel that
+   * could ever reach it, so the caller needs the path back.
+   */
+  it("reports the recording path so the caller can delete the file", () => {
+    const id = store.createMeeting({
+      title: "With audio",
+      engineId: "parakeet",
+      modelId: "parakeet-tdt-0.6b-v3-int8",
+      language: null,
+      audioPath: null
+    });
+    store.setAudioPath(id, "/meetings/7/recording.webm");
+
+    const result = store.removeMeeting(id);
+
+    expect(result.removed).toBe(true);
+    expect(result.audioPath).toBe("/meetings/7/recording.webm");
+  });
+
+  it("reports a null recording path for a meeting that was never archived", () => {
+    const id = store.createMeeting({
+      title: "No audio",
+      engineId: "parakeet",
+      modelId: "parakeet-tdt-0.6b-v3-int8",
+      language: null,
+      audioPath: null
+    });
+
+    expect(store.removeMeeting(id).audioPath).toBeNull();
   });
 
   it("marks only recording rows interrupted on boot", () => {

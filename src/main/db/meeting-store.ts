@@ -45,7 +45,8 @@ export interface MeetingStore {
   listSegments: (id: number, limit: number, offset: number) => MeetingSegment[];
   countSegments: (id: number) => number;
   searchSegments: (query: string, limit: number) => MeetingSearchHit[];
-  removeMeeting: (id: number) => boolean;
+  /** Deletes the row and reports the recording path so the caller can remove it. */
+  removeMeeting: (id: number) => { removed: boolean; audioPath: string | null };
   /** Meetings still marked recording after a crash. Called once at boot. */
   markInterruptedOnBoot: () => number;
   /** Ids and audio paths older than the cutoff, for the retention sweep. */
@@ -295,9 +296,21 @@ export const createMeetingStore = (db: Database.Database): MeetingStore => {
     }));
   };
 
-  const removeMeeting = (id: number): boolean => {
+  /**
+   * Deletes the row and reports where its recording lived, so the caller can
+   * remove the file too. The store owns SQL and nothing else, but a delete
+   * that reported only "row gone" is how every deleted meeting left its
+   * recording on disk forever, invisible and unreachable.
+   */
+  const removeMeeting = (id: number): { removed: boolean; audioPath: string | null } => {
+    const row = db.prepare("SELECT audio_path FROM meetings WHERE id = ?").get(id) as
+      | { audio_path: string | null }
+      | undefined;
     const result = db.prepare("DELETE FROM meetings WHERE id = ?").run(id);
-    return result.changes > 0;
+    return {
+      removed: result.changes > 0,
+      audioPath: row?.audio_path ?? null
+    };
   };
 
   const markInterruptedOnBoot = (): number => {

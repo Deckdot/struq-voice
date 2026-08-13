@@ -85,6 +85,7 @@ import { createMeetingWindow } from "./windows/meeting-window";
 import { installLoopbackHandler } from "./meeting/loopback";
 import { createMeetingAssetService } from "./meeting/assets";
 import { createArchiveWriter } from "./meeting/archive-writer";
+import { removeRecordingDirectory } from "./meeting/recording-files";
 import { createMeetingSession } from "./meeting/meeting-session";
 import { createMeetingWorkerClient } from "./meeting/worker-client";
 import { registerMeetingIpcHandlers } from "./meeting/ipc";
@@ -255,12 +256,8 @@ if (!gotLock) {
       setTimeout(() => {
         const cutoffMs = Date.now() - retentionDays * 86_400_000;
         for (const expired of meetingStore.listExpired(cutoffMs)) {
-          meetingStore.removeMeeting(expired.id);
-          if (expired.audioPath !== null) {
-            void import("node:fs/promises").then(({ rm }) => {
-              void rm(join(expired.audioPath as string, ".."), { recursive: true, force: true });
-            });
-          }
+          const { audioPath } = meetingStore.removeMeeting(expired.id);
+          void removeRecordingDirectory(audioPath ?? expired.audioPath);
         }
       }, 10_000);
     }
@@ -563,6 +560,7 @@ if (!gotLock) {
       ...DEFAULT_CAPTURE_OPTIONS,
       getMinCaptureMs: () => settingsStore.get().minCaptureMs,
       getMaxCaptureMs: () => settingsStore.get().maxCaptureMs,
+      getPrerollMs: () => settingsStore.get().prerollMs,
       source,
       onAudio: (audio) => {
         lastCaptureAudio = audio;
@@ -695,6 +693,7 @@ if (!gotLock) {
      */
     const partials = createPartialTranscriber({
       intervalMs: settingsStore.get().liveTranscriptionIntervalMs,
+      getIntervalMs: () => settingsStore.get().liveTranscriptionIntervalMs,
       snapshotTimeoutMs: 1500,
       minAudioMs: 600,
       snapshot: (timeoutMs) => bridge.requestSnapshot(timeoutMs),

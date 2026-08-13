@@ -447,3 +447,125 @@ describe("capture session engine id", () => {
     expect(session.state).toMatchObject({ phase: "transcribing", engineId: "whisper-cpp" });
   });
 });
+
+/**
+ * The transcript hook records history, which is optional by contract: the
+ * db layer promises history degrades rather than breaking transcription. A
+ * failing write used to throw out of the fire-and-forget finishCapture, so
+ * the words the user just spoke were never delivered, the phase stuck on
+ * transcribing, and every later capture was silently refused until restart.
+ */
+describe("capture session with a failing transcript hook", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const sessionWithThrowingHook = (
+    delivered: string[]
+  ): ReturnType<typeof createCaptureSession> =>
+    createCaptureSession({
+      ...OPTIONS,
+      source: stubSource(),
+      transcribe: () =>
+        Promise.resolve({
+          text: "hello",
+          meta: {
+            engineId: "e",
+            modelId: "m",
+            language: null,
+            inferenceMs: 1,
+            costUsd: null,
+            durationMs: 100
+          }
+        }),
+      onTranscript: () => {
+        throw new Error("SQLITE_FULL");
+      },
+      deliver: (text) => {
+        delivered.push(text);
+        return Promise.resolve({ inserted: true });
+      }
+    });
+
+  it("still delivers the transcript", async () => {
+    const delivered: string[] = [];
+    const session = sessionWithThrowingHook(delivered);
+
+    session.start();
+    await vi.runOnlyPendingTimersAsync();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(delivered).toEqual(["hello"]);
+  });
+
+  it("returns to idle instead of wedging on transcribing", async () => {
+    const session = sessionWithThrowingHook([]);
+
+    session.start();
+    await vi.runOnlyPendingTimersAsync();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(session.state.phase).toBe("idle");
+  });
+
+  it("accepts the next capture", async () => {
+    const session = sessionWithThrowingHook([]);
+
+    session.start();
+    await vi.runOnlyPendingTimersAsync();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+    await vi.runOnlyPendingTimersAsync();
+
+    session.start();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(session.state.phase).toBe("listening");
+  });
+});
+
+describe("capture session releases the audio source", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * Cancel has always released the worklet buffer. A failure out of
+   * listening did not, so one lost microphone left it armed and growing for
+   * the rest of the app's life.
+   */
+  it("discards the worklet buffer when the microphone is lost", async () => {
+    const discardCapture = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      source: stubSource({
+        discardCapture,
+        endCapture: () => Promise.reject(new Error("device gone"))
+      })
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+    // Let the rejected endCapture settle without running the error-hold
+    // timer out to idle.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(session.state.phase).toBe("error");
+    expect(discardCapture).toHaveBeenCalled();
+  });
+});

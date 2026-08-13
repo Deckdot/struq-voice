@@ -201,6 +201,11 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       try {
         audio = await options.source.endCapture();
       } catch (error) {
+        // Sealing the capture failed, so the worklet still holds whatever it
+        // recorded. Release it or the buffer stays armed and growing for the
+        // rest of the session, which is what one lost microphone used to
+        // cost until the app restarted.
+        options.source.discardCapture();
         fail("Microphone lost. Check the device connection and try again.", null);
         void error;
         return;
@@ -238,7 +243,16 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
     }
 
     if (meta !== null) {
-      options.onTranscript?.(text, meta);
+      try {
+        options.onTranscript?.(text, meta);
+      } catch {
+        // The hook records history, which is optional by contract. A failing
+        // write (full disk, locked database) used to throw out of this
+        // fire-and-forget function: the transcript was never delivered, the
+        // phase stayed on transcribing, and every later capture was refused
+        // until the app restarted. Losing the history row is a blemish;
+        // losing the words the user just spoke is not.
+      }
     }
 
     setState({ phase: "delivering", text, inserted: false });
@@ -283,7 +297,12 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
 
   const fail = (message: string, text: string | null = null): void => {
     if (state.phase === "idle" || state.phase === "delivering") return;
-    if (state.phase === "listening") options.onListeningEnd?.();
+    if (state.phase === "listening") {
+      options.onListeningEnd?.();
+      // Same reason cancel does it: a failure out of listening leaves the
+      // worklet armed and its buffer growing for the rest of the session.
+      options.source?.discardCapture();
+    }
     startedAt = null;
     clearTimers();
     setState({ phase: "error", message, text });

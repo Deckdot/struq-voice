@@ -624,7 +624,11 @@ if (!gotLock) {
         return { text, meta };
       },
       onTranscript: (text, meta) => {
-        if (history !== null) {
+        if (history === null) return;
+        // History degrades, it never breaks transcription: the null check
+        // above only covers a database that failed to open, not a write that
+        // fails later (full disk, locked WAL, corrupt file).
+        try {
           history.insert({
             text,
             engineId: meta.engineId,
@@ -635,6 +639,8 @@ if (!gotLock) {
             language: meta.language,
           });
           refreshRecentTranscripts();
+        } catch (error) {
+          console.warn("[history] Could not record the transcript.", error);
         }
       },
       deliver: async (text) => {

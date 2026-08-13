@@ -8,6 +8,32 @@ not by the report's ranking. Two findings that touch the same twenty lines
 belong in one commit; two findings that share a rank but nothing else do
 not. Every wave is one branch, one concern, one PR.
 
+## Status
+
+Waves 1, 2, 3 (except 3.2), 4, 5 and 7.1 are **implemented and committed**
+on `fix/meeting-speaker-detection`. Gates green at each step; 549 unit
+tests, up from 496 when the sweep started.
+
+Outstanding:
+
+- **Wave 3.2**, the meeting start/stop race. Deliberately left: it rewrites
+  the meeting lifecycle, wants its own PR, and needs a manual meeting on
+  real hardware that no unit test replaces.
+- **Wave 6**, the unproven list. Experiments, not code.
+- **Wave 7.2 and 7.3**, the onboarding speech-language step and per-meeting
+  language. Product decisions rather than defect fixes.
+
+Two things worth recording, because neither was in the sweep:
+
+- Real dictation from Roy exposed two more filler-removal defects while
+  Wave 1.1 was being proved: elongated spellings ("ummm") were never
+  matched, and a filler removed from the start of a sentence left the next
+  word lowercase. Both fixed in the same commit.
+- The first attempt at the elongation fix reintroduced the very bug being
+  removed: collapsing doubled letters folds "err" onto "er" and deletes it
+  from "err on the side of caution". Caught by a false-positive probe
+  before commit. Runs of three or more only.
+
 ## Verification before writing the plan
 
 I re-checked the top findings against the source rather than trusting the

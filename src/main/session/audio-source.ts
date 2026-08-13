@@ -22,7 +22,7 @@ export interface CaptureAudio {
 }
 
 export interface CaptureAudioSource {
-  beginCapture: (maxCaptureMs: number) => void;
+  beginCapture: (maxCaptureMs: number, prerollMs?: number) => void;
   endCapture: () => Promise<CaptureAudio>;
   /** Abort the active capture without waiting for PCM. */
   discardCapture: () => void;
@@ -47,13 +47,16 @@ export const createRecorderAudioSource = (
   };
 
   return {
-    beginCapture: (maxCaptureMs) => {
+    beginCapture: (maxCaptureMs, prerollMs) => {
       if (recorderWindow.isDestroyed()) return;
       // A capture that never ended (a lost end-capture) would otherwise pin
       // the loop on, so replace rather than stack.
       dropLevelsHold();
       releaseLevels = bridge.holdLevels();
-      const request: RecorderBeginCaptureRequest = { maxCaptureMs };
+      const request: RecorderBeginCaptureRequest = {
+        maxCaptureMs,
+        ...(prerollMs !== undefined ? { prerollMs } : {})
+      };
       recorderWindow.webContents.send(recorderBeginCaptureChannel, request);
     },
     endCapture: () => {

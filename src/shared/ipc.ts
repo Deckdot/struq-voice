@@ -60,6 +60,12 @@ export const recorderBeginCaptureChannel = "recorder:begin-capture" as const;
 
 export interface RecorderBeginCaptureRequest {
   readonly maxCaptureMs: number;
+  /**
+   * Audio kept from before the key went down (ms). Absent means the
+   * recorder's own default, which is what every build shipped before the
+   * setting was wired through.
+   */
+  readonly prerollMs?: number;
 }
 
 /** Main to recorder: seal the capture after its tail and return the recorded PCM. */

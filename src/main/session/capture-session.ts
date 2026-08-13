@@ -43,6 +43,8 @@ export interface CaptureSessionOptions {
   /** Read live settings at the start of each capture when provided. */
   readonly getMinCaptureMs?: () => number;
   readonly getMaxCaptureMs?: () => number;
+  /** Pre-roll for the next capture (ms). Read per capture, like the maximum. */
+  readonly getPrerollMs?: () => number;
   /** Simulated inference time between stop and delivering (ms). */
   readonly simulatedInferenceMs: number;
   /** How long delivering stays on screen before returning to idle (ms). */
@@ -144,7 +146,7 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       startedAt = Date.now();
       setState({ phase: "listening", startedAtMs: startedAt });
       try {
-        options.source?.beginCapture(maxCaptureMs);
+        options.source?.beginCapture(maxCaptureMs, options.getPrerollMs?.());
       } catch (error) {
         fail("Microphone unavailable. Check the device and try again.");
         void error;

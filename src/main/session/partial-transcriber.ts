@@ -27,6 +27,12 @@ import type { TranscribeResult } from "../engines/types";
 export interface PartialTranscriberOptions {
   /** How often to re-decode while listening (ms). */
   readonly intervalMs: number;
+  /**
+   * Resolves that interval per capture, so changing it in Settings takes
+   * effect on the next capture rather than at the next restart. Takes
+   * precedence over `intervalMs`.
+   */
+  readonly getIntervalMs?: () => number;
   /** Give up on a snapshot that does not arrive in this long (ms). */
   readonly snapshotTimeoutMs: number;
   /** Skip a pass whose audio is shorter than this: too little to decode. */
@@ -125,9 +131,12 @@ export const createPartialTranscriber = (
       sequence = 0;
       controller = new AbortController();
       const activeCapture = captureId;
-      timer = setInterval(() => {
-        void runPass(activeCapture);
-      }, options.intervalMs);
+      timer = setInterval(
+        () => {
+          void runPass(activeCapture);
+        },
+        options.getIntervalMs?.() ?? options.intervalMs
+      );
     },
     stop,
     isRunning: (): boolean => timer !== null

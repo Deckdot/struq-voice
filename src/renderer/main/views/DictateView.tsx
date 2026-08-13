@@ -183,10 +183,12 @@ export function DictateView(): JSX.Element {
   );
 
   const engine = ENGINE_OPTIONS.find((option) => option.id === settings.engine.primary);
+  // The selected id, not a hardcoded one: pinning v3 here reported a
+  // selected v2 as missing while main was happily transcribing with it.
   const engineModelId =
     settings.engine.primary === "whisper-cpp"
       ? settings.whisperModelId
-      : "parakeet-tdt-0.6b-v3-int8";
+      : settings.parakeetModelId;
   const modelStatus = models.find((entry) => entry.model.id === engineModelId);
   const isLocal = engine?.kind === "local";
   const isCloud = engine?.kind === "cloud";

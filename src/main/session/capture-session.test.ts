@@ -46,7 +46,9 @@ describe("capture session", () => {
 
     session.start();
     vi.runOnlyPendingTimers();
-    expect(beginCapture).toHaveBeenCalledWith(1000);
+    // The pre-roll is undefined here because no resolver was given, which
+    // leaves the recorder on its own default.
+    expect(beginCapture).toHaveBeenCalledWith(1000, undefined);
 
     vi.advanceTimersByTime(999);
     expect(session.state.phase).toBe("listening");
@@ -567,5 +569,53 @@ describe("capture session releases the audio source", () => {
 
     expect(session.state.phase).toBe("error");
     expect(discardCapture).toHaveBeenCalled();
+  });
+});
+
+describe("capture session pre-roll", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * The pre-roll setting existed in the schema and in the Capture tab, and
+   * nothing in main ever read it: the recorder hardcoded 250ms, so moving
+   * the slider changed nothing at all.
+   */
+  it("passes the configured pre-roll to the audio source", () => {
+    const beginCapture = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      getPrerollMs: () => 600,
+      source: stubSource({ beginCapture })
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+
+    expect(beginCapture).toHaveBeenCalledWith(OPTIONS.maxCaptureMs, 600);
+  });
+
+  it("reads the pre-roll again on the next capture", () => {
+    const beginCapture = vi.fn();
+    let preroll = 250;
+    const session = createCaptureSession({
+      ...OPTIONS,
+      getPrerollMs: () => preroll,
+      source: stubSource({ beginCapture })
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    session.cancel();
+    preroll = 800;
+    session.start();
+    vi.runOnlyPendingTimers();
+
+    expect(beginCapture).toHaveBeenLastCalledWith(OPTIONS.maxCaptureMs, 800);
   });
 });

@@ -501,8 +501,17 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     }
 
     let audioBytes = 0;
+    let archiveFailed = false;
     if (options.archive.isOpen()) {
-      audioBytes = await options.archive.close();
+      const closed = await options.archive.close();
+      // Null means the recording failed: the file is missing or truncated.
+      // Reporting the bytes that happen to be there would file a corrupt
+      // recording as a complete one.
+      if (closed === null) {
+        archiveFailed = true;
+      } else {
+        audioBytes = closed;
+      }
     }
     options.window.destroy();
     meetingWindow = null;
@@ -516,7 +525,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         durationMs: Math.max(0, Date.now() - (startedAtMs ?? Date.now())),
         audioBytes,
         speakerCount,
-        state: meetingFailed ? "interrupted" : "complete"
+        state: meetingFailed || archiveFailed ? "interrupted" : "complete"
       });
     }
     activeMeetingId = null;

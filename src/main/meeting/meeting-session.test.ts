@@ -81,7 +81,8 @@ const makeArchive = (): ArchiveWriter => ({
   open: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
   append: vi.fn(),
   close: vi.fn().mockResolvedValue(1024),
-  isOpen: () => false
+  isOpen: () => false,
+  lastError: () => null
 });
 
 const makeWindow = () => {

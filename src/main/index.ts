@@ -499,7 +499,6 @@ if (!gotLock) {
     });
 
     const envEngineOverride = process.env["STRUQ_VOICE_ENGINE"];
-    const settings = settingsStore.get();
     /**
      * Bootstrap promotion: a profile still pointing at the retired mock is
      * moved onto a real engine, preferring the local one once its model is on
@@ -542,7 +541,15 @@ if (!gotLock) {
         setTimeout(run, 3000);
       }
     };
-    const primaryEngineId = envEngineOverride ?? settings.engine.primary;
+    /**
+     * The engine to transcribe with, resolved per call rather than captured
+     * at boot. Reading it once meant switching engine in Settings changed
+     * nothing until the app restarted: the capture path, the live transcript
+     * and the tray all kept pointing at whatever was selected at launch. The
+     * env override still wins, since it exists to pin an engine for a run.
+     */
+    const resolvePrimaryEngineId = (): string =>
+      envEngineOverride ?? settingsStore.get().engine.primary;
 
     const sounds = createCaptureSoundPlayer({
       isEnabled: () => settingsStore.get().captureSounds,
@@ -563,7 +570,7 @@ if (!gotLock) {
       onListeningEnd: () => {
         sounds.play("close");
       },
-      transcribingEngineId: primaryEngineId,
+      getTranscribingEngineId: resolvePrimaryEngineId,
       transcribe: async (audio) => {
         // Trim leading and trailing silence before inference: shorter audio
         // is faster, and the engines want the speech, not the room noise.
@@ -578,7 +585,7 @@ if (!gotLock) {
             pcm,
             durationMs: Math.max(trimmedDurationMs, 1),
           },
-          primaryEngineId,
+          resolvePrimaryEngineId(),
           settingsStore.get().engine.fallback,
         );
         if (!outcome.ok) {
@@ -679,7 +686,7 @@ if (!gotLock) {
       minAudioMs: 600,
       snapshot: (timeoutMs) => bridge.requestSnapshot(timeoutMs),
       transcribe: async (audio, signal) => {
-        const engine = engines.get(primaryEngineId);
+        const engine = engines.get(resolvePrimaryEngineId());
         if (engine === undefined) {
           return fail({ code: "APP_NOT_READY", message: "Engine unavailable." });
         }
@@ -765,7 +772,8 @@ if (!gotLock) {
       onCopyTranscript: (text) => {
         clipboard.writeText(text);
       },
-      engineDisplayName: () => engines.get(primaryEngineId)?.displayName ?? MOCK_ENGINE.displayName,
+      engineDisplayName: () =>
+        engines.get(resolvePrimaryEngineId())?.displayName ?? MOCK_ENGINE.displayName,
     });
     tray.setLocale(currentLocOpt.locale);
 

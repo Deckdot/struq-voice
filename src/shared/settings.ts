@@ -221,6 +221,31 @@ export const migrateSettings = (raw: unknown): Settings => {
 };
 
 /**
+ * Apply a patch to a known-good settings object.
+ *
+ * A patch that fails validation must cost the caller its patch, never the
+ * user's profile. Going through migrateSettings meant one rejected field
+ * (an empty model id from the model picker) failed the whole object and
+ * silently reset theme, hotkeys, dictionary and onboarding to defaults.
+ * Bad keys are dropped one at a time and the rest of the patch still lands.
+ */
+export const applySettingsPatch = (
+  current: Settings,
+  patch: Partial<Settings>
+): Settings => {
+  const merged = settingsSchema.safeParse({ ...current, ...patch });
+  if (merged.success) return merged.data;
+  const accepted: Record<string, unknown> = { ...current };
+  for (const [key, value] of Object.entries(patch)) {
+    const candidate = settingsSchema.safeParse({ ...accepted, [key]: value });
+    if (candidate.success) {
+      accepted[key] = value;
+    }
+  }
+  return migrateSettings(accepted);
+};
+
+/**
  * Whether onboarding should run.
  *
  * The flag is the only authority now. It used to be inferred from the engine

@@ -57,6 +57,12 @@ export interface CaptureSessionOptions {
   readonly transcribe?: (audio: CaptureAudio) => Promise<{ text: string; meta: TranscriptMeta }>;
   /** Engine shown in the transcribing state while inference runs. */
   readonly transcribingEngineId?: string;
+  /**
+   * Resolves that engine at capture time, so switching engine in Settings
+   * shows up on the very next capture instead of after a restart. Takes
+   * precedence over `transcribingEngineId`.
+   */
+  readonly getTranscribingEngineId?: () => string;
   /** Called once the transcript exists, before delivering. */
   readonly onTranscript?: (text: string, meta: TranscriptMeta) => void;
   /** Called once the real capture buffer is sealed, or immediately on abort. */
@@ -175,7 +181,10 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
   const finishCapture = async (captureStartedAt: number): Promise<void> => {
     setState({
       phase: "transcribing",
-      engineId: options.transcribingEngineId ?? MOCK_ENGINE_ID,
+      engineId:
+        options.getTranscribingEngineId?.() ??
+        options.transcribingEngineId ??
+        MOCK_ENGINE_ID,
       startedAtMs: captureStartedAt,
     });
 

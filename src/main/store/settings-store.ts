@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Settings } from "../../shared/settings";
-import { DEFAULT_SETTINGS, migrateSettings } from "../../shared/settings";
+import { applySettingsPatch, DEFAULT_SETTINGS, migrateSettings } from "../../shared/settings";
 
 export interface SettingsStore {
   get: () => Settings;
@@ -37,7 +37,7 @@ export const createSettingsStore = (filePath: string): SettingsStore => {
   return {
     get: () => settings,
     update: (patch: Partial<Settings>) => {
-      settings = migrateSettings({ ...settings, ...patch });
+      settings = applySettingsPatch(settings, patch);
       save();
       for (const listener of listeners) {
         listener(settings);

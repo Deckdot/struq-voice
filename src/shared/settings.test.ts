@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applySettingsPatch,
   DEFAULT_SETTINGS,
   dictionaryFileSchema,
   meetingSettingsSchema,
@@ -162,5 +163,55 @@ describe("engine defaults", () => {
 
   it("does not offer the mock as a selectable engine", () => {
     expect(ENGINE_OPTIONS.map((option) => option.id)).not.toContain(MOCK_ENGINE_ID);
+  });
+});
+
+/**
+ * A rejected patch must cost the caller its patch, never the user's profile.
+ * The model picker used to send an empty whisperModelId when a Parakeet model
+ * was chosen; merging that through migrateSettings failed the whole object
+ * and silently reset theme, hotkeys, speech language and the dictionary.
+ */
+describe("applySettingsPatch", () => {
+  const configured = migrateSettings({
+    ...DEFAULT_SETTINGS,
+    theme: "dark",
+    pttAccelerator: "Alt+X",
+    speechLanguage: "nl",
+    whisperModelId: "whisper-small-q8_0"
+  });
+
+  it("applies a valid patch", () => {
+    const next = applySettingsPatch(configured, {
+      engine: { primary: "whisper-cpp", fallback: null }
+    });
+    expect(next.engine.primary).toBe("whisper-cpp");
+    expect(next.theme).toBe("dark");
+  });
+
+  it("keeps every other setting when one field of a patch is invalid", () => {
+    const next = applySettingsPatch(configured, {
+      engine: { primary: "parakeet", fallback: null },
+      whisperModelId: "",
+      parakeetModelId: "parakeet-tdt-0.6b-v2-int8"
+    });
+    expect(next.theme).toBe("dark");
+    expect(next.pttAccelerator).toBe("Alt+X");
+    expect(next.speechLanguage).toBe("nl");
+  });
+
+  it("lands the valid fields of a partly invalid patch", () => {
+    const next = applySettingsPatch(configured, {
+      engine: { primary: "parakeet", fallback: null },
+      whisperModelId: "",
+      parakeetModelId: "parakeet-tdt-0.6b-v2-int8"
+    });
+    expect(next.engine.primary).toBe("parakeet");
+    expect(next.parakeetModelId).toBe("parakeet-tdt-0.6b-v2-int8");
+  });
+
+  it("drops only the rejected field and keeps the previous value", () => {
+    const next = applySettingsPatch(configured, { whisperModelId: "" });
+    expect(next.whisperModelId).toBe("whisper-small-q8_0");
   });
 });

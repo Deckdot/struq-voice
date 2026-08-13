@@ -308,9 +308,11 @@ export function ModelsView(): JSX.Element {
 
   const selectModel = (status: ModelStatus): void => {
     if (status.model.engine === "parakeet") {
+      // Only the engine and the Parakeet id move. Blanking whisperModelId
+      // here used to fail the schema's min(1) and reset the whole profile,
+      // and it threw away the Whisper model to come back to anyway.
       void api.settings.update({
         engine: { primary: "parakeet", fallback: null },
-        whisperModelId: "",
         parakeetModelId: status.model.id
       });
       return;

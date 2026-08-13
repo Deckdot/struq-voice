@@ -394,3 +394,56 @@ describe("capture session", () => {
     }
   });
 });
+
+/**
+ * Switching engine in Settings must show up on the next capture. Main used to
+ * read the engine id once at boot and hand the session that constant, so the
+ * transcribing state named the engine selected at launch until a restart.
+ */
+describe("capture session engine id", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const capture = (session: ReturnType<typeof createCaptureSession>): void => {
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+  };
+
+  it("resolves the engine at capture time, not at construction", () => {
+    let selected = "parakeet";
+    const options = {
+      ...OPTIONS,
+      getTranscribingEngineId: (): string => selected,
+      source: stubSource()
+    };
+
+    const first = createCaptureSession(options);
+    capture(first);
+    expect(first.state).toMatchObject({ phase: "transcribing", engineId: "parakeet" });
+
+    // The same options, built before the switch: the id must still follow the
+    // new selection, which is what a boot-time constant could not do.
+    selected = "whisper-cpp";
+    const second = createCaptureSession(options);
+    capture(second);
+    expect(second.state).toMatchObject({ phase: "transcribing", engineId: "whisper-cpp" });
+  });
+
+  it("falls back to the static id when no resolver is given", () => {
+    const session = createCaptureSession({
+      ...OPTIONS,
+      transcribingEngineId: "whisper-cpp",
+      source: stubSource()
+    });
+
+    capture(session);
+    expect(session.state).toMatchObject({ phase: "transcribing", engineId: "whisper-cpp" });
+  });
+});

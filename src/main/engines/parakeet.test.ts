@@ -496,3 +496,62 @@ describe("parakeet async runtime", () => {
     }
   });
 });
+
+/**
+ * The native decode cannot be cancelled, but the request can stop waiting.
+ * Without that the router's 20s local timeout never fired for Parakeet: a
+ * stalled decode held the request open forever and no fallback engaged.
+ */
+describe("parakeet abort and labelling", () => {
+  it("gives up waiting when the signal aborts mid-decode", async () => {
+    const harness = makeAsyncSherpa(10_000);
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      modelId: PARAKEET_DEFAULT_MODEL_ID,
+      deps: { loadModule: () => harness.module }
+    });
+    const controller = new AbortController();
+
+    const pending = engine.transcribe({
+      pcm: new Int16Array([1, 2, 3]),
+      durationMs: 100,
+      signal: controller.signal
+    });
+    controller.abort();
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("cancelled");
+    }
+  });
+
+  it("labels the result with the model that decoded it", async () => {
+    const harness = makeAsyncSherpa(20);
+    let selected = PARAKEET_DEFAULT_MODEL_ID;
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      getModelId: () => selected,
+      deps: { loadModule: () => harness.module }
+    });
+
+    // Warm up first, so the recognizer for the default model already exists
+    // and the switch below lands while that model is mid-decode rather than
+    // before construction.
+    await engine.warmup();
+    const pending = engine.transcribe(request());
+    // Land the switch once the decode is genuinely under way: the queued job
+    // resolves the recognizer asynchronously, so switching in the same tick
+    // would simply build v2 up front and prove nothing.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    selected = "parakeet-tdt-0.6b-v2-int8";
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // The text came from the default model's weights, so that is the id
+      // that belongs in History.
+      expect(result.value.modelId).toBe(PARAKEET_DEFAULT_MODEL_ID);
+    }
+  });
+});

@@ -278,19 +278,52 @@ export const createParakeetEngine = (
     return pending;
   };
 
+  /**
+   * Resolves when the signal aborts, so a decode can be raced against it.
+   *
+   * The native decode cannot be cancelled: sherpa gives no handle to stop
+   * one in flight. What the caller can stop is waiting for it. Without this
+   * the router's 20s local timeout never fired for Parakeet, so a decode
+   * that stalled held the whole request open and no fallback ever engaged.
+   * The abandoned decode still finishes on the worker thread and still holds
+   * the queue, which is correct: the recognizer is busy until it is done.
+   */
+  const abortion = (signal: AbortSignal): Promise<never> =>
+    new Promise((_resolve, reject) => {
+      if (signal.aborted) {
+        reject(new ParakeetError("Transcription was cancelled."));
+        return;
+      }
+      signal.addEventListener(
+        "abort",
+        () => {
+          reject(new ParakeetError("Transcription was cancelled."));
+        },
+        { once: true }
+      );
+    });
+
   const decodeStream = async (
     activeRecognizer: SherpaOfflineRecognizer,
-    stream: SherpaOfflineStream
+    stream: SherpaOfflineStream,
+    signal: AbortSignal
   ): Promise<SherpaOfflineRecognizerResult> => {
     if (activeRecognizer.decodeAsync === undefined) {
+      // Synchronous decode blocks the event loop, so there is no point in
+      // the whole turn at which an abort could be observed anyway.
       activeRecognizer.decode(stream);
       return activeRecognizer.getResult(stream);
     }
+    const decoding = activeRecognizer.decodeAsync(stream);
+    // An abandoned decode must not surface as an unhandled rejection once
+    // the race has already been settled by the abort.
+    decoding.catch(() => undefined);
     try {
       // The non-blocking path: the native decode runs on the addon's worker
       // thread while the app keeps painting and answering IPC.
-      return await activeRecognizer.decodeAsync(stream);
-    } catch {
+      return await Promise.race([decoding, abortion(signal)]);
+    } catch (error) {
+      if (signal.aborted) throw error;
       // Some runtimes reject the async path for a given model. The stream is
       // still virgin at that point, so the synchronous path is a safe retry.
       activeRecognizer.decode(stream);
@@ -375,6 +408,10 @@ export const createParakeetEngine = (
           return fail(parakeetFailure("Transcription was cancelled."));
         }
         const activeRecognizer = await ensureRecognizerAsync();
+        // The id of the model actually decoding this audio. Reading it after
+        // the decode instead meant a model switched mid-decode wrote the new
+        // id into History against text the old weights produced.
+        const decodingModelId = recognizerModelId ?? resolveModelId();
         const stream = activeRecognizer.createStream();
         stream.acceptWaveform({
           // sherpa expects Float32 in [-1, 1]; our pipeline is Int16.
@@ -382,13 +419,13 @@ export const createParakeetEngine = (
           sampleRate: SAMPLE_RATE
         });
         const startedAt = Date.now();
-        const result = await decodeStream(activeRecognizer, stream);
+        const result = await decodeStream(activeRecognizer, stream, request.signal);
         const inferenceMs = Date.now() - startedAt;
         return ok({
           text: (result.text ?? "").trim(),
           language: null,
           engineId: PARAKEET_ENGINE_ID,
-          modelId: resolveModelId(),
+          modelId: decodingModelId,
           inferenceMs,
           realtimeFactor: inferenceMs / Math.max(request.durationMs, 1),
           costUsd: null

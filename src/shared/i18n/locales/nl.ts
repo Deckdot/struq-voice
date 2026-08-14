@@ -472,6 +472,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
     "De spraakservice voor vergaderingen kon niet starten. Herstart Struq Voice en probeer opnieuw.",
   "meetings.error.worker-failed":
     "De spraakservice voor vergaderingen is onverwacht gestopt. Start een nieuwe vergadering om door te gaan.",
+  "meetings.error.capture-lost":
+    "De audio-opname van de vergadering is onverwacht gestopt. Alles wat tot dat moment is opgenomen, is bewaard.",
   "meetings.error.window-load-failed":
     "Het audiovenster voor vergaderingen kon niet openen. Herstart Struq Voice en probeer opnieuw.",
   "meetings.error.loopback-denied":

@@ -365,7 +365,19 @@ if (!gotLock) {
       store: meetingStore,
       worker: createMeetingWorkerClient(),
       window: {
-        create: () => Promise.resolve(createMeetingWindow()),
+        create: () => {
+          const window = createMeetingWindow();
+          // A capture renderer that dies (crash, OOM, killed from the task
+          // manager) stops reporting silently: the lane-live timer is already
+          // cleared by then, so nothing else would ever notice and the meeting
+          // would sit in `recording` forever with a frozen archive.
+          window.webContents.on("render-process-gone", (_event, details) => {
+            meetingSession?.handleCaptureLost(
+              `The meeting capture renderer exited (${details.reason}).`
+            );
+          });
+          return Promise.resolve(window);
+        },
         destroy: () => {
           // Runs during quit as well as on stop, and by then Electron may have
           // torn windows down already. Reading webContents off a destroyed

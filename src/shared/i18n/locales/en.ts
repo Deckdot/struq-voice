@@ -447,6 +447,7 @@ export const en = {
   "meetings.error.engine-not-ready": "The selected voice service is not ready. Check Models, then try again.",
   "meetings.error.worker-start-failed": "The meeting voice service could not start. Restart Struq Voice, then try again.",
   "meetings.error.worker-failed": "The meeting voice service stopped unexpectedly. Start a new meeting to continue.",
+  "meetings.error.capture-lost": "Meeting audio capture stopped unexpectedly. Everything recorded up to that point was saved.",
   "meetings.error.window-load-failed": "The meeting audio window could not open. Restart Struq Voice, then try again.",
   "meetings.error.loopback-denied": "Windows did not allow system audio capture. Check its privacy settings, then try again.",
   "meetings.error.loopback-unavailable": "System audio capture is unavailable on this machine. Dictation still works. Include your Windows version and build in a bug report.",

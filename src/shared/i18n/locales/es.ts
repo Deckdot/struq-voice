@@ -420,6 +420,7 @@ export const es: Partial<Record<MessageKey, unknown>> = {
   "meetings.error.engine-not-ready": "El servicio de voz seleccionado no está listo. Comprueba Modelos e inténtalo de nuevo.",
   "meetings.error.worker-start-failed": "No se pudo iniciar el servicio de voz para reuniones. Reinicia Struq Voice e inténtalo de nuevo.",
   "meetings.error.worker-failed": "El servicio de voz para reuniones se detuvo inesperadamente. Inicia una reunión nueva para continuar.",
+  "meetings.error.capture-lost": "La captura de audio de la reunión se detuvo inesperadamente. Se guardó todo lo grabado hasta ese momento.",
   "meetings.error.window-load-failed": "No se pudo abrir la ventana de audio de la reunión. Reinicia Struq Voice e inténtalo de nuevo.",
   "meetings.error.loopback-denied": "Windows no permitió capturar el audio del sistema. Comprueba la privacidad e inténtalo de nuevo.",
   "meetings.error.loopback-unavailable": "Struq Voice no pudo oír el audio del sistema. Reproduce audio e inténtalo de nuevo.",

@@ -420,6 +420,7 @@ export const de: Partial<Record<MessageKey, unknown>> = {
   "meetings.error.engine-not-ready": "Der ausgewählte Sprachdienst ist nicht bereit. Prüfe Modelle und versuche es erneut.",
   "meetings.error.worker-start-failed": "Der Sprachdienst für Besprechungen konnte nicht starten. Starte Struq Voice neu und versuche es erneut.",
   "meetings.error.worker-failed": "Der Sprachdienst für Besprechungen wurde unerwartet beendet. Starte eine neue Besprechung, um fortzufahren.",
+  "meetings.error.capture-lost": "Die Audioaufnahme der Besprechung wurde unerwartet beendet. Alles bis zu diesem Zeitpunkt wurde gespeichert.",
   "meetings.error.window-load-failed": "Das Audiofenster für Besprechungen konnte nicht geöffnet werden. Starte Struq Voice neu und versuche es erneut.",
   "meetings.error.loopback-denied": "Windows hat die Aufnahme des Systemtons nicht erlaubt. Prüfe die Datenschutzeinstellungen und versuche es erneut.",
   "meetings.error.loopback-unavailable": "Struq Voice konnte keinen Systemton hören. Spiele Audio ab und versuche es erneut.",

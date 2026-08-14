@@ -422,6 +422,7 @@ export const pl: Partial<Record<MessageKey, unknown>> = {
   "meetings.error.engine-not-ready": "Wybrana usługa głosowa nie jest gotowa. Sprawdź Modele i spróbuj ponownie.",
   "meetings.error.worker-start-failed": "Nie udało się uruchomić usługi głosowej spotkań. Uruchom ponownie Struq Voice i spróbuj jeszcze raz.",
   "meetings.error.worker-failed": "Usługa głosowa spotkań niespodziewanie się zatrzymała. Rozpocznij nowe spotkanie, aby kontynuować.",
+  "meetings.error.capture-lost": "Przechwytywanie dźwięku spotkania niespodziewanie się zatrzymało. Wszystko, co nagrano do tego momentu, zostało zapisane.",
   "meetings.error.window-load-failed": "Nie udało się otworzyć okna dźwięku spotkania. Uruchom ponownie Struq Voice i spróbuj jeszcze raz.",
   "meetings.error.loopback-denied": "Windows nie zezwolił na przechwytywanie dźwięku systemowego. Sprawdź prywatność i spróbuj ponownie.",
   "meetings.error.loopback-unavailable": "Struq Voice nie wykrył dźwięku systemowego. Odtwórz dźwięk i spróbuj ponownie.",

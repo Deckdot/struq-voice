@@ -60,6 +60,7 @@ const MEETING_ERROR_KEYS: Record<MeetingErrorCode, MessageKey> = {
   "engine-not-ready": "meetings.error.engine-not-ready",
   "worker-start-failed": "meetings.error.worker-start-failed",
   "worker-failed": "meetings.error.worker-failed",
+  "capture-lost": "meetings.error.capture-lost",
   "window-load-failed": "meetings.error.window-load-failed",
   "loopback-denied": "meetings.error.loopback-denied",
   "loopback-unavailable": "meetings.error.loopback-unavailable",

@@ -90,6 +90,13 @@ export interface MeetingSession {
   handleFrames: (frames: MeetingAudioFrames) => void;
   handleArchiveChunk: (bytes: ArrayBuffer) => void;
   handleAudioState: (event: MeetingAudioStateEvent) => void;
+  /**
+   * The capture renderer died (crash, OOM, killed from the task manager).
+   * Nothing else notices: the lane-live timer is cleared once recording
+   * starts, so without this the session sits in `recording` forever with an
+   * archive that stopped growing and a tray that claims a live meeting.
+   */
+  handleCaptureLost: (reason: string) => void;
   subscribe: (listener: (state: MeetingState) => void) => () => void;
   onSegment: (
     listener: (event: MeetingSegmentAppendedEvent) => void
@@ -792,6 +799,27 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     }
   };
 
+  const handleCaptureLost = (reason: string): void => {
+    if (disposed) return;
+    // Idle and error own no meeting; finalizing is already tearing down.
+    if (state.phase !== "starting" && state.phase !== "recording" && state.phase !== "paused") {
+      return;
+    }
+    logError(
+      `[meeting] The capture window was lost during ${state.phase}.`,
+      new Error(reason)
+    );
+    // The window is gone, so stop() must not wait on it for an acknowledgement
+    // that can never arrive.
+    meetingWindow = null;
+    // Whatever was recorded is real, but the recording stopped early: this is
+    // an interrupted meeting, never a complete one.
+    meetingFailed = true;
+    void stop().then(() => {
+      setState({ phase: "error", code: "capture-lost" });
+    });
+  };
+
   const abortToError = async (
     meetingId: number,
     code:
@@ -859,6 +887,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     handleFrames,
     handleArchiveChunk,
     handleAudioState,
+    handleCaptureLost,
     subscribe,
     onSegment,
     onSpeakersMerged,

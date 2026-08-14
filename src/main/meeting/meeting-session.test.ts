@@ -481,6 +481,76 @@ describe("meeting session", () => {
     });
   });
 
+  // Nothing watches the capture renderer once recording starts: the lane-live
+  // timer is cleared the moment a lane goes live. Without this the session sat
+  // in `recording` forever, tray and all, with an archive that stopped growing.
+  describe("a capture renderer that dies mid-meeting", () => {
+    it("ends the meeting instead of recording forever", async () => {
+      const { session } = makeSession();
+      await session.start();
+      session.handleAudioState(liveAudioState());
+      expect(session.state.phase).toBe("recording");
+
+      session.handleCaptureLost("renderer crashed");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      expect(session.state.phase).toBe("error");
+      if (session.state.phase === "error") {
+        expect(session.state.code).toBe("capture-lost");
+      }
+    });
+
+    it("keeps what was recorded but files it interrupted", async () => {
+      const { session, store } = makeSession();
+      await session.start();
+      session.handleAudioState(liveAudioState());
+
+      session.handleCaptureLost("renderer crashed");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      expect(store.finalized[0]?.state).toBe("interrupted");
+    });
+
+    it("tears the worker down rather than leaving it decoding", async () => {
+      const { session, worker } = makeSession();
+      await session.start();
+      session.handleAudioState(liveAudioState());
+
+      session.handleCaptureLost("renderer crashed");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      expect(worker.kill).toHaveBeenCalled();
+    });
+
+    it("ignores a lost capture when no meeting is running", () => {
+      const { session, worker } = makeSession();
+      session.handleCaptureLost("renderer crashed");
+      expect(session.state.phase).toBe("idle");
+      expect(worker.kill).not.toHaveBeenCalled();
+    });
+
+    it("ends a paused meeting too", async () => {
+      const { session } = makeSession();
+      await session.start();
+      session.handleAudioState(liveAudioState());
+      session.togglePause();
+      expect(session.state.phase).toBe("paused");
+
+      session.handleCaptureLost("renderer crashed");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      expect(session.state.phase).toBe("error");
+    });
+  });
+
   it("stores segments from worker events and broadcasts them", async () => {
     const { session, store, worker } = makeSession();
     const seen: unknown[] = [];

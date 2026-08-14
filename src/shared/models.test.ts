@@ -37,10 +37,15 @@ describe("model catalog", () => {
     expect(Math.max(...bytes)).toBeGreaterThan(3_000_000_000);
   });
 
-  it("gives every whisper model a real sha256", () => {
-    for (const model of whisper) {
+  // Every file in the catalog, not just whisper. Scoping this to whisper is
+  // how both parakeet tokens.txt entries kept an all-zero placeholder, which
+  // the downloader and the installer both read as "skip verification": a
+  // truncated vocab then passed as installed and only failed at first decode.
+  it("gives every model file a real sha256", () => {
+    for (const model of MODEL_CATALOG) {
       for (const file of model.files) {
-        expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+        expect(file.sha256, `${model.id}/${file.path}`).toMatch(/^[0-9a-f]{64}$/);
+        expect(file.sha256, `${model.id}/${file.path}`).not.toMatch(/^0{64}$/);
       }
     }
   });

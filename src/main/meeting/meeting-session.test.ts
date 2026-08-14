@@ -11,7 +11,7 @@ import type { MeetingState } from "../../shared/meeting";
 import type { Result } from "../../shared/result";
 
 interface FakeStore extends MeetingStore {
-  readonly created: { title: string; engineId: string }[];
+  readonly created: { title: string; engineId: string; language: string | null }[];
   readonly finalized: { id: number; state: string }[];
   readonly segments: unknown[];
 }
@@ -19,11 +19,15 @@ interface FakeStore extends MeetingStore {
 const makeStore = (): FakeStore => {
   let nextId = 1;
   const store = {
-    created: [] as { title: string; engineId: string }[],
+    created: [] as { title: string; engineId: string; language: string | null }[],
     finalized: [] as { id: number; state: string }[],
     segments: [] as unknown[],
     createMeeting: (input: { title: string; engineId: string; modelId: string; language: string | null; audioPath: string | null }) => {
-      store.created.push({ title: input.title, engineId: input.engineId });
+      store.created.push({
+        title: input.title,
+        engineId: input.engineId,
+        language: input.language
+      });
       return nextId++;
     },
     appendSegment: () => 1,
@@ -548,6 +552,37 @@ describe("meeting session", () => {
       });
 
       expect(session.state.phase).toBe("error");
+    });
+  });
+
+  // The row used to record language: null while the worker decoded with the
+  // real hint. A meeting transcribed under a pinned language and one that was
+  // auto-detected are not equally trustworthy, so the row should say which.
+  describe("the recorded language", () => {
+    it("records the same hint the worker decodes with", async () => {
+      const { session, store, worker } = makeSession({ speechLanguage: () => "nl" });
+
+      await session.start();
+
+      expect(store.created[0]?.language).toBe("nl");
+      const init = vi.mocked(worker.start).mock.calls[0]?.[0];
+      expect(init?.speechLanguage).toBe("nl");
+    });
+
+    it("reduces a regional tag the same way the decoder needs", async () => {
+      const { session, store } = makeSession({ speechLanguage: () => "pt-BR" });
+      await session.start();
+      expect(store.created[0]?.language).toBe("pt");
+    });
+
+    it("records null for auto, which means the decoder detected it", async () => {
+      const { session, store, worker } = makeSession({ speechLanguage: () => "auto" });
+
+      await session.start();
+
+      expect(store.created[0]?.language).toBeNull();
+      const init = vi.mocked(worker.start).mock.calls[0]?.[0];
+      expect(init?.speechLanguage).toBeNull();
     });
   });
 

@@ -413,12 +413,17 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     setState({ phase: "starting" });
     const settings = options.settings();
     const engine = engineId(settings);
+    // The same hint the worker decodes with, recorded on the row. Null means
+    // the decoder auto-detected, which is a real answer rather than a missing
+    // one: a meeting transcribed under a pinned language and one that was
+    // auto-detected are not equally trustworthy, and the row should say which.
+    const language = speechLanguageHint(options.speechLanguage());
 
     const meetingId = store.createMeeting({
       title: defaultTitle(new Date()),
       engineId: engine,
       modelId: options.resolveModelId(engine),
-      language: null,
+      language,
       audioPath: null
     });
     activeMeetingId = meetingId;
@@ -477,7 +482,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       vadMinSpeechMs: settings.vadMinSpeechMs,
       vadMinSilenceMs: settings.vadMinSilenceMs,
       vadMaxSpeechMs: settings.vadMaxSpeechMs,
-      speechLanguage: speechLanguageHint(options.speechLanguage())
+      speechLanguage: language
     };
     const workerStarted = await options.worker.start(init);
     if (!workerStarted.ok) {

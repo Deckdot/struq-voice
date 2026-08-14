@@ -8,9 +8,10 @@ import type { MeetingAssetService } from "./assets";
 import type { WorkerEvent } from "./worker/protocol";
 import type { MeetingAudioStateEvent } from "../../shared/ipc";
 import type { MeetingState } from "../../shared/meeting";
+import type { Result } from "../../shared/result";
 
 interface FakeStore extends MeetingStore {
-  readonly created: { title: string; engineId: string }[];
+  readonly created: { title: string; engineId: string; language: string | null }[];
   readonly finalized: { id: number; state: string }[];
   readonly segments: unknown[];
 }
@@ -18,11 +19,15 @@ interface FakeStore extends MeetingStore {
 const makeStore = (): FakeStore => {
   let nextId = 1;
   const store = {
-    created: [] as { title: string; engineId: string }[],
+    created: [] as { title: string; engineId: string; language: string | null }[],
     finalized: [] as { id: number; state: string }[],
     segments: [] as unknown[],
     createMeeting: (input: { title: string; engineId: string; modelId: string; language: string | null; audioPath: string | null }) => {
-      store.created.push({ title: input.title, engineId: input.engineId });
+      store.created.push({
+        title: input.title,
+        engineId: input.engineId,
+        language: input.language
+      });
       return nextId++;
     },
     appendSegment: () => 1,
@@ -39,8 +44,9 @@ const makeStore = (): FakeStore => {
     listSegments: () => [],
     countSegments: () => 0,
     searchSegments: () => [],
-    removeMeeting: () => true,
+    removeMeeting: () => ({ removed: true, audioPath: null }),
     markInterruptedOnBoot: () => 0,
+    mergeSpeaker: () => 0,
     listExpired: () => []
   };
   return store;
@@ -80,7 +86,8 @@ const makeArchive = (): ArchiveWriter => ({
   open: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
   append: vi.fn(),
   close: vi.fn().mockResolvedValue(1024),
-  isOpen: () => false
+  isOpen: () => false,
+  lastError: () => null
 });
 
 const makeWindow = () => {
@@ -133,8 +140,10 @@ const makeSession = (
       accelerator: "CommandOrControl+Shift+M",
       engineId: "parakeet",
       diarization: true,
-      diarizationRefineOverMs: 6000,
+      diarizationRefineOverMs: 15_000,
       speakerThreshold: 0.55,
+      speakerMergeThreshold: 0.55,
+      minSpeakerAudioMs: 3000,
       maxSpeakers: 0,
       archiveAudio: true,
       archiveBitrateKbps: 32,
@@ -314,6 +323,269 @@ describe("meeting session", () => {
     expect(session.state).toEqual({ phase: "error", code: "window-load-failed" });
   });
 
+  // start() awaits four times and each await is a point where the stop hotkey
+  // can land. Before the generation token, the losing start rebuilt the window
+  // and worker that stop had just torn down: a recorder nobody owned, holding
+  // the microphone and the loopback for the life of the app.
+  describe("a stop that lands mid-start", () => {
+    /**
+     * A start parked on the archive open, which is the first await in start().
+     * `release` lets it continue so the cancellation can be observed at the
+     * gate that follows.
+     */
+    const startParkedOnArchive = (
+      overrides: Partial<MeetingSessionOptions> = {}
+    ): {
+      session: MeetingSession;
+      store: FakeStore;
+      worker: ReturnType<typeof makeWorker>;
+      window: ReturnType<typeof makeWindow>;
+      release: () => void;
+      parked: Promise<void>;
+    } => {
+      const archive = makeArchive();
+      let release = (): void => undefined;
+      let reachedArchive = (): void => undefined;
+      const parked = new Promise<void>((resolve) => {
+        reachedArchive = resolve;
+      });
+      // Only the first open parks. A later start (the one that proves the
+      // session recovers) must be free to complete on its own.
+      let parkedOnce = false;
+      archive.open = vi.fn(() => {
+        if (parkedOnce) return Promise.resolve({ ok: true as const, value: undefined });
+        parkedOnce = true;
+        return new Promise<Result<void>>((resolve) => {
+          reachedArchive();
+          release = () => {
+            resolve({ ok: true, value: undefined });
+          };
+        });
+      });
+      const made = makeSession({ archive, ...overrides });
+      return { ...made, release: () => { release(); }, parked };
+    };
+
+    it("does not create the window when the stop arrives during the storage step", async () => {
+      const { session, window, release, parked } = startParkedOnArchive();
+
+      const starting = session.start();
+      await parked;
+      expect(session.state.phase).toBe("starting");
+
+      const stopping = session.stop();
+      release();
+      const [outcome] = await Promise.all([starting, stopping]);
+
+      expect(outcome.ok).toBe(false);
+      // The cancelled start must never create the window it was about to make,
+      // nor fork the worker: both would outlive the meeting with no owner.
+      expect(window.create).not.toHaveBeenCalled();
+      expect(session.state.phase).toBe("idle");
+    });
+
+    it("sends no begin message and leaves no phantom complete row", async () => {
+      const { session, store, window, release, parked } = startParkedOnArchive();
+
+      const starting = session.start();
+      await parked;
+      const stopping = session.stop();
+      release();
+      const [outcome] = await Promise.all([starting, stopping]);
+
+      expect(outcome.ok).toBe(false);
+      // No begin after the teardown: a cancelled start must not put a recorder
+      // on the loopback.
+      expect(window.sent).not.toContain("meeting-audio:begin");
+      expect(window.webContents.executeJavaScript).not.toHaveBeenCalled();
+      expect(session.state.phase).toBe("idle");
+      // A meeting that never recorded is interrupted, never complete.
+      expect(store.finalized).not.toHaveLength(0);
+      expect(store.finalized.every((row) => row.state === "interrupted")).toBe(true);
+    });
+
+    it("finalizes the cancelled meeting exactly once", async () => {
+      const { session, store, release, parked } = startParkedOnArchive();
+
+      const starting = session.start();
+      await parked;
+      const stopping = session.stop();
+      release();
+      await Promise.all([starting, stopping]);
+
+      // stop() and the unwind both know this meeting id. Two finalize writes
+      // would race to decide complete versus interrupted.
+      expect(store.finalized.filter((row) => row.id === 1)).toHaveLength(1);
+    });
+
+    it("refuses a second start while the first is still in flight", async () => {
+      const { session, release, parked } = startParkedOnArchive();
+
+      const first = session.start();
+      await parked;
+      const second = await session.start();
+
+      expect(second.ok).toBe(false);
+      if (!second.ok) expect(second.code).toBe("already-running");
+
+      release();
+      await first;
+      await session.stop();
+    });
+
+    it("kills the worker it started rather than leaking the utilityProcess", async () => {
+      // Parked on the window load this time, so the worker is already forked
+      // when the stop lands and the unwind has something to clean up.
+      const window = makeWindow();
+      let releaseLoad = (): void => undefined;
+      let reachedLoad = (): void => undefined;
+      const parked = new Promise<void>((resolve) => {
+        reachedLoad = resolve;
+      });
+      window.webContents.once = vi.fn(
+        (event: string, callback: (event: unknown, channel: string) => void) => {
+          if (event === "did-finish-load") {
+            releaseLoad = () => {
+              callback({}, "did-finish-load");
+            };
+            reachedLoad();
+          } else if (event === "ipc-message") {
+            // stop() waits for the window to acknowledge; without this the
+            // teardown parks on its own 5s timer and the test times out.
+            setTimeout(() => {
+              callback({}, "meeting-audio:state");
+            }, 0);
+          }
+        }
+      );
+      const { session, worker } = makeSession({ window });
+
+      const starting = session.start();
+      await parked;
+      const stopping = session.stop();
+      releaseLoad();
+      await Promise.all([starting, stopping]);
+
+      expect(worker.kill).toHaveBeenCalled();
+      expect(window.destroy).toHaveBeenCalled();
+      expect(session.state.phase).toBe("idle");
+    });
+
+    it("accepts a fresh start once the cancelled one has unwound", async () => {
+      const { session, release, parked } = startParkedOnArchive();
+
+      const starting = session.start();
+      await parked;
+      const stopping = session.stop();
+      release();
+      await Promise.all([starting, stopping]);
+
+      const second = await session.start();
+      expect(second.ok).toBe(true);
+    });
+  });
+
+  // Nothing watches the capture renderer once recording starts: the lane-live
+  // timer is cleared the moment a lane goes live. Without this the session sat
+  // in `recording` forever, tray and all, with an archive that stopped growing.
+  describe("a capture renderer that dies mid-meeting", () => {
+    it("ends the meeting instead of recording forever", async () => {
+      const { session } = makeSession();
+      await session.start();
+      session.handleAudioState(liveAudioState());
+      expect(session.state.phase).toBe("recording");
+
+      session.handleCaptureLost("renderer crashed");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      expect(session.state.phase).toBe("error");
+      if (session.state.phase === "error") {
+        expect(session.state.code).toBe("capture-lost");
+      }
+    });
+
+    it("keeps what was recorded but files it interrupted", async () => {
+      const { session, store } = makeSession();
+      await session.start();
+      session.handleAudioState(liveAudioState());
+
+      session.handleCaptureLost("renderer crashed");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      expect(store.finalized[0]?.state).toBe("interrupted");
+    });
+
+    it("tears the worker down rather than leaving it decoding", async () => {
+      const { session, worker } = makeSession();
+      await session.start();
+      session.handleAudioState(liveAudioState());
+
+      session.handleCaptureLost("renderer crashed");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      expect(worker.kill).toHaveBeenCalled();
+    });
+
+    it("ignores a lost capture when no meeting is running", () => {
+      const { session, worker } = makeSession();
+      session.handleCaptureLost("renderer crashed");
+      expect(session.state.phase).toBe("idle");
+      expect(worker.kill).not.toHaveBeenCalled();
+    });
+
+    it("ends a paused meeting too", async () => {
+      const { session } = makeSession();
+      await session.start();
+      session.handleAudioState(liveAudioState());
+      session.togglePause();
+      expect(session.state.phase).toBe("paused");
+
+      session.handleCaptureLost("renderer crashed");
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+
+      expect(session.state.phase).toBe("error");
+    });
+  });
+
+  // The row used to record language: null while the worker decoded with the
+  // real hint. A meeting transcribed under a pinned language and one that was
+  // auto-detected are not equally trustworthy, so the row should say which.
+  describe("the recorded language", () => {
+    it("records the same hint the worker decodes with", async () => {
+      const { session, store, worker } = makeSession({ speechLanguage: () => "nl" });
+
+      await session.start();
+
+      expect(store.created[0]?.language).toBe("nl");
+      const init = vi.mocked(worker.start).mock.calls[0]?.[0];
+      expect(init?.speechLanguage).toBe("nl");
+    });
+
+    it("reduces a regional tag the same way the decoder needs", async () => {
+      const { session, store } = makeSession({ speechLanguage: () => "pt-BR" });
+      await session.start();
+      expect(store.created[0]?.language).toBe("pt");
+    });
+
+    it("records null for auto, which means the decoder detected it", async () => {
+      const { session, store, worker } = makeSession({ speechLanguage: () => "auto" });
+
+      await session.start();
+
+      expect(store.created[0]?.language).toBeNull();
+      const init = vi.mocked(worker.start).mock.calls[0]?.[0];
+      expect(init?.speechLanguage).toBeNull();
+    });
+  });
+
   it("stores segments from worker events and broadcasts them", async () => {
     const { session, store, worker } = makeSession();
     const seen: unknown[] = [];
@@ -449,8 +721,10 @@ describe("meeting session", () => {
           accelerator: "CommandOrControl+Shift+M",
           engineId: "parakeet",
           diarization: true,
-          diarizationRefineOverMs: 6000,
+          diarizationRefineOverMs: 15_000,
           speakerThreshold: 0.55,
+          speakerMergeThreshold: 0.55,
+          minSpeakerAudioMs: 3000,
           maxSpeakers: 0,
           archiveAudio: true,
           archiveBitrateKbps: 32,

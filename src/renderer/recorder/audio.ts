@@ -227,10 +227,14 @@ const buildPipeline = async (api: RecorderWindowApi): Promise<void> => {
     source.connect(analyser);
     analyser.connect(worklet);
 
-    const unsubscribeBegin = api.onBeginCapture(({ maxCaptureMs }) => {
+    const unsubscribeBegin = api.onBeginCapture(({ maxCaptureMs, prerollMs }) => {
+      // The configured pre-roll, not a constant. The setting existed in the
+      // schema and in the Capture tab but nothing in main ever read it, so
+      // moving the slider changed nothing at all.
+      const preroll = prerollMs ?? DEFAULT_PREROLL_MS;
       worklet.port.postMessage({
         type: "arm",
-        prerollSamples: Math.floor((TARGET_SAMPLE_RATE * DEFAULT_PREROLL_MS) / 1000),
+        prerollSamples: Math.floor((TARGET_SAMPLE_RATE * preroll) / 1000),
         maxCaptureMs
       });
     });

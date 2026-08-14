@@ -302,3 +302,256 @@ describe("parakeet engine", () => {
     }
   });
 });
+
+interface AsyncHarness {
+  readonly module: SherpaOnnxModule;
+  readonly maxConcurrentDecodes: () => number;
+  readonly decodeCalls: () => number;
+}
+
+const makeAsyncSherpa = (decodeDelayMs = 10): AsyncHarness => {
+  let activeDecodes = 0;
+  let maxActiveDecodes = 0;
+  let decodeCalls = 0;
+  const Recognizer = class implements SherpaOfflineRecognizer {
+    static createAsync = (): Promise<SherpaOfflineRecognizer> =>
+      Promise.resolve(new Recognizer());
+    createStream(): SherpaOfflineStream {
+      return {
+        acceptWaveform: (_waveform): void => {}
+      };
+    }
+    decode(_stream: SherpaOfflineStream): void {
+      decodeCalls += 1;
+    }
+    async decodeAsync(
+      _stream: SherpaOfflineStream
+    ): Promise<{ readonly text?: string }> {
+      decodeCalls += 1;
+      activeDecodes += 1;
+      maxActiveDecodes = Math.max(maxActiveDecodes, activeDecodes);
+      await new Promise((resolve) => setTimeout(resolve, decodeDelayMs));
+      activeDecodes -= 1;
+      return { text: "async hello" };
+    }
+    getResult(_stream: SherpaOfflineStream): { readonly text?: string } {
+      return { text: "sync hello" };
+    }
+  };
+  return {
+    module: { OfflineRecognizer: Recognizer },
+    maxConcurrentDecodes: () => maxActiveDecodes,
+    decodeCalls: () => decodeCalls
+  };
+};
+
+const makeModelsRootForDefault = (): string => {
+  const model = findModel(PARAKEET_DEFAULT_MODEL_ID);
+  if (model === null) {
+    throw new Error("catalog is missing the default Parakeet model");
+  }
+  return makeModelsRoot(
+    PARAKEET_DEFAULT_MODEL_ID,
+    model.files.map((file) => file.path)
+  );
+};
+
+describe("parakeet async runtime", () => {
+  it("constructs the recognizer through the async factory during warmup", async () => {
+    let asyncConstruction = 0;
+    let syncConstruction = 0;
+    const makeInstance = (): SherpaOfflineRecognizer => ({
+      createStream: (): SherpaOfflineStream => ({
+        acceptWaveform: (_waveform): void => {}
+      }),
+      decode: (_stream): void => {},
+      getResult: (_stream): { readonly text?: string } => ({ text: "hello" })
+    });
+    const Recognizer = class implements SherpaOfflineRecognizer {
+      static createAsync = (): Promise<SherpaOfflineRecognizer> => {
+        asyncConstruction += 1;
+        return Promise.resolve(makeInstance());
+      };
+      constructor() {
+        syncConstruction += 1;
+      }
+      createStream(): SherpaOfflineStream {
+        return {
+          acceptWaveform: (_waveform): void => {}
+        };
+      }
+      decode(_stream: SherpaOfflineStream): void {}
+      getResult(_stream: SherpaOfflineStream): { readonly text?: string } {
+        return { text: "hello" };
+      }
+    };
+    const states: ("cold" | "warming" | "warm" | "failed")[] = [];
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      modelId: PARAKEET_DEFAULT_MODEL_ID,
+      onWarmup: (state): void => {
+        states.push(state);
+      },
+      deps: { loadModule: () => ({ OfflineRecognizer: Recognizer }) }
+    });
+
+    await engine.warmup();
+    expect(states).toEqual(["warming", "warm"]);
+    expect(asyncConstruction).toBe(1);
+    expect(syncConstruction).toBe(0);
+  });
+
+  it("decodes through the async path when the runtime provides it", async () => {
+    const harness = makeAsyncSherpa();
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      modelId: PARAKEET_DEFAULT_MODEL_ID,
+      deps: { loadModule: () => harness.module }
+    });
+
+    const result = await engine.transcribe(request());
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.text).toBe("async hello");
+    }
+    expect(harness.decodeCalls()).toBe(1);
+  });
+
+  it("never runs two decodes on the recognizer at once", async () => {
+    const harness = makeAsyncSherpa(10);
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      modelId: PARAKEET_DEFAULT_MODEL_ID,
+      deps: { loadModule: () => harness.module }
+    });
+
+    const [first, second] = await Promise.all([
+      engine.transcribe(request()),
+      engine.transcribe(request())
+    ]);
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(harness.maxConcurrentDecodes()).toBe(1);
+    expect(harness.decodeCalls()).toBe(2);
+  });
+
+  it("skips a request aborted while waiting behind another decode", async () => {
+    const harness = makeAsyncSherpa(20);
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      modelId: PARAKEET_DEFAULT_MODEL_ID,
+      deps: { loadModule: () => harness.module }
+    });
+
+    const first = engine.transcribe(request());
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const controller = new AbortController();
+    const second = engine.transcribe({
+      pcm: new Int16Array([4, 5, 6]),
+      durationMs: 100,
+      signal: controller.signal
+    });
+    controller.abort();
+
+    const firstResult = await first;
+    expect(firstResult.ok).toBe(true);
+
+    const secondResult = await second;
+    expect(secondResult.ok).toBe(false);
+    if (!secondResult.ok) {
+      expect(secondResult.error.message).toContain("cancelled");
+    }
+    // Only the first request reached the native decode.
+    expect(harness.decodeCalls()).toBe(1);
+  });
+
+  it("falls back to the synchronous decode when the async one rejects", async () => {
+    const Recognizer = class implements SherpaOfflineRecognizer {
+      static createAsync = (): Promise<SherpaOfflineRecognizer> =>
+        Promise.resolve(new Recognizer());
+      createStream(): SherpaOfflineStream {
+        return {
+          acceptWaveform: (_waveform): void => {}
+        };
+      }
+      decode(_stream: SherpaOfflineStream): void {}
+      decodeAsync(): Promise<{ readonly text?: string }> {
+        return Promise.reject(new Error("async decode not supported for this model"));
+      }
+      getResult(_stream: SherpaOfflineStream): { readonly text?: string } {
+        return { text: "sync hello" };
+      }
+    };
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      modelId: PARAKEET_DEFAULT_MODEL_ID,
+      deps: { loadModule: () => ({ OfflineRecognizer: Recognizer }) }
+    });
+
+    const result = await engine.transcribe(request());
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.text).toBe("sync hello");
+    }
+  });
+});
+
+/**
+ * The native decode cannot be cancelled, but the request can stop waiting.
+ * Without that the router's 20s local timeout never fired for Parakeet: a
+ * stalled decode held the request open forever and no fallback engaged.
+ */
+describe("parakeet abort and labelling", () => {
+  it("gives up waiting when the signal aborts mid-decode", async () => {
+    const harness = makeAsyncSherpa(10_000);
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      modelId: PARAKEET_DEFAULT_MODEL_ID,
+      deps: { loadModule: () => harness.module }
+    });
+    const controller = new AbortController();
+
+    const pending = engine.transcribe({
+      pcm: new Int16Array([1, 2, 3]),
+      durationMs: 100,
+      signal: controller.signal
+    });
+    controller.abort();
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("cancelled");
+    }
+  });
+
+  it("labels the result with the model that decoded it", async () => {
+    const harness = makeAsyncSherpa(20);
+    let selected = PARAKEET_DEFAULT_MODEL_ID;
+    const engine = createParakeetEngine({
+      modelsRoot: makeModelsRootForDefault(),
+      getModelId: () => selected,
+      deps: { loadModule: () => harness.module }
+    });
+
+    // Warm up first, so the recognizer for the default model already exists
+    // and the switch below lands while that model is mid-decode rather than
+    // before construction.
+    await engine.warmup();
+    const pending = engine.transcribe(request());
+    // Land the switch once the decode is genuinely under way: the queued job
+    // resolves the recognizer asynchronously, so switching in the same tick
+    // would simply build v2 up front and prove nothing.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    selected = "parakeet-tdt-0.6b-v2-int8";
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // The text came from the default model's weights, so that is the id
+      // that belongs in History.
+      expect(result.value.modelId).toBe(PARAKEET_DEFAULT_MODEL_ID);
+    }
+  });
+});

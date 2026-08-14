@@ -32,8 +32,19 @@ export interface RefineLongTurnDeps {
   readonly diarizer: {
     readonly process: (samples: Float32Array) => readonly DiarizedSubSegment[];
   } | null;
-  readonly clusterer: { readonly assign: (embedding: Float32Array) => string } | null;
+  readonly clusterer: {
+    readonly assign: (
+      embedding: Float32Array,
+      options?: { readonly provisional: boolean }
+    ) => string;
+  } | null;
   readonly embed: (samples: Float32Array) => Float32Array;
+  /**
+   * Sub-segments shorter than this (seconds) can join a speaker but cannot
+   * found or shape one. A slice this short does not carry enough voice to
+   * identify anybody, and refinement produces plenty of them.
+   */
+  readonly minIdentifyingSeconds: number;
 }
 
 /**
@@ -46,8 +57,13 @@ export interface RefineLongTurnDeps {
 export const refineLongTurn = (deps: RefineLongTurnDeps): RefinedSegment[] => {
   const { utteranceStartSample, samples, sampleRate, diarizer, clusterer, embed } = deps;
 
+  const identifying = (length: number): { readonly provisional: boolean } => ({
+    provisional: length / sampleRate < deps.minIdentifyingSeconds
+  });
+
   if (diarizer === null || clusterer === null) {
-    const key = clusterer?.assign(embed(samples)) ?? "s1";
+    const key =
+      clusterer?.assign(embed(samples), identifying(samples.length)) ?? "s1";
     return [{ startSample: utteranceStartSample, samples, key }];
   }
 
@@ -62,7 +78,7 @@ export const refineLongTurn = (deps: RefineLongTurnDeps): RefinedSegment[] => {
       startSample - utteranceStartSample,
       endSample - utteranceStartSample
     );
-    const key = clusterer.assign(embed(slice));
+    const key = clusterer.assign(embed(slice), identifying(slice.length));
     if (current !== null && current.key === key) {
       const combined: Float32Array = new Float32Array(current.samples.length + slice.length);
       combined.set(current.samples);
@@ -78,7 +94,7 @@ export const refineLongTurn = (deps: RefineLongTurnDeps): RefinedSegment[] => {
   }
 
   if (merged.length === 0) {
-    const key = clusterer.assign(embed(samples));
+    const key = clusterer.assign(embed(samples), identifying(samples.length));
     return [{ startSample: utteranceStartSample, samples, key }];
   }
   return merged;

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   cleanupTranscript,
+  FILLER_TABLE,
   type CleanupOptions
 } from "./text-cleanup";
+import { SPEECH_LANGUAGES } from "../../shared/settings";
 
 const DEFAULT_OPTIONS: CleanupOptions = {
   dictionary: [],
@@ -34,6 +36,8 @@ describe("cleanupTranscript", () => {
     ).not.toThrow();
   });
 
+  // The leading filler took the sentence's capital with it, so the word that
+  // inherits the position is recapitalised.
   it("strips English fillers when the language is the auto sentinel", () => {
     expect(
       cleanupTranscript("um hello there", {
@@ -41,7 +45,7 @@ describe("cleanupTranscript", () => {
         removeFillers: true,
         speechLanguage: "auto"
       })
-    ).toBe("hello there");
+    ).toBe("Hello there");
   });
 
   it("falls back to English for any unusable language value", () => {
@@ -63,7 +67,7 @@ describe("cleanupTranscript", () => {
         removeFillers: true,
         speechLanguage: "nl-NL"
       })
-    ).toBe("hallo daar");
+    ).toBe("Hallo daar");
   });
 
   it("applies case-insensitive whole-word replacements", () => {
@@ -156,5 +160,117 @@ describe("cleanupTranscript", () => {
         ]
       })
     ).toBe("estimate");
+  });
+});
+
+/**
+ * Filler removal must never apply one language's fillers to another. The
+ * table used to fall back to English for any language it did not know, and
+ * English lists "er", which is the present tense of "to be" in Danish and
+ * Norwegian. Every affected user silently lost the verb from every sentence.
+ */
+describe("filler removal across languages", () => {
+  const withFillers = (speechLanguage: string): CleanupOptions => ({
+    ...DEFAULT_OPTIONS,
+    removeFillers: true,
+    speechLanguage
+  });
+
+  it("keeps the Danish verb 'er'", () => {
+    expect(cleanupTranscript("Det er godt at være her", withFillers("da"))).toBe(
+      "Det er godt at være her"
+    );
+  });
+
+  it("keeps the Norwegian verb 'er'", () => {
+    expect(cleanupTranscript("Jeg er glad i dag", withFillers("nb"))).toBe(
+      "Jeg er glad i dag"
+    );
+  });
+
+  it("still removes 'er' as a filler in English", () => {
+    expect(cleanupTranscript("Um I think er it works", withFillers("en"))).toBe(
+      "I think it works"
+    );
+  });
+
+  it("removes nothing for a language with no filler table", () => {
+    expect(cleanupTranscript("er is not a filler here", withFillers("cs"))).toBe(
+      "er is not a filler here"
+    );
+  });
+
+  /**
+   * "auto" is the detect-the-language sentinel, not a language. It reaches
+   * here whenever the engine reports no language, so it must stay on the
+   * English table rather than becoming a no-op.
+   */
+  it("falls back to English for an unusable language tag", () => {
+    expect(cleanupTranscript("Um I think it works", withFillers("auto"))).toBe(
+      "I think it works"
+    );
+  });
+
+  it("covers every language the speech picker offers", () => {
+    // Reads the shared list the pickers render from, rather than a copy of
+    // it. A language offered but missing here removes no fillers at all,
+    // which is safe but silently useless, so the two must not drift.
+    const missing = SPEECH_LANGUAGES.map((language) => language.code).filter(
+      (tag) => FILLER_TABLE[tag] === undefined
+    );
+    expect(missing).toEqual([]);
+  });
+});
+
+/**
+ * Real dictation does not spell fillers the way a table does. Speech
+ * recognition writes a held vowel with however many letters it heard, and a
+ * filler at the front of a sentence takes the capital with it when removed.
+ */
+describe("filler removal on real dictation", () => {
+  const en: CleanupOptions = {
+    ...DEFAULT_OPTIONS,
+    removeFillers: true,
+    speechLanguage: "en"
+  };
+
+  it("removes elongated fillers", () => {
+    expect(cleanupTranscript("Umm so ummm yeah", en)).toBe("So yeah");
+    expect(cleanupTranscript("I think uhh it works", en)).toBe("I think it works");
+  });
+
+  it("recapitalises the word left at the start of a sentence", () => {
+    expect(cleanupTranscript("Um so it works", en)).toBe("So it works");
+    expect(cleanupTranscript("at most do. Um so we ship", en)).toBe(
+      "at most do. So we ship"
+    );
+  });
+
+  it("does not recapitalise a word from mid-sentence", () => {
+    expect(cleanupTranscript("I think um it works", en)).toBe("I think it works");
+  });
+
+  /**
+   * The elongation collapse must never fold a real word onto a filler.
+   * Collapsing doubled letters turned "err" into "er" and deleted it from
+   * "err on the side of caution", which is the English twin of the Danish
+   * bug this whole change exists to fix.
+   */
+  it("keeps real words that resemble a filler", () => {
+    expect(cleanupTranscript("err on the side of caution", en)).toBe(
+      "err on the side of caution"
+    );
+    expect(cleanupTranscript("The summer hummed and I stammered", en)).toBe(
+      "The summer hummed and I stammered"
+    );
+    expect(cleanupTranscript("Mississippi assessment committee", en)).toBe(
+      "Mississippi assessment committee"
+    );
+  });
+
+  it("strips fillers wrapped in punctuation", () => {
+    expect(cleanupTranscript("Hmm. Um, I think it works.", en)).toBe(
+      "I think it works."
+    );
   });
 });

@@ -65,12 +65,27 @@ export const meetingSettingsSchema = z.object({
    * where two people overlap is not collapsed onto one speaker. 0 disables
    * the refinement stage and skips the segmentation model entirely.
    */
-  diarizationRefineOverMs: z.number().int().min(0).max(60_000).default(6000),
+  diarizationRefineOverMs: z.number().int().min(0).max(60_000).default(15_000),
   /**
-   * Cosine similarity above which a voice is judged to be a speaker already
-   * heard. Higher splits one person into several; lower merges two people.
+   * Similarity above which a voice is judged to be a speaker already heard.
+   * Higher splits one person into several; lower merges two people. Scored
+   * against a speaker's recent utterances, not against a single average.
    */
   speakerThreshold: z.number().min(0.2).max(0.95).default(0.55),
+  /**
+   * Mean similarity between two speakers' recent utterances above which they
+   * are judged to be the same person and folded together. A different measure
+   * from speakerThreshold, so the two numbers are not comparable.
+   */
+  speakerMergeThreshold: z.number().min(0.2).max(0.95).default(0.55),
+  /**
+   * Speech shorter than this can be labelled but never registers a speaker.
+   * A speaker embedding taken from under roughly three seconds carries almost
+   * no identity: measured against a ten second reference of the same voice,
+   * CAM++ scores 0.05 at 300ms and 0.15 at one second. Letting those found
+   * speakers is what turned a two person call into six.
+   */
+  minSpeakerAudioMs: z.number().int().min(500).max(10_000).default(3000),
   /** Hard cap on distinct speakers. 0 lets the clustering decide. */
   maxSpeakers: z.number().int().min(0).max(32).default(0),
   /** Keep the mixed opus recording beside the transcript. */
@@ -173,8 +188,10 @@ export const settingsSchema = z.object({
     accelerator: DEFAULT_MEETING_ACCELERATOR,
     engineId: "parakeet",
     diarization: true,
-    diarizationRefineOverMs: 6000,
+    diarizationRefineOverMs: 15_000,
     speakerThreshold: 0.55,
+    speakerMergeThreshold: 0.55,
+    minSpeakerAudioMs: 3000,
     maxSpeakers: 0,
     archiveAudio: true,
     archiveBitrateKbps: 32,
@@ -186,6 +203,82 @@ export const settingsSchema = z.object({
   })
 });
 
+/**
+ * The speech language as an engine hint.
+ *
+ * "auto" is the sentinel for "let the engine decide", not a language, so it
+ * becomes null and the engine's own detection runs. Anything else is passed
+ * to the decoder, which is what stops a Dutch dictation coming back with
+ * English words: per-utterance auto-detect on a few seconds of speech is a
+ * far weaker signal than the language the user already told us.
+ *
+ * Shared because dictation and meetings must not disagree about what "auto"
+ * means. Engines without a language parameter (Parakeet is one fixed
+ * multilingual model) ignore the hint.
+ */
+export const speechLanguageHint = (language: string): string | null => {
+  if (language === "auto") return null;
+  // Decoders want the base subtag: whisper.cpp rejects "pt-BR" where it
+  // accepts "pt". The picker offers base codes today, but the setting is a
+  // free string and a migrated or hand-edited profile can hold a full tag.
+  const base = language.split("-")[0]?.trim().toLowerCase() ?? "";
+  return base.length === 0 ? null : base;
+};
+
+/**
+ * Every language the speech picker offers, in the order it shows them.
+ *
+ * Shared rather than inlined in the view: onboarding and Settings must offer
+ * the same set, and the filler tables in `post/text-cleanup.ts` are keyed to
+ * this list. A language offered without a filler table removes no fillers at
+ * all, which is safe but silently useless, so the two are tested against this
+ * array instead of a hand-copied duplicate of it.
+ *
+ * `auto` is not here: it is the "let the engine decide" sentinel, offered as
+ * its own option with its own translated label.
+ */
+export const SPEECH_LANGUAGES: readonly { readonly code: string; readonly label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "de", label: "German (Deutsch)" },
+  { code: "fr", label: "French (Français)" },
+  { code: "es", label: "Spanish (Español)" },
+  { code: "it", label: "Italian (Italiano)" },
+  { code: "nl", label: "Dutch (Nederlands)" },
+  { code: "pt", label: "Portuguese (Português)" },
+  { code: "pl", label: "Polish (Polski)" },
+  { code: "ru", label: "Russian (Русский)" },
+  { code: "zh", label: "Chinese (中文)" },
+  { code: "ja", label: "Japanese (日本語)" },
+  { code: "ko", label: "Korean (한국어)" },
+  { code: "ar", label: "Arabic (العربية)" },
+  { code: "hi", label: "Hindi (हिन्दी)" },
+  { code: "tr", label: "Turkish (Türkçe)" },
+  { code: "sv", label: "Swedish (Svenska)" },
+  { code: "da", label: "Danish (Dansk)" },
+  { code: "nb", label: "Norwegian (Norsk)" },
+  { code: "fi", label: "Finnish (Suomi)" },
+  { code: "uk", label: "Ukrainian (Українська)" }
+];
+
+/**
+ * Pick the speech language to preselect from the OS preferred languages.
+ *
+ * Onboarding asks the user to confirm rather than guess, so the job here is
+ * only to make the common case a single click. An OS language we do not offer
+ * falls back to `auto`, which is the honest answer: we have no better guess
+ * than the engine's own detection.
+ */
+export const preferredSpeechLanguage = (
+  preferred: readonly string[]
+): string => {
+  for (const tag of preferred) {
+    const base = tag.split("-")[0]?.trim().toLowerCase() ?? "";
+    if (base.length === 0) continue;
+    if (SPEECH_LANGUAGES.some((language) => language.code === base)) return base;
+  }
+  return "auto";
+};
+
 export type Settings = z.infer<typeof settingsSchema>;
 export type MeetingSettings = z.infer<typeof meetingSettingsSchema>;
 export type DictionaryEntry = z.infer<typeof dictionaryEntrySchema>;
@@ -194,13 +287,63 @@ export type OnboardingState = z.infer<typeof onboardingSchema>;
 export const DEFAULT_SETTINGS: Settings = settingsSchema.parse({});
 
 /**
+ * Take every field of `candidate` that validates on top of `base`, one key
+ * at a time, and drop only the ones that do not.
+ *
+ * The whole-object `safeParse` is all-or-nothing: one bad field discards
+ * every good one alongside it. That is how a single unrecognised value in
+ * settings.json reset an entire configured profile, and how one rejected
+ * key in a patch used to do the same.
+ */
+const salvageFields = (
+  base: Settings,
+  candidate: Record<string, unknown>
+): Settings => {
+  const accepted: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(candidate)) {
+    const probe = settingsSchema.safeParse({ ...accepted, [key]: value });
+    if (probe.success) {
+      accepted[key] = value;
+    }
+  }
+  const settled = settingsSchema.safeParse(accepted);
+  return settled.success ? settled.data : { ...base };
+};
+
+/**
  * Validate and upgrade an arbitrary persisted value to the current schema.
  * Unknown fields are dropped, missing fields get defaults.
+ *
+ * A file that fails as a whole is salvaged field by field rather than
+ * thrown away. A truncated write or one stale value used to cost the user
+ * their theme, hotkeys, speech language, dictionary and onboarding state in
+ * one silent step, and the next write committed that loss permanently.
  */
 export const migrateSettings = (raw: unknown): Settings => {
   const parsed = settingsSchema.safeParse(raw);
   if (parsed.success) return parsed.data;
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    return salvageFields(DEFAULT_SETTINGS, raw as Record<string, unknown>);
+  }
   return settingsSchema.parse({});
+};
+
+/**
+ * Apply a patch to a known-good settings object.
+ *
+ * A patch that fails validation must cost the caller its patch, never the
+ * user's profile. Going through migrateSettings meant one rejected field
+ * (an empty model id from the model picker) failed the whole object and
+ * silently reset theme, hotkeys, dictionary and onboarding to defaults.
+ * Bad keys are dropped one at a time and the rest of the patch still lands.
+ */
+export const applySettingsPatch = (
+  current: Settings,
+  patch: Partial<Settings>
+): Settings => {
+  const merged = settingsSchema.safeParse({ ...current, ...patch });
+  if (merged.success) return merged.data;
+  return salvageFields(current, patch);
 };
 
 /**

@@ -36,6 +36,8 @@ import type { AppReadiness, CapturePartialTranscriptEvent } from "../shared/ipc"
 import {
   appReadinessChangedChannel,
   capturePartialTranscriptChannel,
+  meetingSegmentAppendedChannel,
+  meetingSpeakersMergedChannel,
   meetingStateChangedChannel,
   updatesChangedChannel
 } from "../shared/ipc";
@@ -83,6 +85,7 @@ import { createMeetingWindow } from "./windows/meeting-window";
 import { installLoopbackHandler } from "./meeting/loopback";
 import { createMeetingAssetService } from "./meeting/assets";
 import { createArchiveWriter } from "./meeting/archive-writer";
+import { removeRecordingDirectory } from "./meeting/recording-files";
 import { createMeetingSession } from "./meeting/meeting-session";
 import { createMeetingWorkerClient } from "./meeting/worker-client";
 import { registerMeetingIpcHandlers } from "./meeting/ipc";
@@ -92,7 +95,7 @@ import {
   isAutostartLaunch
 } from "./platform/win32/autostart";
 import { MOCK_ENGINE, MOCK_ENGINE_ID } from "../shared/engines";
-import { ONBOARDING_VERSION } from "../shared/settings";
+import { ONBOARDING_VERSION, speechLanguageHint } from "../shared/settings";
 import type { HardwareProfile } from "../shared/hardware";
 import { detectHardware } from "./hardware/detect";
 import { getArchitectureSupportError } from "./platform/win32/architecture";
@@ -205,8 +208,27 @@ if (!gotLock) {
       app.quit();
       return;
     }
-    // The app draws its own chrome, so suppress Electron's default menu.
-    Menu.setApplicationMenu(null);
+    // The app draws its own chrome, so there is no visible menu bar. A null
+    // application menu, though, also removes the Edit roles, and those roles
+    // are what deliver Ctrl+C/V/X/A/Z to the renderer on Windows. Without
+    // them nothing can be pasted into the app's own inputs, so keep a menu
+    // with the roles: frameless windows never render it.
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        {
+          label: "Edit",
+          submenu: [
+            { role: "undo" },
+            { role: "redo" },
+            { type: "separator" },
+            { role: "cut" },
+            { role: "copy" },
+            { role: "paste" },
+            { role: "selectAll" }
+          ]
+        }
+      ])
+    );
     installLoopbackHandler();
 
     const settingsStore = createSettingsStore(join(app.getPath("userData"), "settings.json"));
@@ -235,12 +257,8 @@ if (!gotLock) {
       setTimeout(() => {
         const cutoffMs = Date.now() - retentionDays * 86_400_000;
         for (const expired of meetingStore.listExpired(cutoffMs)) {
-          meetingStore.removeMeeting(expired.id);
-          if (expired.audioPath !== null) {
-            void import("node:fs/promises").then(({ rm }) => {
-              void rm(join(expired.audioPath as string, ".."), { recursive: true, force: true });
-            });
-          }
+          const { audioPath } = meetingStore.removeMeeting(expired.id);
+          void removeRecordingDirectory(audioPath ?? expired.audioPath);
         }
       }, 10_000);
     }
@@ -350,7 +368,19 @@ if (!gotLock) {
       store: meetingStore,
       worker: createMeetingWorkerClient(),
       window: {
-        create: () => Promise.resolve(createMeetingWindow()),
+        create: () => {
+          const window = createMeetingWindow();
+          // A capture renderer that dies (crash, OOM, killed from the task
+          // manager) stops reporting silently: the lane-live timer is already
+          // cleared by then, so nothing else would ever notice and the meeting
+          // would sit in `recording` forever with a frozen archive.
+          window.webContents.on("render-process-gone", (_event, details) => {
+            meetingSession?.handleCaptureLost(
+              `The meeting capture renderer exited (${details.reason}).`
+            );
+          });
+          return Promise.resolve(window);
+        },
         destroy: () => {
           // Runs during quit as well as on stop, and by then Electron may have
           // torn windows down already. Reading webContents off a destroyed
@@ -410,6 +440,41 @@ if (!gotLock) {
       void updater.check();
     }
 
+    // Start hidden to the tray when launched at login; otherwise show the
+    // main window. A tray-resident app popping a window over the desktop on
+    // every boot is exactly the kind of interruption the product is against.
+    //
+    // The window is created here, before the engine bootstrap and warmup
+    // further down. Those used to run before any window existed, and the
+    // synchronous native loads they paid meant the icon click showed nothing
+    // for seconds and then a splash that met a main process still doing
+    // heavy work. Creating the window first puts the splash on screen while
+    // that work happens, and the warmup now loads the model on the addon's
+    // worker thread anyway.
+    const startedAtLogin =
+      !e2e &&
+      !hookTest &&
+      isAutostartLaunch() &&
+      process.env["STRUQ_VOICE_START_HIDDEN"] !== "0";
+    if (startedAtLogin) {
+      mainWindow = null;
+    } else {
+      mainWindow = createMainWindow(getLocaleOptions(settingsStore.get()));
+      mainWindow.on("close", (event) => {
+        if (!isQuitting) {
+          // Close hides, it does not quit. Quit from the tray or Ctrl+Q.
+          event.preventDefault();
+          if (mainWindow !== null) {
+            mainWindow.hide();
+          }
+          if (!settingsStore.get().firstHideNotified) {
+            settingsStore.update({ firstHideNotified: true });
+            tray.notifyFirstHide();
+          }
+        }
+      });
+    }
+
     const recorderWindow = createRecorderWindow({ e2e });
     const bridge = createRecorderBridge();
     const source = e2e
@@ -448,13 +513,14 @@ if (!gotLock) {
     });
 
     const envEngineOverride = process.env["STRUQ_VOICE_ENGINE"];
-    const settings = settingsStore.get();
-    // Bootstrap promotion: a profile still pointing at the retired mock is
-    // moved onto a real engine, preferring the local one once its model is on
-    // disk and OpenRouter once a key exists. Skipped in test modes: the
-    // readiness check loads the sherpa native module, which is exactly the
-    // native interference the hook spec isolates against.
-    if (!e2e && !hookTest) {
+    /**
+     * Bootstrap promotion: a profile still pointing at the retired mock is
+     * moved onto a real engine, preferring the local one once its model is on
+     * disk and OpenRouter once a key exists. Skipped in test modes: the
+     * readiness check loads the sherpa native module, which is exactly the
+     * native interference the hook spec isolates against.
+     */
+    const promoteFromMock = (): void => {
       void parakeetEngine.readiness().then((readiness) => {
         const latest = settingsStore.get();
         if (readiness.ready && latest.engine.primary === MOCK_ENGINE_ID) {
@@ -471,8 +537,33 @@ if (!gotLock) {
           });
         }
       });
-    }
-    const primaryEngineId = envEngineOverride ?? settings.engine.primary;
+    };
+
+    /**
+     * Run engine bootstrap once the splash has settled. The native module
+     * load blocks the event loop for a moment and must never land in the
+     * window's first frames; the reveal is where every view fires its first
+     * IPC queries, so the delay keeps that burst clean too. At login there is
+     * no window, and a fixed delay still keeps the work away from boot.
+     */
+    const afterSplash = (run: () => void): void => {
+      if (mainWindow !== null && !mainWindow.isDestroyed()) {
+        mainWindow.once("ready-to-show", () => {
+          setTimeout(run, 1800);
+        });
+      } else {
+        setTimeout(run, 3000);
+      }
+    };
+    /**
+     * The engine to transcribe with, resolved per call rather than captured
+     * at boot. Reading it once meant switching engine in Settings changed
+     * nothing until the app restarted: the capture path, the live transcript
+     * and the tray all kept pointing at whatever was selected at launch. The
+     * env override still wins, since it exists to pin an engine for a run.
+     */
+    const resolvePrimaryEngineId = (): string =>
+      envEngineOverride ?? settingsStore.get().engine.primary;
 
     const sounds = createCaptureSoundPlayer({
       isEnabled: () => settingsStore.get().captureSounds,
@@ -486,6 +577,7 @@ if (!gotLock) {
       ...DEFAULT_CAPTURE_OPTIONS,
       getMinCaptureMs: () => settingsStore.get().minCaptureMs,
       getMaxCaptureMs: () => settingsStore.get().maxCaptureMs,
+      getPrerollMs: () => settingsStore.get().prerollMs,
       source,
       onAudio: (audio) => {
         lastCaptureAudio = audio;
@@ -493,7 +585,7 @@ if (!gotLock) {
       onListeningEnd: () => {
         sounds.play("close");
       },
-      transcribingEngineId: primaryEngineId,
+      getTranscribingEngineId: resolvePrimaryEngineId,
       transcribe: async (audio) => {
         // Trim leading and trailing silence before inference: shorter audio
         // is faster, and the engines want the speech, not the room noise.
@@ -503,12 +595,19 @@ if (!gotLock) {
         const trimmedDurationMs = Math.round(
           (pcm.length / 16000) * 1000
         );
+        // The configured speech language is a decoder hint, not just a
+        // post-processing detail. Without it Whisper and OpenRouter detect
+        // per utterance, which on a few seconds of dictation is weak enough
+        // to return English words in the middle of Dutch speech. "auto"
+        // resolves to null and leaves detection on for people who want it.
+        const languageHint = speechLanguageHint(settingsStore.get().speechLanguage);
         const outcome = await router.transcribe(
           {
             pcm,
             durationMs: Math.max(trimmedDurationMs, 1),
+            ...(languageHint !== null ? { language: languageHint } : {}),
           },
-          primaryEngineId,
+          resolvePrimaryEngineId(),
           settingsStore.get().engine.fallback,
         );
         if (!outcome.ok) {
@@ -540,7 +639,11 @@ if (!gotLock) {
         return { text, meta };
       },
       onTranscript: (text, meta) => {
-        if (history !== null) {
+        if (history === null) return;
+        // History degrades, it never breaks transcription: the null check
+        // above only covers a database that failed to open, not a write that
+        // fails later (full disk, locked WAL, corrupt file).
+        try {
           history.insert({
             text,
             engineId: meta.engineId,
@@ -551,6 +654,8 @@ if (!gotLock) {
             language: meta.language,
           });
           refreshRecentTranscripts();
+        } catch (error) {
+          console.warn("[history] Could not record the transcript.", error);
         }
       },
       deliver: async (text) => {
@@ -582,6 +687,21 @@ if (!gotLock) {
       dir: currentLocOpt.dir
     });
 
+    // The reset control writes overlayPosition: null through the settings
+    // store. That must also clear the controller's in-memory position and
+    // move the live panel, otherwise the reset only applies after a restart.
+    // Only a non-null to null transition counts: every other settings write
+    // carries overlayPosition unchanged and must not yank the panel back to
+    // its default spot.
+    let lastPersistedOverlayPosition = settingsStore.get().overlayPosition;
+    settingsStore.subscribe((latest) => {
+      const next = latest.overlayPosition;
+      if (lastPersistedOverlayPosition !== null && next === null) {
+        overlay?.resetPosition();
+      }
+      lastPersistedOverlayPosition = next;
+    });
+
     /**
      * The live transcript. Off unless the user asked for it, and deliberately
      * routed to the primary engine directly rather than through the router: a
@@ -590,11 +710,12 @@ if (!gotLock) {
      */
     const partials = createPartialTranscriber({
       intervalMs: settingsStore.get().liveTranscriptionIntervalMs,
+      getIntervalMs: () => settingsStore.get().liveTranscriptionIntervalMs,
       snapshotTimeoutMs: 1500,
       minAudioMs: 600,
       snapshot: (timeoutMs) => bridge.requestSnapshot(timeoutMs),
       transcribe: async (audio, signal) => {
-        const engine = engines.get(primaryEngineId);
+        const engine = engines.get(resolvePrimaryEngineId());
         if (engine === undefined) {
           return fail({ code: "APP_NOT_READY", message: "Engine unavailable." });
         }
@@ -609,9 +730,14 @@ if (!gotLock) {
         if (pcm.length === 0) {
           return fail({ code: "APP_NOT_READY", message: "Nothing to decode yet." });
         }
+        // The same hint the final pass uses. A partial decoded in a
+        // different language than the transcript that replaces it would
+        // rewrite itself on screen as the user speaks.
+        const partialLanguage = speechLanguageHint(settingsStore.get().speechLanguage);
         return engine.transcribe({
           pcm,
           durationMs: Math.max(Math.round((pcm.length / 16000) * 1000), 1),
+          ...(partialLanguage !== null ? { language: partialLanguage } : {}),
           signal
         });
       },
@@ -680,7 +806,8 @@ if (!gotLock) {
       onCopyTranscript: (text) => {
         clipboard.writeText(text);
       },
-      engineDisplayName: () => engines.get(primaryEngineId)?.displayName ?? MOCK_ENGINE.displayName,
+      engineDisplayName: () =>
+        engines.get(resolvePrimaryEngineId())?.displayName ?? MOCK_ENGINE.displayName,
     });
     tray.setLocale(currentLocOpt.locale);
 
@@ -698,6 +825,25 @@ if (!gotLock) {
         }
       }
       overlay?.updateMeeting(state);
+    });
+
+    const sendToMainWindow = (channel: string, payload: unknown): void => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (window.isDestroyed()) continue;
+        if (!window.webContents.getURL().includes("main/index.html")) continue;
+        window.webContents.send(channel, payload);
+      }
+    };
+
+    // The session has always emitted these and the Meetings view has always
+    // listened for them, but nothing joined the two, so a live transcript only
+    // appeared once the meeting ended and the view refetched.
+    meetings.onSegment((event) => {
+      sendToMainWindow(meetingSegmentAppendedChannel, event);
+    });
+
+    meetings.onSpeakersMerged((event) => {
+      sendToMainWindow(meetingSpeakersMergedChannel, event);
     });
 
     settingsStore.subscribe((latest) => {
@@ -793,38 +939,17 @@ if (!gotLock) {
     setTimeout(maybeStartHotkeys, 5000);
 
     // Parakeet warmup: loading the int8 encoder takes 1-3 seconds, and it
-    // must never land in the user's first capture. Background at app start,
-    // before the first hotkey press. Skipped in test modes: the sherpa
-    // native load is exactly the kind of native interference the hook spec
-    // isolates against. Fails silently; the engine reports readiness itself.
+    // must never land in the user's first capture. Runs in the background
+    // after the splash has settled, before the first hotkey press: the
+    // recognizer is built through the addon's async factory, so the load
+    // happens on its worker thread and never stalls the UI. Skipped in test
+    // modes: the sherpa native load is exactly the kind of native
+    // interference the hook spec isolates against. Fails silently; the
+    // engine reports readiness itself.
     if (!e2e && !hookTest) {
-      void parakeetEngine.warmup();
-    }
-
-    // Start hidden to the tray when launched at login; otherwise show the
-    // main window. A tray-resident app popping a window over the desktop on
-    // every boot is exactly the kind of interruption the product is against.
-    const startedAtLogin =
-      !e2e &&
-      !hookTest &&
-      isAutostartLaunch() &&
-      process.env["STRUQ_VOICE_START_HIDDEN"] !== "0";
-    if (startedAtLogin) {
-      mainWindow = null;
-    } else {
-      mainWindow = createMainWindow(getLocaleOptions(settingsStore.get()));
-      mainWindow.on("close", (event) => {
-        if (!isQuitting) {
-          // Close hides, it does not quit. Quit from the tray or Ctrl+Q.
-          event.preventDefault();
-          if (mainWindow !== null) {
-            mainWindow.hide();
-          }
-          if (!settingsStore.get().firstHideNotified) {
-            settingsStore.update({ firstHideNotified: true });
-            tray.notifyFirstHide();
-          }
-        }
+      afterSplash(() => {
+        promoteFromMock();
+        void parakeetEngine.warmup();
       });
     }
 

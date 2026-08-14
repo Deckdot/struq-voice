@@ -10,6 +10,7 @@ import { writeFile } from "node:fs/promises";
 import type { MeetingStore } from "../db/meeting-store";
 import type { MeetingAssetService } from "./assets";
 import { exportMeeting } from "./export";
+import { removeRecordingDirectory } from "./recording-files";
 import type { MeetingSession } from "./meeting-session";
 import type {
   MeetingAudioFrames,
@@ -145,9 +146,16 @@ export const registerMeetingIpcHandlers = (
 
   ipcMain.handle(
     meetingDeleteChannel,
-    (_event, request: MeetingGetRequest): MeetingSimpleResult => {
+    async (_event, request: MeetingGetRequest): Promise<MeetingSimpleResult> => {
       if (store === null) return { ok: false };
-      return { ok: store.removeMeeting(request.meetingId) };
+      // The recording goes with the row. Deleting only the row left the
+      // audio on disk with nothing left that could ever reach it, so a
+      // deleted meeting was not actually deleted.
+      const { removed, audioPath } = store.removeMeeting(request.meetingId);
+      if (removed) {
+        await removeRecordingDirectory(audioPath);
+      }
+      return { ok: removed };
     }
   );
 

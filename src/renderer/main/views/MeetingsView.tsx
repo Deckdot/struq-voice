@@ -60,6 +60,7 @@ const MEETING_ERROR_KEYS: Record<MeetingErrorCode, MessageKey> = {
   "engine-not-ready": "meetings.error.engine-not-ready",
   "worker-start-failed": "meetings.error.worker-start-failed",
   "worker-failed": "meetings.error.worker-failed",
+  "capture-lost": "meetings.error.capture-lost",
   "window-load-failed": "meetings.error.window-load-failed",
   "loopback-denied": "meetings.error.loopback-denied",
   "loopback-unavailable": "meetings.error.loopback-unavailable",
@@ -329,6 +330,32 @@ function LiveMeeting({
           next.push({ speakerKey: event.segment.speakerKey, label: "" });
         }
         return next;
+      });
+    });
+  }, [api, activeMeetingId]);
+
+  useEffect(() => {
+    return api.meetings.onSpeakersMerged((event) => {
+      if (event.meetingId !== activeMeetingId) return;
+      // Two speakers turned out to be one voice. Main has already rewritten
+      // the stored segments; relabel the ones on screen so a speaker the
+      // transcript no longer has does not linger in the live view.
+      const resolve = (key: string): string => {
+        let current = key;
+        for (const merge of event.merges) {
+          if (merge.from === current) current = merge.into;
+        }
+        return current;
+      };
+      setSegments((current) =>
+        current.map((segment) => {
+          const speakerKey = resolve(segment.speakerKey);
+          return speakerKey === segment.speakerKey ? segment : { ...segment, speakerKey };
+        })
+      );
+      setSpeakers((current) => {
+        const retired = new Set(event.merges.map((merge) => merge.from));
+        return current.filter((speaker) => !retired.has(speaker.speakerKey));
       });
     });
   }, [api, activeMeetingId]);

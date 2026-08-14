@@ -12,7 +12,7 @@
  * matters: what a freshly loaded renderer receives.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   OverlayWindowController,
   OverlayWindowOptions
@@ -25,10 +25,15 @@ interface SentMessage {
 
 const sent: SentMessage[] = [];
 const loadHandlers: (() => void)[] = [];
+const setPositionCalls: { x: number; y: number }[] = [];
+const windowConstructorOptions: { x?: number; y?: number; width?: number; height?: number }[] = [];
 let destroyed = false;
 
 vi.mock("electron", () => {
   class FakeWindow {
+    constructor(options: { x?: number; y?: number; width?: number; height?: number }) {
+      windowConstructorOptions.push(options);
+    }
     webContents = {
       send: (channel: string, payload: unknown): void => {
         sent.push({ channel, payload });
@@ -65,8 +70,8 @@ vi.mock("electron", () => {
     setBounds(): void {
       /* no-op */
     }
-    setPosition(): void {
-      /* no-op */
+    setPosition(x: number, y: number): void {
+      setPositionCalls.push({ x, y });
     }
     destroy(): void {
       destroyed = true;
@@ -115,6 +120,8 @@ const freshController = async (
   vi.resetModules();
   sent.length = 0;
   loadHandlers.length = 0;
+  setPositionCalls.length = 0;
+  windowConstructorOptions.length = 0;
   destroyed = false;
   const module = await import("./overlay-window");
   return module.createOverlayWindowController(options);
@@ -123,6 +130,8 @@ const freshController = async (
 beforeEach(() => {
   sent.length = 0;
   loadHandlers.length = 0;
+  setPositionCalls.length = 0;
+  windowConstructorOptions.length = 0;
   destroyed = false;
 });
 
@@ -218,5 +227,99 @@ describe("overlay cold start", () => {
     expect(meetingStateEvents()).toEqual([
       expect.objectContaining({ phase: "recording" })
     ]);
+  });
+});
+
+describe("overlay position persistence", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const openPanel = (controller: OverlayWindowController): void => {
+    controller.update({ phase: "listening", startedAtMs: 1000 });
+  };
+
+  it("persists the drag position once the panel settles, not per frame", async () => {
+    const persisted: { x: number; y: number }[] = [];
+    const controller = await freshController({
+      e2e: true,
+      onPositionChange: (position) => {
+        persisted.push(position);
+      }
+    });
+    openPanel(controller);
+
+    controller.moveTo(100, 100);
+    controller.moveTo(150, 150);
+    expect(persisted).toHaveLength(0);
+
+    vi.advanceTimersByTime(100);
+    controller.moveTo(200, 200);
+    vi.advanceTimersByTime(250);
+
+    expect(persisted).toEqual([{ x: 200, y: 200 }]);
+  });
+
+  it("writes the last settled position exactly once", async () => {
+    const persisted: { x: number; y: number }[] = [];
+    const controller = await freshController({
+      e2e: true,
+      onPositionChange: (position) => {
+        persisted.push(position);
+      }
+    });
+    openPanel(controller);
+
+    controller.moveTo(300, 300);
+    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(1000);
+
+    expect(persisted).toEqual([{ x: 300, y: 300 }]);
+  });
+
+  it("flushes a drag that ended moments before dispose", async () => {
+    const persisted: { x: number; y: number }[] = [];
+    const controller = await freshController({
+      e2e: true,
+      onPositionChange: (position) => {
+        persisted.push(position);
+      }
+    });
+    openPanel(controller);
+
+    controller.moveTo(400, 400);
+    controller.dispose();
+
+    expect(persisted).toEqual([{ x: 400, y: 400 }]);
+  });
+
+  it("restores the saved position when the window is created fresh", async () => {
+    const controller = await freshController({
+      e2e: true,
+      initialPosition: { x: 120, y: 240 }
+    });
+    openPanel(controller);
+
+    expect(windowConstructorOptions[0]).toEqual(
+      expect.objectContaining({ x: 120, y: 240 })
+    );
+  });
+
+  it("resetPosition forgets the saved spot and moves the panel to the default", async () => {
+    const controller = await freshController({
+      e2e: true,
+      initialPosition: { x: 120, y: 240 }
+    });
+    openPanel(controller);
+    setPositionCalls.length = 0;
+
+    controller.resetPosition();
+
+    // Work area 1920x1040, panel 280x44: bottom centre with a 24px gap.
+    expect(setPositionCalls).toEqual([{ x: 820, y: 972 }]);
   });
 });

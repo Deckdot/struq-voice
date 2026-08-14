@@ -42,25 +42,56 @@ export const wavDurationMs = (bytes: Buffer, sampleRate: number): number => {
   return Math.round((dataSize / 2 / sampleRate) * 1000);
 };
 
+/** Never trim harder than this, whatever the clip's peak. */
+const MAX_SILENCE_THRESHOLD = 400;
+/** Below this everything is noise, so a silent clip cannot pick its own floor. */
+const MIN_SILENCE_THRESHOLD = 80;
+/** Speech quieter than this share of the clip's peak still counts as speech. */
+const PEAK_FRACTION = 0.01;
+
 /**
  * Find the first and last sample above the silence threshold. Returns
  * [start, end] indices inclusive; an all-silent buffer returns [0, 0].
- * The `minKeepMs` guard keeps a tiny margin around speech so a loud room
- * or a clipped syllable does not zero out the whole clip.
+ * The `minKeepMs` guard keeps a margin around speech so a loud room or a
+ * clipped syllable does not zero out the whole clip.
+ *
+ * The threshold scales with the clip rather than sitting at a fixed level.
+ * A fixed 400 is about 1.2% of full scale, and people drop their voice at the
+ * end of a sentence, so a quiet final clause fell under it: `last` stopped at
+ * the end of the louder speech and everything after it was cut before the
+ * engine ever saw it. A quiet microphone made every capture behave that way.
+ *
+ * The scaled threshold is clamped to at most the old fixed value, so this can
+ * only ever keep more audio than before, never less. That asymmetry is
+ * deliberate: over-trimming loses the user's words, while under-trimming costs
+ * a few milliseconds of inference on some room tone.
  */
 export const trimSilence = (
   pcm: Int16Array,
   sampleRate: number,
-  threshold = 400,
-  minKeepMs = 120
+  threshold?: number,
+  minKeepMs = 200
 ): { start: number; end: number } => {
   if (pcm.length === 0) return { start: 0, end: 0 };
+
+  let peak = 0;
+  for (let i = 0; i < pcm.length; i++) {
+    const magnitude = Math.abs(pcm[i] ?? 0);
+    if (magnitude > peak) peak = magnitude;
+  }
+
+  const effective =
+    threshold ??
+    Math.min(
+      MAX_SILENCE_THRESHOLD,
+      Math.max(MIN_SILENCE_THRESHOLD, Math.round(peak * PEAK_FRACTION))
+    );
 
   let first = -1;
   let last = -1;
   for (let i = 0; i < pcm.length; i++) {
     const sample = pcm[i] ?? 0;
-    if (sample > threshold || sample < -threshold) {
+    if (sample > effective || sample < -effective) {
       if (first === -1) first = i;
       last = i;
     }

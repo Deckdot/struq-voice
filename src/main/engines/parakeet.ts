@@ -53,6 +53,12 @@ export interface SherpaOfflineRecognizerResult {
 export interface SherpaOfflineRecognizer {
   createStream: () => SherpaOfflineStream;
   decode: (stream: SherpaOfflineStream) => void;
+  /**
+   * Non-blocking decode: runs on the addon's worker thread and resolves with
+   * the final result. Absent on older runtimes and test fakes; callers fall
+   * back to decode + getResult.
+   */
+  decodeAsync?: (stream: SherpaOfflineStream) => Promise<SherpaOfflineRecognizerResult>;
   getResult: (stream: SherpaOfflineStream) => SherpaOfflineRecognizerResult;
   destroy?: () => void;
 }
@@ -75,10 +81,20 @@ export interface SherpaOfflineRecognizerConfig {
   };
 }
 
-export interface SherpaOnnxModule {
-  readonly OfflineRecognizer: new (
+export interface SherpaOfflineRecognizerConstructor {
+  new (config: SherpaOfflineRecognizerConfig): SherpaOfflineRecognizer;
+  /**
+   * Non-blocking construction: the ONNX model load (1-3s) runs on the
+   * addon's worker thread instead of the event loop. Absent on older
+   * runtimes and test fakes; callers fall back to the constructor.
+   */
+  createAsync?: (
     config: SherpaOfflineRecognizerConfig
-  ) => SherpaOfflineRecognizer;
+  ) => Promise<SherpaOfflineRecognizer>;
+}
+
+export interface SherpaOnnxModule {
+  readonly OfflineRecognizer: SherpaOfflineRecognizerConstructor;
 }
 
 export interface ParakeetEngineOptions {
@@ -151,10 +167,17 @@ export const createParakeetEngine = (
   const resolveModelId = (): string =>
     options.getModelId?.() ?? options.modelId ?? PARAKEET_DEFAULT_MODEL_ID;
   let recognizer: SherpaOfflineRecognizer | null = null;
+  let recognizerPromise: Promise<SherpaOfflineRecognizer> | null = null;
   let recognizerModelId: string | null = null;
   let sherpaCache: SherpaOnnxModule | null = null;
   let sherpaLoadFailedAt = 0;
   let recognizerFailedAt = 0;
+  // Serializes every native call on the recognizer. sherpa-onnx does not
+  // allow concurrent decode() calls on one recognizer, and with the async
+  // decode the event loop keeps running while a decode is in flight, so a
+  // live-transcript pass and the final pass could otherwise overlap. One
+  // decode at a time, in arrival order.
+  let decodeQueue: Promise<void> = Promise.resolve();
 
   const loadSherpa = (): SherpaOnnxModule => {
     if (sherpaCache !== null) {
@@ -174,13 +197,9 @@ export const createParakeetEngine = (
     }
   };
 
-  const ensureRecognizer = (): SherpaOfflineRecognizer => {
-    const modelId = resolveModelId();
+  const buildRecognizer = async (modelId: string): Promise<SherpaOfflineRecognizer> => {
     // The recognizer is bound to one model's files; switching the selected
     // model swaps it rather than transcribing with the stale weights.
-    if (recognizer !== null && recognizerModelId === modelId) {
-      return recognizer;
-    }
     if (recognizer !== null) {
       recognizer.destroy?.();
       recognizer = null;
@@ -197,19 +216,119 @@ export const createParakeetEngine = (
     if (missing) {
       throw new ParakeetError(NOT_DOWNLOADED_MESSAGE);
     }
+    const config = buildRecognizerConfig(modelDir, options.numThreads ?? DEFAULT_NUM_THREADS);
     try {
-      recognizer = new sherpa.OfflineRecognizer(
-        buildRecognizerConfig(modelDir, options.numThreads ?? DEFAULT_NUM_THREADS)
-      );
+      if (sherpa.OfflineRecognizer.createAsync !== undefined) {
+        try {
+          const built = await sherpa.OfflineRecognizer.createAsync(config);
+          recognizerFailedAt = 0;
+          return built;
+        } catch {
+          // Async construction can be rejected for a given model; the
+          // synchronous constructor is the established fallback.
+        }
+      }
+      const built = new sherpa.OfflineRecognizer(config);
       recognizerFailedAt = 0;
-      recognizerModelId = modelId;
+      return built;
     } catch {
       recognizerFailedAt = Date.now();
       throw new ParakeetError(
         `Parakeet could not load the model files (${modelId}). They may be locked by another program or the native runtime may be blocked.`
       );
     }
-    return recognizer;
+  };
+
+  const ensureRecognizerAsync = (): Promise<SherpaOfflineRecognizer> => {
+    const modelId = resolveModelId();
+    if (recognizer !== null && recognizerModelId === modelId) {
+      return Promise.resolve(recognizer);
+    }
+    // A construction already in flight (warmup, another capture): share it
+    // rather than loading the model twice.
+    if (recognizerPromise !== null) {
+      return recognizerPromise;
+    }
+    const pending = buildRecognizer(modelId).then((built) => {
+      // Release the shared slot before any further decision: a model switch
+      // below must be able to start a fresh build rather than resolving this
+      // promise with itself, and no later clearing may clobber that new
+      // build's slot.
+      recognizerPromise = null;
+      if (resolveModelId() === modelId) {
+        recognizer = built;
+        recognizerModelId = modelId;
+        return built;
+      }
+      // The selection changed while the model loaded: this instance is
+      // already stale. Discard it and rebuild for the current selection.
+      built.destroy?.();
+      return ensureRecognizerAsync();
+    });
+    recognizerPromise = pending;
+    // A failed build must also release the shared slot, or every later
+    // transcription would await a permanently rejected promise. The success
+    // path releases inside the callback above.
+    void pending.then(
+      () => undefined,
+      () => {
+        recognizerPromise = null;
+      }
+    );
+    return pending;
+  };
+
+  /**
+   * Resolves when the signal aborts, so a decode can be raced against it.
+   *
+   * The native decode cannot be cancelled: sherpa gives no handle to stop
+   * one in flight. What the caller can stop is waiting for it. Without this
+   * the router's 20s local timeout never fired for Parakeet, so a decode
+   * that stalled held the whole request open and no fallback ever engaged.
+   * The abandoned decode still finishes on the worker thread and still holds
+   * the queue, which is correct: the recognizer is busy until it is done.
+   */
+  const abortion = (signal: AbortSignal): Promise<never> =>
+    new Promise((_resolve, reject) => {
+      if (signal.aborted) {
+        reject(new ParakeetError("Transcription was cancelled."));
+        return;
+      }
+      signal.addEventListener(
+        "abort",
+        () => {
+          reject(new ParakeetError("Transcription was cancelled."));
+        },
+        { once: true }
+      );
+    });
+
+  const decodeStream = async (
+    activeRecognizer: SherpaOfflineRecognizer,
+    stream: SherpaOfflineStream,
+    signal: AbortSignal
+  ): Promise<SherpaOfflineRecognizerResult> => {
+    if (activeRecognizer.decodeAsync === undefined) {
+      // Synchronous decode blocks the event loop, so there is no point in
+      // the whole turn at which an abort could be observed anyway.
+      activeRecognizer.decode(stream);
+      return activeRecognizer.getResult(stream);
+    }
+    const decoding = activeRecognizer.decodeAsync(stream);
+    // An abandoned decode must not surface as an unhandled rejection once
+    // the race has already been settled by the abort.
+    decoding.catch(() => undefined);
+    try {
+      // The non-blocking path: the native decode runs on the addon's worker
+      // thread while the app keeps painting and answering IPC.
+      return await Promise.race([decoding, abortion(signal)]);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      // Some runtimes reject the async path for a given model. The stream is
+      // still virgin at that point, so the synchronous path is a safe retry.
+      activeRecognizer.decode(stream);
+      return activeRecognizer.getResult(stream);
+    }
   };
 
   const computeReadiness = (): EngineReadiness => {
@@ -265,20 +384,34 @@ export const createParakeetEngine = (
         return Promise.resolve();
       }
       options.onWarmup?.("warming");
-      try {
-        ensureRecognizer();
-      } catch {
-        options.onWarmup?.("failed");
-        return Promise.resolve();
-      }
-      options.onWarmup?.("warm");
-      return Promise.resolve();
+      // Construction goes through the async factory when the runtime has
+      // one, so the 1-3s model load happens off the event loop: the warmup
+      // that used to hang app startup now runs in the background.
+      return ensureRecognizerAsync().then(
+        () => {
+          options.onWarmup?.("warm");
+        },
+        () => {
+          options.onWarmup?.("failed");
+        }
+      );
     },
     transcribe: (
       request: TranscribeRequest
     ): Promise<Result<TranscribeResult>> => {
-      try {
-        const activeRecognizer = ensureRecognizer();
+      const job = decodeQueue.then(async () => {
+        // An aborted request waiting behind an earlier decode is dead weight:
+        // skip the native work entirely. (The live transcript aborts its pass
+        // the moment the capture ends, so the final pass never queues behind
+        // a fresh partial decode.)
+        if (request.signal.aborted) {
+          return fail(parakeetFailure("Transcription was cancelled."));
+        }
+        const activeRecognizer = await ensureRecognizerAsync();
+        // The id of the model actually decoding this audio. Reading it after
+        // the decode instead meant a model switched mid-decode wrote the new
+        // id into History against text the old weights produced.
+        const decodingModelId = recognizerModelId ?? resolveModelId();
         const stream = activeRecognizer.createStream();
         stream.acceptWaveform({
           // sherpa expects Float32 in [-1, 1]; our pipeline is Int16.
@@ -286,32 +419,44 @@ export const createParakeetEngine = (
           sampleRate: SAMPLE_RATE
         });
         const startedAt = Date.now();
-        activeRecognizer.decode(stream);
-        const result = activeRecognizer.getResult(stream);
+        const result = await decodeStream(activeRecognizer, stream, request.signal);
         const inferenceMs = Date.now() - startedAt;
-        return Promise.resolve(
-          ok({
-            text: (result.text ?? "").trim(),
-            language: null,
-            engineId: PARAKEET_ENGINE_ID,
-            modelId: resolveModelId(),
-            inferenceMs,
-            realtimeFactor: inferenceMs / Math.max(request.durationMs, 1),
-            costUsd: null
-          })
-        );
-      } catch (error) {
+        return ok({
+          text: (result.text ?? "").trim(),
+          language: null,
+          engineId: PARAKEET_ENGINE_ID,
+          modelId: decodingModelId,
+          inferenceMs,
+          realtimeFactor: inferenceMs / Math.max(request.durationMs, 1),
+          costUsd: null
+        });
+      });
+      // Keep the queue alive regardless of outcome; every error is already
+      // folded into the Result, so this branch only exists to unblock the
+      // next decode.
+      decodeQueue = job.then(
+        () => undefined,
+        () => undefined
+      );
+      return job.catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
-        return Promise.resolve(fail(parakeetFailure(message)));
-      }
+        return fail(parakeetFailure(message));
+      });
     },
     dispose: (): Promise<void> => {
-      if (recognizer !== null) {
-        recognizer.destroy?.();
-        recognizer = null;
-      }
-      recognizerModelId = null;
-      return Promise.resolve();
+      // Never destroy a recognizer that a decode or construction is still
+      // using: that is a use-after-free inside the native worker. Drain the
+      // queue (and a construction in flight) first, then release.
+      return Promise.allSettled([
+        recognizerPromise ?? Promise.resolve(),
+        decodeQueue
+      ]).then(() => {
+        if (recognizer !== null) {
+          recognizer.destroy?.();
+          recognizer = null;
+        }
+        recognizerModelId = null;
+      });
     }
   };
 };

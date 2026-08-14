@@ -184,3 +184,95 @@ describe("paste delivery", () => {
     expect(f.keyTapEnter).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * The clipboard is the delivery mechanism, so overwriting it is the one
+ * destructive thing this module does. `writeText` clears every other format
+ * and `readText` cannot see them, so an image or a file selection used to be
+ * destroyed silently and the paste still reported as inserted.
+ */
+describe("clipboard preservation", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const withFormats = (
+    formats: string[],
+    stash = ""
+  ): { deps: PasteDeps; writeText: ReturnType<typeof vi.fn<(t: string) => void>> } => {
+    const writeText = vi.fn<(text: string) => void>();
+    return {
+      writeText,
+      deps: {
+        getFocusedWindow: () => null,
+        clipboard: { readText: () => stash, writeText },
+        availableFormats: () => formats,
+        keyTap: () => {},
+        execPowershell: () => Promise.resolve(),
+        delay: () => Promise.resolve()
+      }
+    };
+  };
+
+  it("never overwrites a clipboard holding an image", async () => {
+    const { deps, writeText } = withFormats(["image/png"]);
+
+    const result = await insertTextIntoActiveApp("the transcript", OPTIONS, deps);
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(result.ok && result.value.inserted).toBe(false);
+  });
+
+  it("never overwrites a clipboard holding files", async () => {
+    const { deps, writeText } = withFormats(["Files"]);
+
+    await insertTextIntoActiveApp("the transcript", OPTIONS, deps);
+
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it("still delivers when the clipboard holds only text", async () => {
+    const { deps, writeText } = withFormats(["text/plain"], "old text");
+
+    const result = await insertTextIntoActiveApp("the transcript", OPTIONS, deps);
+
+    expect(writeText).toHaveBeenCalledWith("the transcript");
+    expect(result.ok && result.value.inserted).toBe(true);
+  });
+
+  it("still delivers when the clipboard is empty", async () => {
+    const { deps, writeText } = withFormats([]);
+
+    const result = await insertTextIntoActiveApp("the transcript", OPTIONS, deps);
+
+    expect(writeText).toHaveBeenCalledWith("the transcript");
+    expect(result.ok && result.value.inserted).toBe(true);
+  });
+
+  /**
+   * A throw while putting the old clipboard back used to reject out of the
+   * whole function, turning an already-delivered transcript into a reported
+   * failure. The restore is best effort.
+   */
+  it("reports success when restoring the clipboard throws", async () => {
+    const writeText = vi.fn<(text: string) => void>((text) => {
+      if (text === "old text") throw new Error("clipboard locked");
+    });
+    const deps = {
+      getFocusedWindow: () => null,
+      clipboard: { readText: () => "old text", writeText },
+      availableFormats: () => ["text/plain"],
+      keyTap: () => {},
+      execPowershell: () => Promise.resolve(),
+      delay: () => Promise.resolve()
+    } as unknown as PasteDeps;
+
+    const result = await insertTextIntoActiveApp("the transcript", OPTIONS, deps);
+
+    expect(result.ok && result.value.inserted).toBe(true);
+  });
+});

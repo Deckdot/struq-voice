@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  applySettingsPatch,
+  preferredSpeechLanguage,
+  speechLanguageHint,
+  SPEECH_LANGUAGES,
   DEFAULT_SETTINGS,
   dictionaryFileSchema,
   meetingSettingsSchema,
@@ -88,8 +92,10 @@ describe("settings migration", () => {
     expect(settings.meeting.accelerator).toBe(DEFAULT_MEETING_ACCELERATOR);
     expect(settings.meeting.engineId).toBe("parakeet");
     expect(settings.meeting.diarization).toBe(true);
-    expect(settings.meeting.diarizationRefineOverMs).toBe(6000);
+    expect(settings.meeting.diarizationRefineOverMs).toBe(15_000);
     expect(settings.meeting.speakerThreshold).toBe(0.55);
+    expect(settings.meeting.speakerMergeThreshold).toBe(0.55);
+    expect(settings.meeting.minSpeakerAudioMs).toBe(3000);
     expect(settings.meeting.maxSpeakers).toBe(0);
     expect(settings.meeting.archiveAudio).toBe(true);
     expect(settings.meeting.archiveBitrateKbps).toBe(32);
@@ -160,5 +166,117 @@ describe("engine defaults", () => {
 
   it("does not offer the mock as a selectable engine", () => {
     expect(ENGINE_OPTIONS.map((option) => option.id)).not.toContain(MOCK_ENGINE_ID);
+  });
+});
+
+/**
+ * A rejected patch must cost the caller its patch, never the user's profile.
+ * The model picker used to send an empty whisperModelId when a Parakeet model
+ * was chosen; merging that through migrateSettings failed the whole object
+ * and silently reset theme, hotkeys, speech language and the dictionary.
+ */
+describe("applySettingsPatch", () => {
+  const configured = migrateSettings({
+    ...DEFAULT_SETTINGS,
+    theme: "dark",
+    pttAccelerator: "Alt+X",
+    speechLanguage: "nl",
+    whisperModelId: "whisper-small-q8_0"
+  });
+
+  it("applies a valid patch", () => {
+    const next = applySettingsPatch(configured, {
+      engine: { primary: "whisper-cpp", fallback: null }
+    });
+    expect(next.engine.primary).toBe("whisper-cpp");
+    expect(next.theme).toBe("dark");
+  });
+
+  it("keeps every other setting when one field of a patch is invalid", () => {
+    const next = applySettingsPatch(configured, {
+      engine: { primary: "parakeet", fallback: null },
+      whisperModelId: "",
+      parakeetModelId: "parakeet-tdt-0.6b-v2-int8"
+    });
+    expect(next.theme).toBe("dark");
+    expect(next.pttAccelerator).toBe("Alt+X");
+    expect(next.speechLanguage).toBe("nl");
+  });
+
+  it("lands the valid fields of a partly invalid patch", () => {
+    const next = applySettingsPatch(configured, {
+      engine: { primary: "parakeet", fallback: null },
+      whisperModelId: "",
+      parakeetModelId: "parakeet-tdt-0.6b-v2-int8"
+    });
+    expect(next.engine.primary).toBe("parakeet");
+    expect(next.parakeetModelId).toBe("parakeet-tdt-0.6b-v2-int8");
+  });
+
+  it("drops only the rejected field and keeps the previous value", () => {
+    const next = applySettingsPatch(configured, { whisperModelId: "" });
+    expect(next.whisperModelId).toBe("whisper-small-q8_0");
+  });
+});
+
+/**
+ * The speech language is a decoder hint, not only a post-processing detail.
+ * Dictation used to send nothing, so Whisper and OpenRouter auto-detected
+ * every utterance and a Dutch dictation could come back with English words
+ * in it. Dictation and meetings must agree on what the setting means.
+ */
+describe("speechLanguageHint", () => {
+  it("returns null for the auto sentinel so the engine detects", () => {
+    expect(speechLanguageHint("auto")).toBeNull();
+  });
+
+  it("passes a plain language code through", () => {
+    expect(speechLanguageHint("nl")).toBe("nl");
+  });
+
+  it("reduces a regional tag to the base subtag the decoders accept", () => {
+    expect(speechLanguageHint("pt-BR")).toBe("pt");
+    expect(speechLanguageHint("en-US")).toBe("en");
+  });
+
+  it("treats an empty or whitespace value as no hint", () => {
+    expect(speechLanguageHint("")).toBeNull();
+    expect(speechLanguageHint("   ")).toBeNull();
+  });
+});
+
+/**
+ * Onboarding preselects from the OS so the speech language step is one
+ * confirming click. It must not invent a language we cannot actually pin.
+ */
+describe("preferredSpeechLanguage", () => {
+  it("takes the first OS language we offer", () => {
+    expect(preferredSpeechLanguage(["nl-NL", "en-US"])).toBe("nl");
+  });
+
+  it("reduces a regional tag to the base code the picker uses", () => {
+    expect(preferredSpeechLanguage(["en-GB"])).toBe("en");
+    expect(preferredSpeechLanguage(["pt-BR"])).toBe("pt");
+  });
+
+  it("skips languages we do not offer rather than failing outright", () => {
+    // Welsh is not in the picker, English is: the second choice wins.
+    expect(preferredSpeechLanguage(["cy-GB", "en-GB"])).toBe("en");
+  });
+
+  it("falls back to auto when nothing matches, which is the honest answer", () => {
+    expect(preferredSpeechLanguage(["cy-GB"])).toBe("auto");
+    expect(preferredSpeechLanguage([])).toBe("auto");
+  });
+
+  it("ignores empty tags", () => {
+    expect(preferredSpeechLanguage(["", "  ", "de"])).toBe("de");
+  });
+
+  it("offers a filler-table language for every entry, and no auto sentinel", () => {
+    expect(SPEECH_LANGUAGES.length).toBeGreaterThan(0);
+    expect(SPEECH_LANGUAGES.some((language) => language.code === "auto")).toBe(false);
+    const codes = SPEECH_LANGUAGES.map((language) => language.code);
+    expect(new Set(codes).size).toBe(codes.length);
   });
 });

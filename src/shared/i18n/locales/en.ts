@@ -170,6 +170,7 @@ export const en = {
   "models.speed.highAccuracy": "High accuracy",
 
   // Settings Tabs & Categories
+  "settings.saveFailed": "Settings could not be saved to disk. Your change applies now but will be lost when the app restarts.",
   "settings.category.general": "General",
   "settings.category.capture": "Capture",
   "settings.category.transcription": "Transcription",
@@ -199,6 +200,8 @@ export const en = {
   "settings.meetings.speakers.sensitivity.hint": "How alike two voices must be to count as one person.",
   "settings.meetings.speakers.sensitivity.merge": "Merge similar voices",
   "settings.meetings.speakers.sensitivity.keepApart": "Keep voices apart",
+  "settings.meetings.speakers.minAudio.label": "Minimum speech per speaker",
+  "settings.meetings.speakers.minAudio.hint": "Speech shorter than this is labelled but never registers a new speaker. Short remarks carry too little voice to identify anyone.",
   "settings.meetings.speakers.max.label": "Expected speakers",
   "settings.meetings.speakers.max.hint": "0 lets the clustering decide.",
   "settings.meetings.advanced.title": "Advanced",
@@ -394,6 +397,11 @@ export const en = {
   // Onboarding
   "onboarding.step.mic.title": "Your microphone",
   "onboarding.step.mic.desc": "Already chosen. Say something to make sure the bar moves.",
+  "onboarding.step.speech.title": "The language you speak",
+  "onboarding.step.speech.desc": "Telling us up front is more accurate than letting the model guess each time.",
+  "onboarding.speech.label": "Speech language",
+  "onboarding.speech.value": "This is what you dictate in. It is separate from the language the app is in.",
+  "onboarding.speech.auto": "Detect automatically",
   "onboarding.step.keys.title": "Your keys",
   "onboarding.step.keys.desc": "Already registered. Change them if they clash with something you use.",
   "onboarding.step.model.title": "Your model",
@@ -444,6 +452,7 @@ export const en = {
   "meetings.error.engine-not-ready": "The selected voice service is not ready. Check Models, then try again.",
   "meetings.error.worker-start-failed": "The meeting voice service could not start. Restart Struq Voice, then try again.",
   "meetings.error.worker-failed": "The meeting voice service stopped unexpectedly. Start a new meeting to continue.",
+  "meetings.error.capture-lost": "Meeting audio capture stopped unexpectedly. Everything recorded up to that point was saved.",
   "meetings.error.window-load-failed": "The meeting audio window could not open. Restart Struq Voice, then try again.",
   "meetings.error.loopback-denied": "Windows did not allow system audio capture. Check its privacy settings, then try again.",
   "meetings.error.loopback-unavailable": "System audio capture is unavailable on this machine. Dictation still works. Include your Windows version and build in a bug report.",

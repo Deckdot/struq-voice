@@ -29,6 +29,31 @@ idle ──start──▶ starting ──lanes live──▶ recording ──sto
 - The hidden meeting window is created on start, destroyed on stop; the
   `struq-meeting` utilityProcess is forked on start, drained on stop, killed.
 
+## Lifecycle rules (do not relitigate)
+
+`start()` awaits four times: storage, worker start, window load, capture
+gesture. Every one of those is a point where the stop hotkey can land.
+
+- **Each start carries a generation token.** `stop()` and `dispose()`
+  invalidate it before tearing anything down, and `start()` re-checks after
+  every await. A start that has been overtaken unwinds only what *it*
+  created and returns; it must never rebuild shared state. Without this the
+  losing start rebuilt the window and worker that stop had just destroyed,
+  leaving a recorder nobody owned holding the microphone and the loopback
+  for the life of the app.
+- **A start already in flight refuses a second one.** Two concurrent starts
+  would run two full sequences against one set of handles.
+- **One finalize per meeting row.** `stop()` claims the id when it cancels a
+  start mid-flight so the unwind skips it; otherwise both write and race to
+  decide `complete` versus `interrupted`.
+- **A meeting that never recorded is `interrupted`.** Cancelled mid-start, a
+  failed archive, a dead capture renderer: all `interrupted`, never
+  `complete`.
+- **Main watches `render-process-gone` on the meeting window.** The
+  lane-live timer is cleared the moment a lane goes live, so after that
+  nothing else notices a dead renderer and the session would sit in
+  `recording` forever with a frozen archive.
+
 ## Why ASR runs out of process
 
 `sherpa-onnx-node`'s `recognizer.decode()` is a synchronous blocking native
@@ -38,6 +63,37 @@ The worker (`src/main/meeting/worker/index.ts`) is a utilityProcess with its
 own event loop, crash isolation and memory that is genuinely released on
 kill. The queue is hard-capped at 600 seconds of backlog; over the cap emits
 a `gap` marker instead of growing.
+
+## Speaker clustering
+
+`worker/speaker-clusterer.ts`. A voice is a bounded ring of its recent
+embeddings, scored by the mean of the top few similarities. A single running
+mean was tried and does not work: one voice split into two clusters whose
+means were 0.494 apart while two genuinely different voices sat at 0.391, so
+no threshold separates them.
+
+Three rules keep one person from becoming several, which is what the 1.2.x
+releases did:
+
+- **Duration is the dominant factor.** CAM++ scores about 0.05 against its own
+  voice at 300ms, 0.15 at one second and 0.89 at eight. Anything under
+  `minSpeakerAudioMs` (3s) is *provisional*: it takes the nearest speaker's
+  label but may never found or define one. Backchannels were minting speakers.
+- **Embed the speech, not the utterance.** The VAD hands back padding; embed
+  `trimSilence`'d audio or the fingerprint is partly the room.
+- **Two thresholds and a merge.** At or above `threshold` the embedding is
+  kept, below `createThreshold` it is somebody new, and in between it joins the
+  nearest speaker without defining them. Converged speakers merge, which emits
+  `speakers-merged` so main can rewrite stored segments.
+
+`speakerMergeThreshold` is *not* on the same scale as `speakerThreshold`: it
+averages every pair across two rings, where assignment takes the best few
+against one. Scoring a merge with top-k instead of the mean fused a male and a
+female voice.
+
+Measure changes, do not guess them: `node scripts/make-two-speaker-fixture.mjs
+--speakers 1` then `node scripts/diarization-bench.mjs`. The one-speaker
+fixture must yield exactly one speaker and the two-speaker fixture exactly two.
 
 ## The lane split (do not relitigate)
 

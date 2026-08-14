@@ -9,17 +9,19 @@ import type { Settings } from "../../../shared/settings";
 import { Button } from "../components/ui";
 import { StepShell } from "./StepShell";
 import { MicrophoneStep } from "./MicrophoneStep";
+import { SpeechLanguageStep } from "./SpeechLanguageStep";
 import { HotkeyStep } from "./HotkeyStep";
 import { EngineStep } from "./EngineStep";
 import { TryItStep } from "./TryItStep";
 
 /**
- * First-run setup. Five moments:
+ * First-run setup. Six moments:
  *   1. Microphone (arrives satisfied; live meter is the proof)
- *   2. Shortcuts (both already registered)
- *   3. Model (download starts on mount, not on arrival)
- *   4. Try it (real capture; the proof the setup works)
- *   5. Done (calm completion; "you are ready")
+ *   2. Speech language (preselected from the OS; one confirming click)
+ *   3. Shortcuts (both already registered)
+ *   4. Model (download starts on mount, not on arrival)
+ *   5. Try it (real capture; the proof the setup works)
+ *   6. Done (calm completion; "you are ready")
  *
  * Skipping is always available, defaults are already applied, and
  * completion lands in settings.onboarding.completed.
@@ -27,7 +29,7 @@ import { TryItStep } from "./TryItStep";
 
 import { useTranslation } from "../lib/useTranslation";
 
-const STEP_COUNT = 4;
+const STEP_COUNT = 5;
 
 export interface OnboardingProps {
   readonly settings: Settings;
@@ -48,11 +50,30 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
   const [transcript, setTranscript] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   const lastTick = useRef<{ atMs: number; bytes: number } | null>(null);
+  /**
+   * The latest persisted speech language, so the OS preselect can check
+   * "still the default?" without depending on settings and re-running the
+   * profile fetch on every unrelated settings change.
+   */
+  const speechLanguageRef = useRef(settings.speechLanguage);
+  speechLanguageRef.current = local.speechLanguage;
+
+  const update = useCallback(
+    (patch: Partial<Settings>): void => {
+      setLocal((current) => ({ ...current, ...patch }));
+      void api.settings.update(patch);
+    },
+    [api]
+  );
 
   const stepCopy: readonly { title: string; description: string }[] = [
     {
       title: t("onboarding.step.mic.title"),
       description: t("onboarding.step.mic.desc")
+    },
+    {
+      title: t("onboarding.step.speech.title"),
+      description: t("onboarding.step.speech.desc")
     },
     {
       title: t("onboarding.step.keys.title"),
@@ -78,6 +99,17 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
       if (cancelled) return;
       setProfile(result);
       setInstalled(result.modelInstalled);
+      // Preselect from the OS so the step is one confirming click. Only from
+      // the "auto" default: a language already chosen is the user's, and this
+      // must never overwrite it on a re-run of onboarding. The ref holds the
+      // latest persisted value, so this does not have to depend on settings
+      // and re-run the whole profile fetch every time they change.
+      if (
+        result.suggestedSpeechLanguage !== "auto" &&
+        speechLanguageRef.current === "auto"
+      ) {
+        update({ speechLanguage: result.suggestedSpeechLanguage });
+      }
       if (result.modelInstalled) return;
       void api.onboarding.startRecommended().then((started) => {
         if (cancelled) return;
@@ -90,7 +122,7 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
     return () => {
       cancelled = true;
     };
-  }, [api]);
+  }, [api, update]);
 
   useEffect(() => {
     return api.models.onDownloadProgress((event) => {
@@ -130,21 +162,19 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
     }
   }, [capture]);
 
-  const update = useCallback(
-    (patch: Partial<Settings>): void => {
-      setLocal((current) => ({ ...current, ...patch }));
-      void api.settings.update(patch);
-    },
-    [api]
-  );
-
   const finish = useCallback((): void => {
     void api.onboarding.complete().then(() => {
       onFinished();
     });
   }, [api, onFinished]);
 
-  const completed: readonly boolean[] = [micReady, true, installed, transcript !== null];
+  const completed: readonly boolean[] = [
+    micReady,
+    local.speechLanguage !== "auto",
+    true,
+    installed,
+    transcript !== null
+  ];
 
   const last = step === STEP_COUNT - 1;
   const copy = stepCopy[step] ?? stepCopy[0] ?? { title: "", description: "" };
@@ -241,8 +271,9 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
             className="flex flex-col gap-3"
           >
             {step === 0 && <MicrophoneStep onReady={setMicReady} />}
-            {step === 1 && <HotkeyStep settings={local} onChange={update} />}
-            {step === 2 && (
+            {step === 1 && <SpeechLanguageStep settings={local} onChange={update} />}
+            {step === 2 && <HotkeyStep settings={local} onChange={update} />}
+            {step === 3 && (
               <EngineStep
                 profile={profile}
                 receivedBytes={receivedBytes}
@@ -251,7 +282,7 @@ export function Onboarding({ settings, capture, onFinished }: OnboardingProps): 
                 failure={failure}
               />
             )}
-            {step === 3 && (
+            {step === 4 && (
               <TryItStep
                 settings={local}
                 capture={capture}

@@ -4,7 +4,7 @@
  * settings shows a masked placeholder and a "Replace key" action only.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
 import type { Result } from "../../shared/result";
@@ -67,7 +67,14 @@ export const createSecretsStore = (): SecretsStore => {
       try {
         await mkdir(join(app.getPath("userData"), "secrets"), { recursive: true });
         const encrypted = safeStorage.encryptString(key);
-        await writeFile(keyPath(), encrypted);
+        // Temp file plus rename: a crash mid-write would otherwise leave a
+        // truncated blob that safeStorage cannot decrypt, which reads as
+        // "no key configured" and silently signs the user out of their
+        // cloud engine.
+        const target = keyPath();
+        const temp = `${target}.tmp`;
+        await writeFile(temp, encrypted);
+        await rename(temp, target);
         return ok(undefined);
       } catch {
         return fail({

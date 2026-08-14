@@ -68,6 +68,8 @@ export type MeetingErrorCode =
   | "engine-not-ready"
   | "worker-start-failed"
   | "worker-failed"
+  /** The capture window died mid-meeting; whatever was recorded is kept. */
+  | "capture-lost"
   | "window-load-failed"
   | "loopback-denied"
   | "loopback-unavailable"

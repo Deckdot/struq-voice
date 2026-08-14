@@ -109,10 +109,43 @@ describe("meeting store", () => {
       gap: false
     });
     store.setSpeakerLabel(id, "s1", "Sarah");
-    expect(store.removeMeeting(id)).toBe(true);
+    expect(store.removeMeeting(id).removed).toBe(true);
     expect(store.getMeeting(id)).toBeNull();
     expect(store.countSegments(id)).toBe(0);
     expect(store.listSpeakers(id)).toHaveLength(0);
+  });
+
+  /**
+   * The recording has to go with the row. Deleting only the row left the
+   * audio in userData/meetings/<id>/ forever, with no UI or channel that
+   * could ever reach it, so the caller needs the path back.
+   */
+  it("reports the recording path so the caller can delete the file", () => {
+    const id = store.createMeeting({
+      title: "With audio",
+      engineId: "parakeet",
+      modelId: "parakeet-tdt-0.6b-v3-int8",
+      language: null,
+      audioPath: null
+    });
+    store.setAudioPath(id, "/meetings/7/recording.webm");
+
+    const result = store.removeMeeting(id);
+
+    expect(result.removed).toBe(true);
+    expect(result.audioPath).toBe("/meetings/7/recording.webm");
+  });
+
+  it("reports a null recording path for a meeting that was never archived", () => {
+    const id = store.createMeeting({
+      title: "No audio",
+      engineId: "parakeet",
+      modelId: "parakeet-tdt-0.6b-v3-int8",
+      language: null,
+      audioPath: null
+    });
+
+    expect(store.removeMeeting(id).audioPath).toBeNull();
   });
 
   it("marks only recording rows interrupted on boot", () => {
@@ -177,5 +210,75 @@ describe("meeting store", () => {
       state: "complete"
     });
     expect(store.getMeeting(id)?.wordCount).toBe(4);
+  });
+
+  describe("mergeSpeaker", () => {
+    const seed = (): number => {
+      const id = store.createMeeting({
+        title: "Merge",
+        engineId: "parakeet",
+        modelId: "parakeet-tdt-0.6b-v3-int8",
+        language: null,
+        audioPath: null
+      });
+      store.appendSegment({
+        meetingId: id,
+        startMs: 0,
+        endMs: 1000,
+        source: "system",
+        speakerKey: "s1",
+        text: "first",
+        gap: false
+      });
+      store.appendSegment({
+        meetingId: id,
+        startMs: 1000,
+        endMs: 2000,
+        source: "system",
+        speakerKey: "s2",
+        text: "second",
+        gap: false
+      });
+      return id;
+    };
+
+    it("moves every segment from the retired key to the survivor", () => {
+      const id = seed();
+      expect(store.mergeSpeaker(id, "s2", "s1")).toBe(1);
+      const keys = store.listSegments(id, 50, 0).map((segment) => segment.speakerKey);
+      expect(keys).toEqual(["s1", "s1"]);
+    });
+
+    it("leaves other meetings alone", () => {
+      const first = seed();
+      const second = seed();
+      store.mergeSpeaker(first, "s2", "s1");
+      expect(store.listSegments(second, 50, 0).map((s) => s.speakerKey)).toEqual([
+        "s1",
+        "s2"
+      ]);
+    });
+
+    it("carries a label across and retires the old speaker row", () => {
+      const id = seed();
+      store.setSpeakerLabel(id, "s2", "Priya");
+      store.mergeSpeaker(id, "s2", "s1");
+      const speakers = store.listSpeakers(id);
+      expect(speakers).toEqual([{ speakerKey: "s1", label: "Priya" }]);
+    });
+
+    it("never overwrites a name the user already gave the survivor", () => {
+      const id = seed();
+      store.setSpeakerLabel(id, "s1", "Alex");
+      store.setSpeakerLabel(id, "s2", "Priya");
+      store.mergeSpeaker(id, "s2", "s1");
+      expect(store.listSpeakers(id)).toEqual([{ speakerKey: "s1", label: "Alex" }]);
+    });
+
+    it("is a no-op when a key is merged into itself", () => {
+      const id = seed();
+      expect(store.mergeSpeaker(id, "s1", "s1")).toBe(0);
+      expect(store.listSegments(id, 50, 0).map((s) => s.speakerKey)).toEqual(["s1", "s2"]);
+    });
   });
 });

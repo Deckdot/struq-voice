@@ -636,8 +636,13 @@ export const createDownloader = (
             return await downloadFile(model, file, run);
           })
         );
-        if (outcomes.some((outcome) => outcome === "failed" || outcome === "aborted")) {
-          // One failure aborts the rest; the partials stay for a later resume.
+        const failed = outcomes.some(
+          (outcome) => outcome === "failed" || outcome === "aborted"
+        );
+        if (failed) {
+          // Every file has already settled by the time Promise.all resolves,
+          // so this aborts nothing in flight. It is kept only to release the
+          // controllers; the resume path relies on the partials staying put.
           for (const controller of run.controllers) {
             controller.abort();
           }
@@ -646,6 +651,17 @@ export const createDownloader = (
         if (isCancelled(run)) {
           states.set(model.id, { state: "idle" });
         } else if (current !== undefined && current.state === "error") {
+          emitFinal(model, run);
+        } else if (failed) {
+          // A file failed without any per-file handler recording why. Falling
+          // through to "done" here is what let a half-downloaded model report
+          // success: the engine then claimed to be ready and failed at the
+          // first capture instead.
+          states.set(model.id, {
+            state: "error",
+            code: "unknown",
+            message: `${model.name} did not download completely. Try again.`
+          });
           emitFinal(model, run);
         } else {
           states.set(model.id, { state: "done" });

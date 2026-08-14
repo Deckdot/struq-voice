@@ -14,22 +14,26 @@ const makeDeps = (overrides: {
     overrides.samples ?? new Float32Array(SAMPLE_RATE * 10).fill(0.1);
   const keys = overrides.keys ?? ["s1", "s2", "s1"];
   let assigned = 0;
+  const provisionalFlags: boolean[] = [];
   return {
     utteranceStartSample: overrides.utteranceStartSample ?? 0,
     samples,
     sampleRate: SAMPLE_RATE,
     minSubSegmentSeconds: 0.4,
+    minIdentifyingSeconds: 0,
     diarizer: {
       process: () => overrides.subSegments ?? []
     },
     clusterer: {
-      assign: () => {
+      assign: (_embedding: Float32Array, options?: { readonly provisional: boolean }) => {
         const key = keys[assigned] ?? "s1";
         assigned += 1;
+        provisionalFlags.push(options?.provisional ?? false);
         return key;
       }
     },
-    embed: (slice: Float32Array) => Float32Array.from(slice.slice(0, 8))
+    embed: (slice: Float32Array) => Float32Array.from(slice.slice(0, 8)),
+    provisionalFlags
   };
 };
 
@@ -119,5 +123,39 @@ describe("refineLongTurn", () => {
     const result = refineLongTurn({ ...rest, diarizer: null, clusterer: null });
     expect(result).toHaveLength(1);
     expect(result[0]?.key).toBe("s1");
+  });
+
+  describe("the identifying floor", () => {
+    it("marks sub-segments below it provisional, so they cannot found a speaker", () => {
+      const deps = {
+        ...makeDeps({
+          subSegments: [
+            { start: 0, end: 4 },
+            { start: 4, end: 5.2 },
+            { start: 5.2, end: 9 }
+          ],
+          keys: ["s1", "s2", "s1"]
+        }),
+        minIdentifyingSeconds: 3
+      };
+
+      refineLongTurn(deps);
+
+      // Refinement chops a long turn into whatever pyannote found, and the
+      // short pieces carry no speaker identity. Only the two long ones are
+      // allowed to define anybody.
+      expect(deps.provisionalFlags).toEqual([false, true, false]);
+    });
+
+    it("marks the whole utterance provisional when it is under the floor", () => {
+      const deps = {
+        ...makeDeps({ samples: new Float32Array(SAMPLE_RATE).fill(0.1), subSegments: [] }),
+        minIdentifyingSeconds: 3
+      };
+
+      refineLongTurn(deps);
+
+      expect(deps.provisionalFlags).toEqual([true]);
+    });
   });
 });

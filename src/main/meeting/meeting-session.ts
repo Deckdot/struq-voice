@@ -23,6 +23,7 @@ import type { BrowserWindow } from "electron";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { MeetingSettings } from "../../shared/settings";
+import { speechLanguageHint } from "../../shared/settings";
 import type {
   MeetingLaneErrorCode,
   MeetingLaneHealth,
@@ -34,6 +35,7 @@ import type {
   MeetingAudioFrames,
   MeetingAudioStateEvent,
   MeetingSegmentAppendedEvent,
+  MeetingSpeakersMergedEvent,
   MeetingStartResult
 } from "../../shared/ipc";
 import type { ArchiveWriter } from "./archive-writer";
@@ -88,9 +90,19 @@ export interface MeetingSession {
   handleFrames: (frames: MeetingAudioFrames) => void;
   handleArchiveChunk: (bytes: ArrayBuffer) => void;
   handleAudioState: (event: MeetingAudioStateEvent) => void;
+  /**
+   * The capture renderer died (crash, OOM, killed from the task manager).
+   * Nothing else notices: the lane-live timer is cleared once recording
+   * starts, so without this the session sits in `recording` forever with an
+   * archive that stopped growing and a tray that claims a live meeting.
+   */
+  handleCaptureLost: (reason: string) => void;
   subscribe: (listener: (state: MeetingState) => void) => () => void;
   onSegment: (
     listener: (event: MeetingSegmentAppendedEvent) => void
+  ) => () => void;
+  onSpeakersMerged: (
+    listener: (event: MeetingSpeakersMergedEvent) => void
   ) => () => void;
   dispose: () => void;
 }
@@ -99,6 +111,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   let state: MeetingState = INITIAL_MEETING_STATE;
   const stateListeners = new Set<(state: MeetingState) => void>();
   const segmentListeners = new Set<(event: MeetingSegmentAppendedEvent) => void>();
+  const speakersMergedListeners = new Set<(event: MeetingSpeakersMergedEvent) => void>();
 
   let activeMeetingId: number | null = null;
   let startedAtMs: number | null = null;
@@ -112,6 +125,18 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   let backlogSeconds = 0;
   let meetingFailed = false;
   let disposed = false;
+  /**
+   * start() awaits four times (storage, worker, window load, capture gesture)
+   * and each await is a point where a stop() can land. Without an ownership
+   * check the losing start rebuilds the state stop just tore down, leaving a
+   * window nobody destroys and a worker nobody kills. Every start takes a
+   * token; stop() and dispose() invalidate it, and start() re-checks after
+   * each await, unwinding what this attempt itself created.
+   */
+  let startGeneration = 0;
+  let startInFlight = false;
+  /** Meeting ids whose row the canceller finalizes, so the unwind does not. */
+  const finalizedByCanceller = new Set<number>();
   let lastLaneHealth: { system: MeetingLaneHealth; microphone: MeetingLaneHealth } = {
     system: { live: false },
     microphone: { live: false }
@@ -164,7 +189,14 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   const handleWorkerEvent = (event: unknown): void => {
     if (disposed) return;
     const workerEvent = event as {
-      readonly type: "segment" | "gap" | "heartbeat" | "failure" | "ready" | "drained";
+      readonly type:
+        | "segment"
+        | "gap"
+        | "speakers-merged"
+        | "heartbeat"
+        | "failure"
+        | "ready"
+        | "drained";
     };
     const meetingId = activeMeetingId;
     const store = options.store;
@@ -229,6 +261,24 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         });
         break;
       }
+      case "speakers-merged": {
+        if (meetingId === null || store === null) return;
+        const payload = event as {
+          readonly type: "speakers-merged";
+          readonly merges: readonly { readonly from: string; readonly into: string }[];
+        };
+        for (const merge of payload.merges) {
+          store.mergeSpeaker(meetingId, merge.from, merge.into);
+        }
+        speakerCount = Math.max(1, speakerCount - payload.merges.length);
+        if (state.phase === "recording") {
+          setState({ ...state, speakerCount });
+        }
+        for (const listener of speakersMergedListeners) {
+          listener({ meetingId, merges: payload.merges, speakerCount });
+        }
+        break;
+      }
       case "heartbeat": {
         const payload = event as {
           readonly type: "heartbeat";
@@ -236,7 +286,9 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
           readonly speakerCount: number;
         };
         backlogSeconds = payload.queuedSeconds;
-        speakerCount = Math.max(speakerCount, payload.speakerCount);
+        // The worker's count is authoritative and can fall after a merge, so
+        // this tracks it rather than ratcheting to the high-water mark.
+        speakerCount = payload.speakerCount;
         if (state.phase === "recording") {
           setState({ ...state, backlogSeconds, speakerCount });
         }
@@ -267,8 +319,77 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     }
   };
 
+  /**
+   * Unwind an overtaken start. Only what this attempt created is torn down,
+   * and the meeting row is finalized `interrupted` because it was created but
+   * never recorded. State is left alone: the stop() that cancelled this start
+   * owns the phase, and writing one here would stomp it.
+   */
+  const unwindCancelledStart = async (
+    meetingId: number,
+    created: { window: BrowserWindow | null; archiveOpen: boolean; worker: boolean }
+  ): Promise<void> => {
+    logError(
+      "[meeting] Start cancelled by a stop that arrived mid-start.",
+      new Error(`Meeting ${String(meetingId)} was torn down before it began recording.`)
+    );
+    if (created.archiveOpen && options.archive.isOpen()) {
+      try {
+        await options.archive.close();
+      } catch (error) {
+        logError("[meeting] Cancelled start: closing the archive failed.", error);
+      }
+    }
+    if (created.window !== null) {
+      try {
+        options.window.destroy();
+      } catch (error) {
+        logError("[meeting] Cancelled start: destroying the window failed.", error);
+      }
+      // Only clear the shared handle when it is still this attempt's window.
+      // A newer start may already own it.
+      if (meetingWindow === created.window) {
+        meetingWindow = null;
+      }
+    }
+    if (created.worker) {
+      try {
+        options.worker.kill();
+      } catch (error) {
+        logError("[meeting] Cancelled start: killing the worker failed.", error);
+      }
+    }
+    // Only finalize a row the canceller is not already finalizing. A stop()
+    // that saw this meeting id writes its own row on the way out; two writes
+    // would race to decide whether the meeting was complete or interrupted.
+    if (finalizedByCanceller.has(meetingId)) {
+      finalizedByCanceller.delete(meetingId);
+    } else {
+      try {
+        options.store?.finalizeMeeting(meetingId, {
+          endedAtMs: Date.now(),
+          durationMs: 0,
+          audioBytes: 0,
+          speakerCount: 0,
+          state: "interrupted"
+        });
+      } catch (error) {
+        logError("[meeting] Cancelled start: finalizing the meeting failed.", error);
+      }
+    }
+    if (activeMeetingId === meetingId) {
+      activeMeetingId = null;
+      startedAtMs = null;
+    }
+  };
+
   const start = async (): Promise<MeetingStartResult> => {
-    if (isMeetingActive(state)) {
+    if (disposed) {
+      return { ok: false, code: "database-unavailable" };
+    }
+    // A second start while the first is still awaiting would run two full
+    // start sequences against one set of handles.
+    if (isMeetingActive(state) || startInFlight) {
       return { ok: false, code: "already-running" };
     }
     const store = options.store;
@@ -279,15 +400,30 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       return { ok: false, code: "assets-missing" };
     }
 
+    startGeneration += 1;
+    const generation = startGeneration;
+    startInFlight = true;
+    const isCurrent = (): boolean => generation === startGeneration && !disposed;
+    const created: { window: BrowserWindow | null; archiveOpen: boolean; worker: boolean } = {
+      window: null,
+      archiveOpen: false,
+      worker: false
+    };
+
     setState({ phase: "starting" });
     const settings = options.settings();
     const engine = engineId(settings);
+    // The same hint the worker decodes with, recorded on the row. Null means
+    // the decoder auto-detected, which is a real answer rather than a missing
+    // one: a meeting transcribed under a pinned language and one that was
+    // auto-detected are not equally trustworthy, and the row should say which.
+    const language = speechLanguageHint(options.speechLanguage());
 
     const meetingId = store.createMeeting({
       title: defaultTitle(new Date()),
       engineId: engine,
       modelId: options.resolveModelId(engine),
-      language: null,
+      language,
       audioPath: null
     });
     activeMeetingId = meetingId;
@@ -309,10 +445,17 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         if (!opened.ok) {
           throw new Error(opened.error.message);
         }
+        created.archiveOpen = true;
       }
     } catch (error) {
+      startInFlight = false;
       await abortToError(meetingId, "database-unavailable", "meeting-storage", error);
       return { ok: false, code: "database-unavailable" };
+    }
+    if (!isCurrent()) {
+      startInFlight = false;
+      await unwindCancelledStart(meetingId, created);
+      return { ok: false, code: "already-running" };
     }
 
     const init: WorkerInit = {
@@ -333,14 +476,17 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       diarization: settings.diarization,
       diarizationRefineOverMs: settings.diarizationRefineOverMs,
       speakerThreshold: settings.speakerThreshold,
+      speakerMergeThreshold: settings.speakerMergeThreshold,
+      minSpeakerAudioMs: settings.minSpeakerAudioMs,
       maxSpeakers: settings.maxSpeakers,
       vadMinSpeechMs: settings.vadMinSpeechMs,
       vadMinSilenceMs: settings.vadMinSilenceMs,
       vadMaxSpeechMs: settings.vadMaxSpeechMs,
-      speechLanguage: normalizeSpeechLanguage(options.speechLanguage())
+      speechLanguage: language
     };
     const workerStarted = await options.worker.start(init);
     if (!workerStarted.ok) {
+      startInFlight = false;
       await abortToError(
         meetingId,
         "worker-start-failed",
@@ -349,15 +495,20 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       );
       return { ok: false, code: "worker-start-failed" };
     }
+    created.worker = true;
+    if (!isCurrent()) {
+      startInFlight = false;
+      await unwindCancelledStart(meetingId, created);
+      return { ok: false, code: "already-running" };
+    }
 
     try {
-      meetingWindow = await options.window.create();
+      // Bound locally as well as shared: the unwind must destroy the window
+      // this attempt made, not whichever one the handle points at later.
+      const window = await options.window.create();
+      created.window = window;
+      meetingWindow = window;
       await new Promise<void>((resolve, reject) => {
-        const window = meetingWindow;
-        if (window === null) {
-          reject(new Error("No meeting window."));
-          return;
-        }
         // A load that neither finishes nor fails must not hang the start. The
         // listeners are `once`, so they retire themselves; the timer is the
         // only thing left to clear, and settled guards the losing path.
@@ -381,12 +532,33 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         });
       });
     } catch (error) {
+      startInFlight = false;
       await abortToError(meetingId, "window-load-failed", "window-load", error);
+      return { ok: false, code: "window-load-failed" };
+    }
+    if (!isCurrent()) {
+      startInFlight = false;
+      await unwindCancelledStart(meetingId, created);
+      return { ok: false, code: "already-running" };
+    }
+
+    // Loaded, but a destroy can still land between the load and the gesture.
+    // Sending into a dead webContents throws, and the throw would be reported
+    // as a loopback failure rather than the teardown it actually is.
+    const startedWindow = created.window;
+    if (startedWindow.isDestroyed()) {
+      startInFlight = false;
+      await abortToError(
+        meetingId,
+        "window-load-failed",
+        "window-load",
+        new Error("The meeting window was destroyed before capture began.")
+      );
       return { ok: false, code: "window-load-failed" };
     }
 
     try {
-      meetingWindow.webContents.send("meeting-audio:begin", {
+      startedWindow.webContents.send("meeting-audio:begin", {
         includeMicrophone: settings.includeMicrophone,
         archiveAudio: settings.archiveAudio,
         archiveBitrateKbps: settings.archiveBitrateKbps,
@@ -400,14 +572,24 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       // trips, so the renderer may not have run its begin handler yet. The
       // bridge is defined at renderer init for exactly that reason, and the
       // ?. keeps a first-paint race from throwing here and aborting the start.
-      await meetingWindow.webContents.executeJavaScript(
+      await startedWindow.webContents.executeJavaScript(
         "window.__struqBeginMeetingAudio?.()",
         true
       );
     } catch (error) {
+      startInFlight = false;
       await abortToError(meetingId, "loopback-unavailable", "audio-capture", error);
       return { ok: false, code: "loopback-unavailable" };
     }
+    // The last and most important check: past here the meeting is live, and a
+    // stop that landed during the gesture would otherwise have torn down a
+    // meeting that then starts feeding the worker anyway.
+    if (!isCurrent()) {
+      startInFlight = false;
+      await unwindCancelledStart(meetingId, created);
+      return { ok: false, code: "already-running" };
+    }
+    startInFlight = false;
 
     laneLiveTimer = setTimeout(() => {
       // No lane went live: the loopback is unavailable (a locked desktop or
@@ -429,10 +611,19 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
 
   const stop = async (): Promise<void> => {
     if (!isMeetingActive(state)) return;
+    // Invalidate first. An in-flight start observes this at its next resume
+    // point and unwinds itself instead of rebuilding what is torn down below.
+    startGeneration += 1;
+    // A meeting stopped before it ever recorded never held audio, so its row
+    // is interrupted no matter how cleanly the teardown runs.
+    const cancelledMidStart = startInFlight;
     const meetingId = activeMeetingId;
     if (meetingId === null) {
       setState({ phase: "idle" });
       return;
+    }
+    if (cancelledMidStart) {
+      finalizedByCanceller.add(meetingId);
     }
     setState({ phase: "finalizing", meetingId, remaining: backlogSeconds });
 
@@ -466,8 +657,17 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     }
 
     let audioBytes = 0;
+    let archiveFailed = false;
     if (options.archive.isOpen()) {
-      audioBytes = await options.archive.close();
+      const closed = await options.archive.close();
+      // Null means the recording failed: the file is missing or truncated.
+      // Reporting the bytes that happen to be there would file a corrupt
+      // recording as a complete one.
+      if (closed === null) {
+        archiveFailed = true;
+      } else {
+        audioBytes = closed;
+      }
     }
     options.window.destroy();
     meetingWindow = null;
@@ -481,7 +681,8 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         durationMs: Math.max(0, Date.now() - (startedAtMs ?? Date.now())),
         audioBytes,
         speakerCount,
-        state: meetingFailed ? "interrupted" : "complete"
+        state:
+          meetingFailed || archiveFailed || cancelledMidStart ? "interrupted" : "complete"
       });
     }
     activeMeetingId = null;
@@ -603,6 +804,27 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     }
   };
 
+  const handleCaptureLost = (reason: string): void => {
+    if (disposed) return;
+    // Idle and error own no meeting; finalizing is already tearing down.
+    if (state.phase !== "starting" && state.phase !== "recording" && state.phase !== "paused") {
+      return;
+    }
+    logError(
+      `[meeting] The capture window was lost during ${state.phase}.`,
+      new Error(reason)
+    );
+    // The window is gone, so stop() must not wait on it for an acknowledgement
+    // that can never arrive.
+    meetingWindow = null;
+    // Whatever was recorded is real, but the recording stopped early: this is
+    // an interrupted meeting, never a complete one.
+    meetingFailed = true;
+    void stop().then(() => {
+      setState({ phase: "error", code: "capture-lost" });
+    });
+  };
+
   const abortToError = async (
     meetingId: number,
     code:
@@ -648,6 +870,15 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     };
   };
 
+  const onSpeakersMerged = (
+    listener: (event: MeetingSpeakersMergedEvent) => void
+  ): (() => void) => {
+    speakersMergedListeners.add(listener);
+    return () => {
+      speakersMergedListeners.delete(listener);
+    };
+  };
+
   options.worker.onEvent(handleWorkerEvent);
 
   return {
@@ -661,8 +892,10 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     handleFrames,
     handleArchiveChunk,
     handleAudioState,
+    handleCaptureLost,
     subscribe,
     onSegment,
+    onSpeakersMerged,
     /**
      * Runs on quit, so no step may abort the ones after it.
      *
@@ -675,6 +908,10 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     dispose: (): void => {
       if (disposed) return;
       disposed = true;
+      // Same reason as stop(): a start still awaiting must not rebuild the
+      // window and worker this is about to tear down. isCurrent() also checks
+      // disposed, so this is belt and braces for a start that reads the token.
+      startGeneration += 1;
       const step = (name: string, run: () => void): void => {
         try {
           run();
@@ -727,10 +964,3 @@ const defaultTitle = (date: Date): string => {
   return `Meeting ${String(date.getFullYear())}-${month}-${day} ${hours}:${minutes}`;
 };
 
-/**
- * The dictation speech language is "auto" when the engine decides. Meetings
- * need a language the VAD and engines can rely on, so "auto" becomes null
- * (engine default), anything else passes through.
- */
-const normalizeSpeechLanguage = (language: string): string | null =>
-  language === "auto" ? null : language;

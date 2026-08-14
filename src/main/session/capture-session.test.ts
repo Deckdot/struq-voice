@@ -46,7 +46,9 @@ describe("capture session", () => {
 
     session.start();
     vi.runOnlyPendingTimers();
-    expect(beginCapture).toHaveBeenCalledWith(1000);
+    // The pre-roll is undefined here because no resolver was given, which
+    // leaves the recorder on its own default.
+    expect(beginCapture).toHaveBeenCalledWith(1000, undefined);
 
     vi.advanceTimersByTime(999);
     expect(session.state.phase).toBe("listening");
@@ -95,7 +97,10 @@ describe("capture session", () => {
     expect(session.state.phase).toBe("idle");
   });
 
-  it("fires listening-end feedback once the capture buffer is sealed", async () => {
+  it("fires listening-end feedback on release, not when the buffer arrives", async () => {
+    // Sealing a capture costs more the longer it ran, so waiting for the audio
+    // before making a sound left a long dictation feeling like the key press
+    // had not registered. The sound and the phase change land together now.
     const phases: string[] = [];
     const deferred: { resolve?: (audio: CaptureAudio) => void } = {};
     const audio = {
@@ -120,14 +125,39 @@ describe("capture session", () => {
     vi.advanceTimersByTime(500);
     session.stop();
 
-    expect(phases).toEqual([]);
+    // Audio has not been handed over yet, and the feedback has already fired.
+    expect(deferred.resolve).toBeDefined();
+    expect(phases).toEqual(["transcribing"]);
     expect(session.state.phase).toBe("transcribing");
+
     const resolveAudio = deferred.resolve;
     if (resolveAudio === undefined) throw new Error("capture did not request audio");
     resolveAudio(audio);
     await Promise.resolve();
 
+    // And exactly once: the handover must not sound a second time.
     expect(phases).toEqual(["transcribing"]);
+  });
+
+  it("fires listening-end feedback once even when the microphone is lost", async () => {
+    const onListeningEnd = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      source: stubSource({
+        endCapture: () => Promise.reject(new Error("device gone")),
+      }),
+      onListeningEnd,
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(500);
+    session.stop();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onListeningEnd).toHaveBeenCalledTimes(1);
+    expect(session.state.phase).toBe("error");
   });
 
   it("does not fire listening-end feedback for a discarded tap", () => {
@@ -364,5 +394,228 @@ describe("capture session", () => {
     if (session.state.phase === "delivering") {
       expect(session.state.inserted).toBe(false);
     }
+  });
+});
+
+/**
+ * Switching engine in Settings must show up on the next capture. Main used to
+ * read the engine id once at boot and hand the session that constant, so the
+ * transcribing state named the engine selected at launch until a restart.
+ */
+describe("capture session engine id", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const capture = (session: ReturnType<typeof createCaptureSession>): void => {
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+  };
+
+  it("resolves the engine at capture time, not at construction", () => {
+    let selected = "parakeet";
+    const options = {
+      ...OPTIONS,
+      getTranscribingEngineId: (): string => selected,
+      source: stubSource()
+    };
+
+    const first = createCaptureSession(options);
+    capture(first);
+    expect(first.state).toMatchObject({ phase: "transcribing", engineId: "parakeet" });
+
+    // The same options, built before the switch: the id must still follow the
+    // new selection, which is what a boot-time constant could not do.
+    selected = "whisper-cpp";
+    const second = createCaptureSession(options);
+    capture(second);
+    expect(second.state).toMatchObject({ phase: "transcribing", engineId: "whisper-cpp" });
+  });
+
+  it("falls back to the static id when no resolver is given", () => {
+    const session = createCaptureSession({
+      ...OPTIONS,
+      transcribingEngineId: "whisper-cpp",
+      source: stubSource()
+    });
+
+    capture(session);
+    expect(session.state).toMatchObject({ phase: "transcribing", engineId: "whisper-cpp" });
+  });
+});
+
+/**
+ * The transcript hook records history, which is optional by contract: the
+ * db layer promises history degrades rather than breaking transcription. A
+ * failing write used to throw out of the fire-and-forget finishCapture, so
+ * the words the user just spoke were never delivered, the phase stuck on
+ * transcribing, and every later capture was silently refused until restart.
+ */
+describe("capture session with a failing transcript hook", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const sessionWithThrowingHook = (
+    delivered: string[]
+  ): ReturnType<typeof createCaptureSession> =>
+    createCaptureSession({
+      ...OPTIONS,
+      source: stubSource(),
+      transcribe: () =>
+        Promise.resolve({
+          text: "hello",
+          meta: {
+            engineId: "e",
+            modelId: "m",
+            language: null,
+            inferenceMs: 1,
+            costUsd: null,
+            durationMs: 100
+          }
+        }),
+      onTranscript: () => {
+        throw new Error("SQLITE_FULL");
+      },
+      deliver: (text) => {
+        delivered.push(text);
+        return Promise.resolve({ inserted: true });
+      }
+    });
+
+  it("still delivers the transcript", async () => {
+    const delivered: string[] = [];
+    const session = sessionWithThrowingHook(delivered);
+
+    session.start();
+    await vi.runOnlyPendingTimersAsync();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(delivered).toEqual(["hello"]);
+  });
+
+  it("returns to idle instead of wedging on transcribing", async () => {
+    const session = sessionWithThrowingHook([]);
+
+    session.start();
+    await vi.runOnlyPendingTimersAsync();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(session.state.phase).toBe("idle");
+  });
+
+  it("accepts the next capture", async () => {
+    const session = sessionWithThrowingHook([]);
+
+    session.start();
+    await vi.runOnlyPendingTimersAsync();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+    await vi.runOnlyPendingTimersAsync();
+
+    session.start();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(session.state.phase).toBe("listening");
+  });
+});
+
+describe("capture session releases the audio source", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * Cancel has always released the worklet buffer. A failure out of
+   * listening did not, so one lost microphone left it armed and growing for
+   * the rest of the app's life.
+   */
+  it("discards the worklet buffer when the microphone is lost", async () => {
+    const discardCapture = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      source: stubSource({
+        discardCapture,
+        endCapture: () => Promise.reject(new Error("device gone"))
+      })
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    vi.advanceTimersByTime(OPTIONS.minCaptureMs + 10);
+    session.stop();
+    // Let the rejected endCapture settle without running the error-hold
+    // timer out to idle.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(session.state.phase).toBe("error");
+    expect(discardCapture).toHaveBeenCalled();
+  });
+});
+
+describe("capture session pre-roll", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * The pre-roll setting existed in the schema and in the Capture tab, and
+   * nothing in main ever read it: the recorder hardcoded 250ms, so moving
+   * the slider changed nothing at all.
+   */
+  it("passes the configured pre-roll to the audio source", () => {
+    const beginCapture = vi.fn();
+    const session = createCaptureSession({
+      ...OPTIONS,
+      getPrerollMs: () => 600,
+      source: stubSource({ beginCapture })
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+
+    expect(beginCapture).toHaveBeenCalledWith(OPTIONS.maxCaptureMs, 600);
+  });
+
+  it("reads the pre-roll again on the next capture", () => {
+    const beginCapture = vi.fn();
+    let preroll = 250;
+    const session = createCaptureSession({
+      ...OPTIONS,
+      getPrerollMs: () => preroll,
+      source: stubSource({ beginCapture })
+    });
+
+    session.start();
+    vi.runOnlyPendingTimers();
+    session.cancel();
+    preroll = 800;
+    session.start();
+    vi.runOnlyPendingTimers();
+
+    expect(beginCapture).toHaveBeenLastCalledWith(OPTIONS.maxCaptureMs, 800);
   });
 });

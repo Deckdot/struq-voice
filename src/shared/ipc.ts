@@ -60,6 +60,12 @@ export const recorderBeginCaptureChannel = "recorder:begin-capture" as const;
 
 export interface RecorderBeginCaptureRequest {
   readonly maxCaptureMs: number;
+  /**
+   * Audio kept from before the key went down (ms). Absent means the
+   * recorder's own default, which is what every build shipped before the
+   * setting was wired through.
+   */
+  readonly prerollMs?: number;
 }
 
 /** Main to recorder: seal the capture after its tail and return the recorded PCM. */
@@ -416,6 +422,12 @@ export interface SettingsUpdateRequest {
 
 export interface SettingsUpdateResult {
   readonly settings: Settings;
+  /**
+   * Set when the change reached memory but not disk (a read-only file, a
+   * full volume). The setting applies for this session and is gone at the
+   * next boot, so the UI must not report it as saved.
+   */
+  readonly writeError?: string;
 }
 
 export interface SettingsChangedEvent {
@@ -432,6 +444,12 @@ export interface OnboardingProfileResult {
   readonly recommendation: ModelRecommendation;
   /** True when the recommended model is already on disk. */
   readonly modelInstalled: boolean;
+  /**
+   * The speech language to preselect, from the OS preferred languages, so the
+   * common case is one confirming click. "auto" when the OS language is not
+   * one we offer. Independent of the UI locale (AGENTS.md section 16).
+   */
+  readonly suggestedSpeechLanguage: string;
 }
 
 /**
@@ -470,6 +488,13 @@ export const meetingRevealRecordingChannel = "meeting:reveal-recording" as const
  * live view appends rather than re-reading the meeting on every utterance.
  */
 export const meetingSegmentAppendedChannel = "meeting:segment-appended" as const;
+
+/**
+ * Push channel: the clustering decided two speakers were one voice. Sent with
+ * the already-persisted segments rewritten, so the live view relabels in place
+ * instead of showing a speaker who no longer exists.
+ */
+export const meetingSpeakersMergedChannel = "meeting:speakers-merged" as const;
 
 /** Push channel: input levels for both lanes, for the live meters. */
 export const meetingLevelsChannel = "meeting:levels" as const;
@@ -567,6 +592,13 @@ export interface MeetingExportResult {
 export interface MeetingSegmentAppendedEvent {
   readonly meetingId: number;
   readonly segment: MeetingSegment;
+  readonly speakerCount: number;
+}
+
+export interface MeetingSpeakersMergedEvent {
+  readonly meetingId: number;
+  /** Retired key to surviving key, oldest merge first. */
+  readonly merges: readonly { readonly from: string; readonly into: string }[];
   readonly speakerCount: number;
 }
 
@@ -781,6 +813,7 @@ export const PRELOAD_CHANNELS = {
     export: meetingExportChannel,
     revealRecording: meetingRevealRecordingChannel,
     segmentAppended: meetingSegmentAppendedChannel,
+    speakersMerged: meetingSpeakersMergedChannel,
     levels: meetingLevelsChannel,
     assets: meetingAssetsChannel,
     installAssets: meetingInstallAssetsChannel,

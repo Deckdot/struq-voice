@@ -45,18 +45,30 @@ export function StatusCluster(): JSX.Element | null {
   }, [api]);
 
   useEffect(() => {
-    void api.models.list().then(({ items }) => {
-      setModels(items);
+    const refresh = (): void => {
+      void api.models.list().then(({ items }) => {
+        setModels(items);
+      });
+    };
+    refresh();
+    // A snapshot taken once at mount meant a "Model not downloaded" fault
+    // stayed on screen for the rest of the session even after the download
+    // finished. Terminal download states change what is installed, so the
+    // list is refetched when one lands.
+    return api.models.onDownloadProgress((event) => {
+      if (event.state !== "downloading") refresh();
     });
   }, [api]);
 
   const engine = engineOption(settings.engine.primary);
   const isLocal = engine?.kind === "local";
   const isCloud = engine?.kind === "cloud";
+  // The selected id, not a hardcoded one: pinning v3 here reported a
+  // selected v2 as missing while main was happily transcribing with it.
   const engineModelId =
     settings.engine.primary === "whisper-cpp"
       ? settings.whisperModelId
-      : "parakeet-tdt-0.6b-v3-int8";
+      : settings.parakeetModelId;
   const modelStatus = models.find((entry) => entry.model.id === engineModelId);
 
   useEffect(() => {

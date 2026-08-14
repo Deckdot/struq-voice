@@ -43,6 +43,8 @@ export interface CaptureSessionOptions {
   /** Read live settings at the start of each capture when provided. */
   readonly getMinCaptureMs?: () => number;
   readonly getMaxCaptureMs?: () => number;
+  /** Pre-roll for the next capture (ms). Read per capture, like the maximum. */
+  readonly getPrerollMs?: () => number;
   /** Simulated inference time between stop and delivering (ms). */
   readonly simulatedInferenceMs: number;
   /** How long delivering stays on screen before returning to idle (ms). */
@@ -57,6 +59,12 @@ export interface CaptureSessionOptions {
   readonly transcribe?: (audio: CaptureAudio) => Promise<{ text: string; meta: TranscriptMeta }>;
   /** Engine shown in the transcribing state while inference runs. */
   readonly transcribingEngineId?: string;
+  /**
+   * Resolves that engine at capture time, so switching engine in Settings
+   * shows up on the very next capture instead of after a restart. Takes
+   * precedence over `transcribingEngineId`.
+   */
+  readonly getTranscribingEngineId?: () => string;
   /** Called once the transcript exists, before delivering. */
   readonly onTranscript?: (text: string, meta: TranscriptMeta) => void;
   /** Called once the real capture buffer is sealed, or immediately on abort. */
@@ -138,7 +146,7 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
       startedAt = Date.now();
       setState({ phase: "listening", startedAtMs: startedAt });
       try {
-        options.source?.beginCapture(maxCaptureMs);
+        options.source?.beginCapture(maxCaptureMs, options.getPrerollMs?.());
       } catch (error) {
         fail("Microphone unavailable. Check the device and try again.");
         void error;
@@ -175,22 +183,36 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
   const finishCapture = async (captureStartedAt: number): Promise<void> => {
     setState({
       phase: "transcribing",
-      engineId: options.transcribingEngineId ?? MOCK_ENGINE_ID,
+      engineId:
+        options.getTranscribingEngineId?.() ??
+        options.transcribingEngineId ??
+        MOCK_ENGINE_ID,
       startedAtMs: captureStartedAt,
     });
+
+    // Feedback belongs to the release, not to the buffer handover. Sealing the
+    // capture means waiting out the audio tail and then copying the whole
+    // recording out of the worklet, which costs more the longer the capture
+    // ran, so playing the close sound afterwards made a long dictation feel
+    // like it had not registered the key at all. The phase is already
+    // broadcast above, so the overlay and this sound now land together.
+    options.onListeningEnd?.();
 
     let audio: CaptureAudio | null = null;
     if (options.source !== undefined) {
       try {
         audio = await options.source.endCapture();
       } catch (error) {
-        options.onListeningEnd?.();
+        // Sealing the capture failed, so the worklet still holds whatever it
+        // recorded. Release it or the buffer stays armed and growing for the
+        // rest of the session, which is what one lost microphone used to
+        // cost until the app restarted.
+        options.source.discardCapture();
         fail("Microphone lost. Check the device connection and try again.", null);
         void error;
         return;
       }
     }
-    options.onListeningEnd?.();
 
     // The capture may have been cancelled or failed while we waited.
     if (currentPhase() !== "transcribing") return;
@@ -223,7 +245,16 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
     }
 
     if (meta !== null) {
-      options.onTranscript?.(text, meta);
+      try {
+        options.onTranscript?.(text, meta);
+      } catch {
+        // The hook records history, which is optional by contract. A failing
+        // write (full disk, locked database) used to throw out of this
+        // fire-and-forget function: the transcript was never delivered, the
+        // phase stayed on transcribing, and every later capture was refused
+        // until the app restarted. Losing the history row is a blemish;
+        // losing the words the user just spoke is not.
+      }
     }
 
     setState({ phase: "delivering", text, inserted: false });
@@ -268,7 +299,12 @@ export const createCaptureSession = (options: CaptureSessionOptions): CaptureSes
 
   const fail = (message: string, text: string | null = null): void => {
     if (state.phase === "idle" || state.phase === "delivering") return;
-    if (state.phase === "listening") options.onListeningEnd?.();
+    if (state.phase === "listening") {
+      options.onListeningEnd?.();
+      // Same reason cancel does it: a failure out of listening leaves the
+      // worklet armed and its buffer growing for the rest of the session.
+      options.source?.discardCapture();
+    }
     startedAt = null;
     clearTimers();
     setState({ phase: "error", message, text });

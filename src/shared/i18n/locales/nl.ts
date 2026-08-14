@@ -167,6 +167,7 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "models.speed.balanced": "Gebalanceerd",
   "models.speed.highAccuracy": "Hoge nauwkeurigheid",
 
+  "settings.saveFailed": "Instellingen konden niet worden opgeslagen. Je wijziging geldt nu, maar verdwijnt zodra de app opnieuw start.",
   "settings.category.general": "Algemeen",
   "settings.category.capture": "Opname",
   "settings.category.transcription": "Transcriptie",
@@ -370,6 +371,13 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   // Onboarding
   "onboarding.step.mic.title": "Je microfoon",
   "onboarding.step.mic.desc": "Reeds geselecteerd. Zeg iets om te controleren of de balk beweegt.",
+  "onboarding.step.speech.title": "De taal die je spreekt",
+  "onboarding.step.speech.desc":
+    "Dit vooraf instellen is nauwkeuriger dan het model elke keer laten raden.",
+  "onboarding.speech.label": "Spraaktaal",
+  "onboarding.speech.value":
+    "Hierin dicteer je. Dit staat los van de taal waarin de app zelf staat.",
+  "onboarding.speech.auto": "Automatisch herkennen",
   "onboarding.step.keys.title": "Je sneltoetsen",
   "onboarding.step.keys.desc":
     "Reeds geregistreerd. Pas ze aan als ze conflicteren met andere software.",
@@ -435,6 +443,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
     "Hoe gelijk twee stemmen moeten zijn om als een persoon te tellen.",
   "settings.meetings.speakers.sensitivity.merge": "Gelijkende stemmen samenvoegen",
   "settings.meetings.speakers.sensitivity.keepApart": "Stemmen gescheiden houden",
+  "settings.meetings.speakers.minAudio.label": "Minimale spraak per spreker",
+  "settings.meetings.speakers.minAudio.hint": "Spraak korter dan dit krijgt wel een label, maar registreert nooit een nieuwe spreker. Korte opmerkingen bevatten te weinig stem om iemand te herkennen.",
   "settings.meetings.speakers.max.label": "Verwachte sprekers",
   "settings.meetings.speakers.max.hint": "0 laat de clustering beslissen.",
   "settings.meetings.advanced.title": "Geavanceerd",
@@ -469,6 +479,8 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
     "De spraakservice voor vergaderingen kon niet starten. Herstart Struq Voice en probeer opnieuw.",
   "meetings.error.worker-failed":
     "De spraakservice voor vergaderingen is onverwacht gestopt. Start een nieuwe vergadering om door te gaan.",
+  "meetings.error.capture-lost":
+    "De audio-opname van de vergadering is onverwacht gestopt. Alles wat tot dat moment is opgenomen, is bewaard.",
   "meetings.error.window-load-failed":
     "Het audiovenster voor vergaderingen kon niet openen. Herstart Struq Voice en probeer opnieuw.",
   "meetings.error.loopback-denied":

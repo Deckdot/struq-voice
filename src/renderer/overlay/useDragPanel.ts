@@ -60,8 +60,16 @@ export const useDragPanel = (move: (x: number, y: number) => void): DragPanelHan
     return () => {
       clearDragListeners();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
+      // An unmount mid-drag (the capture ended while the pointer was still
+      // down) must land the last queued position: without this the panel
+      // settles a frame behind the drop and that final spot is never saved.
+      const pendingMove = pending.current;
+      pending.current = null;
+      if (pendingMove !== null) {
+        move(pendingMove.x, pendingMove.y);
+      }
     };
-  }, [clearDragListeners]);
+  }, [clearDragListeners, move]);
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLElement>): void => {

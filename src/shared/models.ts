@@ -100,8 +100,6 @@ function whisperFile(path: string, bytes: number, sha256: string): ModelFile {
   };
 }
 
-const ZERO_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
-
 /** Whisper size tiers, smallest to largest. Used to order and label the catalog. */
 export type WhisperTier = "tiny" | "base" | "small" | "medium" | "large";
 
@@ -269,7 +267,7 @@ export const MODEL_CATALOG: readonly ModelInfo[] = [
         "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
         "tokens.txt",
         93939,
-        ZERO_HASH
+        "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"
       )
     ]
   },
@@ -304,7 +302,7 @@ export const MODEL_CATALOG: readonly ModelInfo[] = [
         "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8",
         "tokens.txt",
         9384,
-        ZERO_HASH
+        "ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d"
       )
     ]
   },

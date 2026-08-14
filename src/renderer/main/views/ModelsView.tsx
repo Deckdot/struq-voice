@@ -201,6 +201,7 @@ export function ModelsView(): JSX.Element {
   } | null>(null);
   const [activeSelection, setActiveSelection] = useState<{
     primary: string;
+    fallback: string | null;
     whisperModelId: string;
     parakeetModelId: string;
   } | null>(null);
@@ -236,6 +237,7 @@ export function ModelsView(): JSX.Element {
     void api.settings.get().then(({ settings }) => {
       setActiveSelection({
         primary: settings.engine.primary,
+        fallback: settings.engine.fallback,
         whisperModelId: settings.whisperModelId,
         parakeetModelId: settings.parakeetModelId
       });
@@ -243,6 +245,7 @@ export function ModelsView(): JSX.Element {
     return api.settings.onChange((settings) => {
       setActiveSelection({
         primary: settings.engine.primary,
+        fallback: settings.engine.fallback,
         whisperModelId: settings.whisperModelId,
         parakeetModelId: settings.parakeetModelId
       });
@@ -306,17 +309,30 @@ export function ModelsView(): JSX.Element {
     );
   };
 
+  /**
+   * Picking a model changes which engine runs and which model it loads, and
+   * nothing else.
+   *
+   * Both branches used to send `fallback: null`, so choosing a model
+   * silently cleared the backup service. That field is also the only opt-in
+   * permitting a local engine to cascade to the cloud, so a model pick
+   * revoked a consent the user gave elsewhere and dictation stopped falling
+   * back with no visible cause.
+   */
   const selectModel = (status: ModelStatus): void => {
+    const fallback = activeSelection?.fallback ?? null;
     if (status.model.engine === "parakeet") {
+      // Only the engine and the Parakeet id move. Blanking whisperModelId
+      // here used to fail the schema's min(1) and reset the whole profile,
+      // and it threw away the Whisper model to come back to anyway.
       void api.settings.update({
-        engine: { primary: "parakeet", fallback: null },
-        whisperModelId: "",
+        engine: { primary: "parakeet", fallback },
         parakeetModelId: status.model.id
       });
       return;
     }
     void api.settings.update({
-      engine: { primary: "whisper-cpp", fallback: null },
+      engine: { primary: "whisper-cpp", fallback },
       whisperModelId: status.model.id
     });
   };

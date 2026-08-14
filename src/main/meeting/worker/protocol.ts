@@ -23,6 +23,18 @@ export interface WorkerInit {
   readonly diarization: boolean;
   readonly diarizationRefineOverMs: number;
   readonly speakerThreshold: number;
+  /**
+   * Mean cross-similarity above which two speakers are folded into one. On a
+   * different scale from speakerThreshold; see the clusterer.
+   */
+  readonly speakerMergeThreshold: number;
+  /**
+   * Speech shorter than this cannot found or define a speaker. A CAM++
+   * embedding taken from under about three seconds carries almost no speaker
+   * identity, so letting one register a speaker is what turns a single voice
+   * into six.
+   */
+  readonly minSpeakerAudioMs: number;
   readonly maxSpeakers: number;
   readonly vadMinSpeechMs: number;
   readonly vadMinSilenceMs: number;
@@ -70,6 +82,16 @@ export interface WorkerGap {
   readonly endMs: number;
 }
 
+/**
+ * Two speakers turned out to be one voice. Segments already emitted under
+ * `from` belong to `into`, so main rewrites what it has persisted rather than
+ * leaving a transcript that refers to a speaker who no longer exists.
+ */
+export interface WorkerSpeakersMerged {
+  readonly type: "speakers-merged";
+  readonly merges: readonly { readonly from: string; readonly into: string }[];
+}
+
 /** Sent at most once a second, so main can drive the backlog indicator. */
 export interface WorkerHeartbeat {
   readonly type: "heartbeat";
@@ -91,6 +113,7 @@ export type WorkerEvent =
   | WorkerReady
   | WorkerSegment
   | WorkerGap
+  | WorkerSpeakersMerged
   | WorkerHeartbeat
   | WorkerFailure
   | WorkerDrained;

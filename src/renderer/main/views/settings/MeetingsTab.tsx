@@ -152,6 +152,22 @@ export function MeetingsTab({ settings, update }: MeetingsTabProps): JSX.Element
           }
         />
         <SettingsRow
+          label={t("settings.meetings.speakers.minAudio.label")}
+          hint={t("settings.meetings.speakers.minAudio.hint")}
+          control={
+            <NumberInput
+              value={meeting.minSpeakerAudioMs}
+              min={500}
+              max={10_000}
+              step={500}
+              onChange={(minSpeakerAudioMs) => {
+                updateMeeting({ minSpeakerAudioMs });
+              }}
+              aria-label="Minimum speech to identify a speaker"
+            />
+          }
+        />
+        <SettingsRow
           label={t("settings.meetings.speakers.max.label")}
           hint={t("settings.meetings.speakers.max.hint")}
           control={

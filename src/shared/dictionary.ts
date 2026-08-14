@@ -34,8 +34,15 @@ export const buildRulePattern = (rule: {
   readonly wholeWord: boolean;
 }): RegExp => {
   const body = escapeRegExp(rule.from);
-  const bounded = rule.wholeWord ? `\\b${body}\\b` : body;
-  return new RegExp(bounded, rule.matchCase ? "g" : "gi");
+  // \b is ASCII-only: it treats every accented or non-Latin character as a
+  // non-word character, so \bcafé\b needs a word character after "é" and
+  // never matches, and a rule written entirely in CJK never fires at all.
+  // Lookarounds over the Unicode letter and number classes say what \b was
+  // meant to say, in both the preview and delivery.
+  const bounded = rule.wholeWord
+    ? `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`
+    : body;
+  return new RegExp(bounded, rule.matchCase ? "gu" : "giu");
 };
 
 export interface RuleMatch {

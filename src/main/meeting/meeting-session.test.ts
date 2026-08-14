@@ -8,6 +8,7 @@ import type { MeetingAssetService } from "./assets";
 import type { WorkerEvent } from "./worker/protocol";
 import type { MeetingAudioStateEvent } from "../../shared/ipc";
 import type { MeetingState } from "../../shared/meeting";
+import type { Result } from "../../shared/result";
 
 interface FakeStore extends MeetingStore {
   readonly created: { title: string; engineId: string }[];
@@ -316,6 +317,168 @@ describe("meeting session", () => {
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.code).toBe("window-load-failed");
     expect(session.state).toEqual({ phase: "error", code: "window-load-failed" });
+  });
+
+  // start() awaits four times and each await is a point where the stop hotkey
+  // can land. Before the generation token, the losing start rebuilt the window
+  // and worker that stop had just torn down: a recorder nobody owned, holding
+  // the microphone and the loopback for the life of the app.
+  describe("a stop that lands mid-start", () => {
+    /**
+     * A start parked on the archive open, which is the first await in start().
+     * `release` lets it continue so the cancellation can be observed at the
+     * gate that follows.
+     */
+    const startParkedOnArchive = (
+      overrides: Partial<MeetingSessionOptions> = {}
+    ): {
+      session: MeetingSession;
+      store: FakeStore;
+      worker: ReturnType<typeof makeWorker>;
+      window: ReturnType<typeof makeWindow>;
+      release: () => void;
+      parked: Promise<void>;
+    } => {
+      const archive = makeArchive();
+      let release = (): void => undefined;
+      let reachedArchive = (): void => undefined;
+      const parked = new Promise<void>((resolve) => {
+        reachedArchive = resolve;
+      });
+      // Only the first open parks. A later start (the one that proves the
+      // session recovers) must be free to complete on its own.
+      let parkedOnce = false;
+      archive.open = vi.fn(() => {
+        if (parkedOnce) return Promise.resolve({ ok: true as const, value: undefined });
+        parkedOnce = true;
+        return new Promise<Result<void>>((resolve) => {
+          reachedArchive();
+          release = () => {
+            resolve({ ok: true, value: undefined });
+          };
+        });
+      });
+      const made = makeSession({ archive, ...overrides });
+      return { ...made, release: () => { release(); }, parked };
+    };
+
+    it("does not create the window when the stop arrives during the storage step", async () => {
+      const { session, window, release, parked } = startParkedOnArchive();
+
+      const starting = session.start();
+      await parked;
+      expect(session.state.phase).toBe("starting");
+
+      const stopping = session.stop();
+      release();
+      const [outcome] = await Promise.all([starting, stopping]);
+
+      expect(outcome.ok).toBe(false);
+      // The cancelled start must never create the window it was about to make,
+      // nor fork the worker: both would outlive the meeting with no owner.
+      expect(window.create).not.toHaveBeenCalled();
+      expect(session.state.phase).toBe("idle");
+    });
+
+    it("sends no begin message and leaves no phantom complete row", async () => {
+      const { session, store, window, release, parked } = startParkedOnArchive();
+
+      const starting = session.start();
+      await parked;
+      const stopping = session.stop();
+      release();
+      const [outcome] = await Promise.all([starting, stopping]);
+
+      expect(outcome.ok).toBe(false);
+      // No begin after the teardown: a cancelled start must not put a recorder
+      // on the loopback.
+      expect(window.sent).not.toContain("meeting-audio:begin");
+      expect(window.webContents.executeJavaScript).not.toHaveBeenCalled();
+      expect(session.state.phase).toBe("idle");
+      // A meeting that never recorded is interrupted, never complete.
+      expect(store.finalized).not.toHaveLength(0);
+      expect(store.finalized.every((row) => row.state === "interrupted")).toBe(true);
+    });
+
+    it("finalizes the cancelled meeting exactly once", async () => {
+      const { session, store, release, parked } = startParkedOnArchive();
+
+      const starting = session.start();
+      await parked;
+      const stopping = session.stop();
+      release();
+      await Promise.all([starting, stopping]);
+
+      // stop() and the unwind both know this meeting id. Two finalize writes
+      // would race to decide complete versus interrupted.
+      expect(store.finalized.filter((row) => row.id === 1)).toHaveLength(1);
+    });
+
+    it("refuses a second start while the first is still in flight", async () => {
+      const { session, release, parked } = startParkedOnArchive();
+
+      const first = session.start();
+      await parked;
+      const second = await session.start();
+
+      expect(second.ok).toBe(false);
+      if (!second.ok) expect(second.code).toBe("already-running");
+
+      release();
+      await first;
+      await session.stop();
+    });
+
+    it("kills the worker it started rather than leaking the utilityProcess", async () => {
+      // Parked on the window load this time, so the worker is already forked
+      // when the stop lands and the unwind has something to clean up.
+      const window = makeWindow();
+      let releaseLoad = (): void => undefined;
+      let reachedLoad = (): void => undefined;
+      const parked = new Promise<void>((resolve) => {
+        reachedLoad = resolve;
+      });
+      window.webContents.once = vi.fn(
+        (event: string, callback: (event: unknown, channel: string) => void) => {
+          if (event === "did-finish-load") {
+            releaseLoad = () => {
+              callback({}, "did-finish-load");
+            };
+            reachedLoad();
+          } else if (event === "ipc-message") {
+            // stop() waits for the window to acknowledge; without this the
+            // teardown parks on its own 5s timer and the test times out.
+            setTimeout(() => {
+              callback({}, "meeting-audio:state");
+            }, 0);
+          }
+        }
+      );
+      const { session, worker } = makeSession({ window });
+
+      const starting = session.start();
+      await parked;
+      const stopping = session.stop();
+      releaseLoad();
+      await Promise.all([starting, stopping]);
+
+      expect(worker.kill).toHaveBeenCalled();
+      expect(window.destroy).toHaveBeenCalled();
+      expect(session.state.phase).toBe("idle");
+    });
+
+    it("accepts a fresh start once the cancelled one has unwound", async () => {
+      const { session, release, parked } = startParkedOnArchive();
+
+      const starting = session.start();
+      await parked;
+      const stopping = session.stop();
+      release();
+      await Promise.all([starting, stopping]);
+
+      const second = await session.start();
+      expect(second.ok).toBe(true);
+    });
   });
 
   it("stores segments from worker events and broadcasts them", async () => {

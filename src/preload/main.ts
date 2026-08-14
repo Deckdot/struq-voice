@@ -194,7 +194,8 @@ const api: MainWindowApi = {
   clipboard: {
     copy: (text: string) => {
       ipcRenderer.send(channels.clipboard.copy, text);
-    }
+    },
+    read: () => ipcRenderer.invoke(channels.clipboard.read) as Promise<string>
   },
   metrics: {
     measuredRtf: () =>

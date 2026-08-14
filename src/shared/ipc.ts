@@ -320,6 +320,16 @@ export interface ClipboardCopyRequest {
   readonly text: string;
 }
 
+/**
+ * Read the clipboard for the in-app paste affordances.
+ *
+ * A sandboxed renderer cannot rely on `navigator.clipboard.readText`, and the
+ * Edit menu roles are the only other route to Ctrl+V. Both fail quietly on
+ * some Windows setups, which leaves a field like the API key with no way to
+ * paste at all. Reading through main is the one route that always works.
+ */
+export const clipboardReadChannel = "clipboard:read" as const;
+
 export const modelsListChannel = "models:list" as const;
 export const modelsDownloadChannel = "models:download" as const;
 export const modelsCancelChannel = "models:cancel" as const;
@@ -759,7 +769,8 @@ export const PRELOAD_CHANNELS = {
     measuredRtf: metricsMeasuredRtfChannel
   },
   clipboard: {
-    copy: clipboardCopyChannel
+    copy: clipboardCopyChannel,
+    read: clipboardReadChannel
   },
   settings: {
     get: settingsGetChannel,

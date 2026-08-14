@@ -43,6 +43,7 @@ import {
   onboardingProfileChannel,
   onboardingStartRecommendedChannel,
   clipboardCopyChannel,
+  clipboardReadChannel,
   devicesListChannel,
   historyClearChannel,
   historyDeleteChannel,
@@ -295,6 +296,8 @@ export const registerIpcHandlers = (
   ipcMain.on(clipboardCopyChannel, (_event, text: string) => {
     clipboard.writeText(text);
   });
+
+  ipcMain.handle(clipboardReadChannel, () => clipboard.readText());
 
   // Device list and selection relay through the recorder window, which owns
   // the microphone and therefore the enumerated device labels.

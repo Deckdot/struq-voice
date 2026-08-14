@@ -229,6 +229,29 @@ if (!gotLock) {
         }
       ])
     );
+    // Right-click edit menu. The Edit roles above deliver the keyboard
+    // shortcuts, but a frameless window renders no menu bar, so without this
+    // there is no visible way to copy or paste and no recovery when the
+    // accelerators do not arrive. Built per invocation because the entries
+    // depend on what was clicked.
+    app.on("web-contents-created", (_event, contents) => {
+      contents.on("context-menu", (_contextEvent, params) => {
+        const template: Electron.MenuItemConstructorOptions[] = [];
+        if (params.isEditable || params.selectionText.length > 0) {
+          template.push(
+            { role: "cut", enabled: params.isEditable && params.selectionText.length > 0 },
+            { role: "copy", enabled: params.selectionText.length > 0 },
+            { role: "paste", enabled: params.isEditable },
+            { type: "separator" },
+            { role: "selectAll" }
+          );
+        }
+        if (template.length === 0) return;
+        const owner = BrowserWindow.fromWebContents(contents);
+        Menu.buildFromTemplate(template).popup(owner !== null ? { window: owner } : {});
+      });
+    });
+
     installLoopbackHandler();
 
     const settingsStore = createSettingsStore(join(app.getPath("userData"), "settings.json"));

@@ -186,6 +186,9 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   rows. Advanced values (min/max capture, pre-roll, restore delay,
   live transcript interval) live behind a Disclosure in their
   category. The OpenRouter key field and the model picker live in their category.
+  The key field carries an explicit Paste button, and every editable field in
+  the app has a right-click Cut/Copy/Paste/Select All menu, so a key can be
+  pasted even when the Ctrl+V accelerator does not reach the window.
   Text settings include filler and punctuation toggles and a link to the Dictionary tab.
   The voice service picker, the backup service picker, and the theme picker all
   apply immediately. Capture includes a live level meter under the selected

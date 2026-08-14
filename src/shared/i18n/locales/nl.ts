@@ -371,6 +371,13 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   // Onboarding
   "onboarding.step.mic.title": "Je microfoon",
   "onboarding.step.mic.desc": "Reeds geselecteerd. Zeg iets om te controleren of de balk beweegt.",
+  "onboarding.step.speech.title": "De taal die je spreekt",
+  "onboarding.step.speech.desc":
+    "Dit vooraf instellen is nauwkeuriger dan het model elke keer laten raden.",
+  "onboarding.speech.label": "Spraaktaal",
+  "onboarding.speech.value":
+    "Hierin dicteer je. Dit staat los van de taal waarin de app zelf staat.",
+  "onboarding.speech.auto": "Automatisch herkennen",
   "onboarding.step.keys.title": "Je sneltoetsen",
   "onboarding.step.keys.desc":
     "Reeds geregistreerd. Pas ze aan als ze conflicteren met andere software.",

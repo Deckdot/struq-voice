@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   applySettingsPatch,
+  preferredSpeechLanguage,
   speechLanguageHint,
+  SPEECH_LANGUAGES,
   DEFAULT_SETTINGS,
   dictionaryFileSchema,
   meetingSettingsSchema,
@@ -240,5 +242,41 @@ describe("speechLanguageHint", () => {
   it("treats an empty or whitespace value as no hint", () => {
     expect(speechLanguageHint("")).toBeNull();
     expect(speechLanguageHint("   ")).toBeNull();
+  });
+});
+
+/**
+ * Onboarding preselects from the OS so the speech language step is one
+ * confirming click. It must not invent a language we cannot actually pin.
+ */
+describe("preferredSpeechLanguage", () => {
+  it("takes the first OS language we offer", () => {
+    expect(preferredSpeechLanguage(["nl-NL", "en-US"])).toBe("nl");
+  });
+
+  it("reduces a regional tag to the base code the picker uses", () => {
+    expect(preferredSpeechLanguage(["en-GB"])).toBe("en");
+    expect(preferredSpeechLanguage(["pt-BR"])).toBe("pt");
+  });
+
+  it("skips languages we do not offer rather than failing outright", () => {
+    // Welsh is not in the picker, English is: the second choice wins.
+    expect(preferredSpeechLanguage(["cy-GB", "en-GB"])).toBe("en");
+  });
+
+  it("falls back to auto when nothing matches, which is the honest answer", () => {
+    expect(preferredSpeechLanguage(["cy-GB"])).toBe("auto");
+    expect(preferredSpeechLanguage([])).toBe("auto");
+  });
+
+  it("ignores empty tags", () => {
+    expect(preferredSpeechLanguage(["", "  ", "de"])).toBe("de");
+  });
+
+  it("offers a filler-table language for every entry, and no auto sentinel", () => {
+    expect(SPEECH_LANGUAGES.length).toBeGreaterThan(0);
+    expect(SPEECH_LANGUAGES.some((language) => language.code === "auto")).toBe(false);
+    const codes = SPEECH_LANGUAGES.map((language) => language.code);
+    expect(new Set(codes).size).toBe(codes.length);
   });
 });

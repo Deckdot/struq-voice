@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../../shared/api";
 import type { Settings } from "../../../../shared/settings";
+import { SPEECH_LANGUAGES } from "../../../../shared/settings";
 import { ENGINE_OPTIONS } from "../../../../shared/engines";
 import type { EngineOption } from "../../../../shared/engines";
 import { MODEL_CATALOG } from "../../../../shared/models";
@@ -269,26 +270,11 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
                 }}
               >
                 <option value="auto">{t("settings.transcription.speechLanguage.auto")}</option>
-                <option value="en">English</option>
-                <option value="de">German (Deutsch)</option>
-                <option value="fr">French (Français)</option>
-                <option value="es">Spanish (Español)</option>
-                <option value="it">Italian (Italiano)</option>
-                <option value="nl">Dutch (Nederlands)</option>
-                <option value="pt">Portuguese (Português)</option>
-                <option value="pl">Polish (Polski)</option>
-                <option value="ru">Russian (Русский)</option>
-                <option value="zh">Chinese (中文)</option>
-                <option value="ja">Japanese (日本語)</option>
-                <option value="ko">Korean (한국어)</option>
-                <option value="ar">Arabic (العربية)</option>
-                <option value="hi">Hindi (हिन्दी)</option>
-                <option value="tr">Turkish (Türkçe)</option>
-                <option value="sv">Swedish (Svenska)</option>
-                <option value="da">Danish (Dansk)</option>
-                <option value="nb">Norwegian (Norsk)</option>
-                <option value="fi">Finnish (Suomi)</option>
-                <option value="uk">Ukrainian (Українська)</option>
+                {SPEECH_LANGUAGES.map((language) => (
+                  <option key={language.code} value={language.code}>
+                    {language.label}
+                  </option>
+                ))}
               </Select>
             </div>
           }

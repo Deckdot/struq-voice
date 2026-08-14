@@ -333,6 +333,11 @@ export const ptBR: Partial<Record<MessageKey, unknown>> = {
 
   "onboarding.step.mic.title": "Seu microfone",
   "onboarding.step.mic.desc": "Já selecionado. Fale algo para garantir que a barra se mova.",
+  "onboarding.step.speech.title": "O idioma que você fala",
+  "onboarding.step.speech.desc": "Informar isso antes é mais preciso do que deixar o modelo adivinhar toda vez.",
+  "onboarding.speech.label": "Idioma da fala",
+  "onboarding.speech.value": "É o idioma em que você dita. Ele é separado do idioma do aplicativo.",
+  "onboarding.speech.auto": "Detectar automaticamente",
   "onboarding.step.keys.title": "Seus atalhos",
   "onboarding.step.keys.desc": "Já registrados. Altere se conflitarem com outro software.",
   "onboarding.step.model.title": "Seu modelo",

@@ -397,6 +397,11 @@ export const en = {
   // Onboarding
   "onboarding.step.mic.title": "Your microphone",
   "onboarding.step.mic.desc": "Already chosen. Say something to make sure the bar moves.",
+  "onboarding.step.speech.title": "The language you speak",
+  "onboarding.step.speech.desc": "Telling us up front is more accurate than letting the model guess each time.",
+  "onboarding.speech.label": "Speech language",
+  "onboarding.speech.value": "This is what you dictate in. It is separate from the language the app is in.",
+  "onboarding.speech.auto": "Detect automatically",
   "onboarding.step.keys.title": "Your keys",
   "onboarding.step.keys.desc": "Already registered. Change them if they clash with something you use.",
   "onboarding.step.model.title": "Your model",

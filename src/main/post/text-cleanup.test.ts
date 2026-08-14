@@ -4,6 +4,7 @@ import {
   FILLER_TABLE,
   type CleanupOptions
 } from "./text-cleanup";
+import { SPEECH_LANGUAGES } from "../../shared/settings";
 
 const DEFAULT_OPTIONS: CleanupOptions = {
   dictionary: [],
@@ -211,14 +212,12 @@ describe("filler removal across languages", () => {
   });
 
   it("covers every language the speech picker offers", () => {
-    // Mirrors the option list in views/settings/TranscriptionTab.tsx. A
-    // language offered there but missing here removes no fillers at all,
+    // Reads the shared list the pickers render from, rather than a copy of
+    // it. A language offered but missing here removes no fillers at all,
     // which is safe but silently useless, so the two must not drift.
-    const offered = [
-      "en", "de", "fr", "es", "it", "nl", "pt", "pl", "ru", "zh",
-      "ja", "ko", "ar", "hi", "tr", "sv", "da", "nb", "fi", "uk"
-    ];
-    const missing = offered.filter((tag) => FILLER_TABLE[tag] === undefined);
+    const missing = SPEECH_LANGUAGES.map((language) => language.code).filter(
+      (tag) => FILLER_TABLE[tag] === undefined
+    );
     expect(missing).toEqual([]);
   });
 });

@@ -333,6 +333,11 @@ export const fr: Partial<Record<MessageKey, unknown>> = {
 
   "onboarding.step.mic.title": "Votre microphone",
   "onboarding.step.mic.desc": "Déjà sélectionné. Parlez pour vérifier que la barre s'anime.",
+  "onboarding.step.speech.title": "La langue que vous parlez",
+  "onboarding.step.speech.desc": "L'indiquer à l'avance est plus précis que de laisser le modèle deviner à chaque fois.",
+  "onboarding.speech.label": "Langue parlée",
+  "onboarding.speech.value": "C'est la langue dans laquelle vous dictez. Elle est indépendante de celle de l'application.",
+  "onboarding.speech.auto": "Détecter automatiquement",
   "onboarding.step.keys.title": "Vos touches de raccourci",
   "onboarding.step.keys.desc": "Déjà enregistrées. Modifiez-les si elles entrent en conflit avec un autre logiciel.",
   "onboarding.step.model.title": "Votre modèle",

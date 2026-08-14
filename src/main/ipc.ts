@@ -4,7 +4,12 @@ import type { HistoryStore } from "./db/history-store";
 import type { ModelsService } from "./models";
 import type { SecretsStore } from "./store/secrets";
 import type { SettingsStore } from "./store/settings-store";
-import { ONBOARDING_VERSION, dictionaryFileSchema, migrateSettings } from "../shared/settings";
+import {
+  ONBOARDING_VERSION,
+  dictionaryFileSchema,
+  migrateSettings,
+  preferredSpeechLanguage
+} from "../shared/settings";
 import type { HardwareProfile, ModelRecommendation } from "../shared/hardware";
 import { UNKNOWN_HARDWARE, recommendModel } from "../shared/hardware";
 import type {
@@ -135,7 +140,8 @@ export const registerIpcHandlers = (
     return {
       hardware: onboarding?.getHardware() ?? null,
       recommendation,
-      modelInstalled: status?.installed ?? false
+      modelInstalled: status?.installed ?? false,
+      suggestedSpeechLanguage: preferredSpeechLanguage(app.getPreferredSystemLanguages())
     };
   });
 

@@ -225,6 +225,60 @@ export const speechLanguageHint = (language: string): string | null => {
   return base.length === 0 ? null : base;
 };
 
+/**
+ * Every language the speech picker offers, in the order it shows them.
+ *
+ * Shared rather than inlined in the view: onboarding and Settings must offer
+ * the same set, and the filler tables in `post/text-cleanup.ts` are keyed to
+ * this list. A language offered without a filler table removes no fillers at
+ * all, which is safe but silently useless, so the two are tested against this
+ * array instead of a hand-copied duplicate of it.
+ *
+ * `auto` is not here: it is the "let the engine decide" sentinel, offered as
+ * its own option with its own translated label.
+ */
+export const SPEECH_LANGUAGES: readonly { readonly code: string; readonly label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "de", label: "German (Deutsch)" },
+  { code: "fr", label: "French (Français)" },
+  { code: "es", label: "Spanish (Español)" },
+  { code: "it", label: "Italian (Italiano)" },
+  { code: "nl", label: "Dutch (Nederlands)" },
+  { code: "pt", label: "Portuguese (Português)" },
+  { code: "pl", label: "Polish (Polski)" },
+  { code: "ru", label: "Russian (Русский)" },
+  { code: "zh", label: "Chinese (中文)" },
+  { code: "ja", label: "Japanese (日本語)" },
+  { code: "ko", label: "Korean (한국어)" },
+  { code: "ar", label: "Arabic (العربية)" },
+  { code: "hi", label: "Hindi (हिन्दी)" },
+  { code: "tr", label: "Turkish (Türkçe)" },
+  { code: "sv", label: "Swedish (Svenska)" },
+  { code: "da", label: "Danish (Dansk)" },
+  { code: "nb", label: "Norwegian (Norsk)" },
+  { code: "fi", label: "Finnish (Suomi)" },
+  { code: "uk", label: "Ukrainian (Українська)" }
+];
+
+/**
+ * Pick the speech language to preselect from the OS preferred languages.
+ *
+ * Onboarding asks the user to confirm rather than guess, so the job here is
+ * only to make the common case a single click. An OS language we do not offer
+ * falls back to `auto`, which is the honest answer: we have no better guess
+ * than the engine's own detection.
+ */
+export const preferredSpeechLanguage = (
+  preferred: readonly string[]
+): string => {
+  for (const tag of preferred) {
+    const base = tag.split("-")[0]?.trim().toLowerCase() ?? "";
+    if (base.length === 0) continue;
+    if (SPEECH_LANGUAGES.some((language) => language.code === base)) return base;
+  }
+  return "auto";
+};
+
 export type Settings = z.infer<typeof settingsSchema>;
 export type MeetingSettings = z.infer<typeof meetingSettingsSchema>;
 export type DictionaryEntry = z.infer<typeof dictionaryEntrySchema>;

@@ -444,6 +444,12 @@ export interface OnboardingProfileResult {
   readonly recommendation: ModelRecommendation;
   /** True when the recommended model is already on disk. */
   readonly modelInstalled: boolean;
+  /**
+   * The speech language to preselect, from the OS preferred languages, so the
+   * common case is one confirming click. "auto" when the OS language is not
+   * one we offer. Independent of the UI locale (AGENTS.md section 16).
+   */
+  readonly suggestedSpeechLanguage: string;
 }
 
 /**

@@ -269,6 +269,7 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.openrouter.pasteHint": "Begint met sk-or-v1-.",
   "settings.transcription.openrouter.saveBtn": "Opslaan",
   "settings.transcription.openrouter.cancelBtn": "Annuleren",
+  "settings.transcription.openrouter.pasteBtn": "Plakken",
   "settings.transcription.openrouter.removeBtn": "Verwijderen",
   "settings.transcription.openrouter.replaceBtn": "Sleutel vervangen",
   "settings.transcription.openrouter.addBtn": "Sleutel toevoegen",

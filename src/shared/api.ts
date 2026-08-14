@@ -97,6 +97,7 @@ export interface MainWindowApi {
   };
   readonly clipboard: {
     copy: (text: string) => void;
+    read: () => Promise<string>;
   };
   readonly settings: {
     get: () => Promise<{ settings: Settings }>;

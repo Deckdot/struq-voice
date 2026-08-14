@@ -60,6 +60,20 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
       });
   };
 
+  /**
+   * Read the key from the clipboard through main. The Edit menu roles are the
+   * only thing that delivers Ctrl+V to a sandboxed renderer on Windows, and
+   * they do not always arrive, so this button is the route that always works.
+   */
+  const pasteKey = (): void => {
+    void api.clipboard.read().then((text) => {
+      const trimmed = text.trim();
+      if (trimmed.length === 0) return;
+      setKeyInput(trimmed);
+      setKeyMessage(null);
+    });
+  };
+
   const clearKey = (): void => {
     void api.openRouterKey.clear().then((result) => {
       if (result.ok) {
@@ -194,6 +208,15 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
                   placeholder="sk-or-v1-..."
                   className="font-mono"
                 />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={pasteKey}
+                  title={t("settings.transcription.openrouter.pasteBtn")}
+                >
+                  <Icon icon="ph:clipboard-text" className="h-3.5 w-3.5" aria-hidden="true" />
+                  {t("settings.transcription.openrouter.pasteBtn")}
+                </Button>
                 <Button
                   variant="primary"
                   size="sm"

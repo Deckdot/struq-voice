@@ -245,6 +245,7 @@ export const it: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.openrouter.pasteHint": "Inizia con sk-or-v1-.",
   "settings.transcription.openrouter.saveBtn": "Salva",
   "settings.transcription.openrouter.cancelBtn": "Annulla",
+  "settings.transcription.openrouter.pasteBtn": "Incolla",
   "settings.transcription.openrouter.removeBtn": "Rimuovi",
   "settings.transcription.openrouter.replaceBtn": "Sostituisci chiave",
   "settings.transcription.openrouter.addBtn": "Aggiungi chiave",

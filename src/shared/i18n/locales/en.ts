@@ -304,6 +304,7 @@ export const en = {
   "settings.transcription.openrouter.pasteHint": "Begins with sk-or-v1-.",
   "settings.transcription.openrouter.saveBtn": "Save",
   "settings.transcription.openrouter.cancelBtn": "Cancel",
+  "settings.transcription.openrouter.pasteBtn": "Paste",
   "settings.transcription.openrouter.removeBtn": "Remove",
   "settings.transcription.openrouter.replaceBtn": "Replace key",
   "settings.transcription.openrouter.addBtn": "Add key",

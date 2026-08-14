@@ -49,6 +49,9 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   q5_0 + whisper base), real sizes and sha256 from the HF API.
 - Resumable range downloader (cap 3 concurrent), sha256 verify, atomic move,
   cancellable, progress at 4Hz.
+- Every catalog file carries a real hash, vocabularies included, so a
+  truncated `tokens.txt` cannot pass as installed and fail at first decode.
+  A test rejects an all-zero placeholder anywhere in the catalog.
 - Whisper runtime zip download (sha256 verify, extract only `whisper-cli.exe`).
 - Import an existing local model directory (copies then verifies).
 - Measured realtime factor per engine, computed from real History rows.
@@ -104,8 +107,19 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
 - Support models (VAD, embedding, segmentation) install once from the
   Meetings page through the resumable downloader, kept out of the Models
   view.
+- A meeting that never really started or never really finished is filed
+  `interrupted`, never `complete`. That covers a stop landing mid-start (the
+  start carries a generation token and unwinds only what it created, rather
+  than rebuilding a window and worker nobody owns), an archive that errored,
+  and a capture renderer that died. The row records which language the
+  meeting was decoded under; null means the decoder auto-detected.
+- Losing the capture window mid-meeting ends the meeting instead of leaving
+  it recording forever: main watches `render-process-gone`, because the
+  lane-live timer is cleared once a lane goes live and nothing else would
+  notice. Whatever was recorded before the death is kept.
 
-### Onboarding and hardware- Machine profiling: cores and memory from Node `os`, GPU vendor from
+### Onboarding and hardware
+- Machine profiling: cores and memory from Node `os`, GPU vendor from
   `app.getGPUInfo("basic")`, CUDA runtime from the whisper.cpp DLL probe.
   No subprocess calls, and every probe degrades to the unknown profile
   rather than blocking boot (`src/shared/hardware.ts`,
@@ -113,11 +127,15 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
 - One model recommended per machine, named with the hardware that chose it:
   Parakeet v3 for a balanced or capable PC, whisper base q5_1 for a light
   one. Pure and unit tested.
-- First run is a full-window flow with four steps: microphone (arrives
-  satisfied, live meter), hotkey (defaults already registered), engine (the
-  download starts on mount, not on arrival), and a real capture the user
-  performs themselves. Skipping is as cheap as continuing and still leaves a
-  working app.
+- First run is a full-window flow with five steps: microphone (arrives
+  satisfied, live meter), speech language (preselected from the OS preferred
+  languages, so the common case is one confirming click), hotkey (defaults
+  already registered), engine (the download starts on mount, not on arrival),
+  and a real capture the user performs themselves. Skipping is as cheap as
+  continuing and still leaves a working app.
+- The speech language step only ever writes over the `auto` default, never
+  over a language already chosen, so a re-run cannot silently change it. It
+  writes `speechLanguage` and never `locale`: the two are independent axes.
 - Completion lives in the settings schema (`onboarding.completed`), so main
   can gate on it and clearing the web cache cannot replay it. An install that
   predates the block and already has a real engine is treated as complete.

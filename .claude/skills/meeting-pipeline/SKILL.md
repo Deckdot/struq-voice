@@ -29,6 +29,31 @@ idle ──start──▶ starting ──lanes live──▶ recording ──sto
 - The hidden meeting window is created on start, destroyed on stop; the
   `struq-meeting` utilityProcess is forked on start, drained on stop, killed.
 
+## Lifecycle rules (do not relitigate)
+
+`start()` awaits four times: storage, worker start, window load, capture
+gesture. Every one of those is a point where the stop hotkey can land.
+
+- **Each start carries a generation token.** `stop()` and `dispose()`
+  invalidate it before tearing anything down, and `start()` re-checks after
+  every await. A start that has been overtaken unwinds only what *it*
+  created and returns; it must never rebuild shared state. Without this the
+  losing start rebuilt the window and worker that stop had just destroyed,
+  leaving a recorder nobody owned holding the microphone and the loopback
+  for the life of the app.
+- **A start already in flight refuses a second one.** Two concurrent starts
+  would run two full sequences against one set of handles.
+- **One finalize per meeting row.** `stop()` claims the id when it cancels a
+  start mid-flight so the unwind skips it; otherwise both write and race to
+  decide `complete` versus `interrupted`.
+- **A meeting that never recorded is `interrupted`.** Cancelled mid-start, a
+  failed archive, a dead capture renderer: all `interrupted`, never
+  `complete`.
+- **Main watches `render-process-gone` on the meeting window.** The
+  lane-live timer is cleared the moment a lane goes live, so after that
+  nothing else notices a dead renderer and the session would sit in
+  `recording` forever with a frozen archive.
+
 ## Why ASR runs out of process
 
 `sherpa-onnx-node`'s `recognizer.decode()` is a synchronous blocking native

@@ -10,18 +10,30 @@ not. Every wave is one branch, one concern, one PR.
 
 ## Status
 
-Waves 1, 2, 3 (except 3.2), 4, 5 and 7.1 are **implemented and committed**
-on `fix/meeting-speaker-detection`. Gates green at each step; 549 unit
-tests, up from 496 when the sweep started.
+**Every wave is closed.** Waves 1 through 5, 7.1 and 7.2 are implemented and
+committed on `fix/meeting-speaker-detection`; Wave 6 is investigated and
+resolved; Wave 7.3 is closed as not needed. Gates green at each step; 569
+unit tests, up from 496 when the sweep started.
 
-Outstanding:
+How the last three closed:
 
-- **Wave 3.2**, the meeting start/stop race. Deliberately left: it rewrites
-  the meeting lifecycle, wants its own PR, and needs a manual meeting on
-  real hardware that no unit test replaces.
-- **Wave 6**, the unproven list. Experiments, not code.
-- **Wave 7.2 and 7.3**, the onboarding speech-language step and per-meeting
-  language. Product decisions rather than defect fixes.
+- **Wave 3.2**, the meeting start/stop race: fixed with a generation token.
+  Two of the six probes fail against the old code, on the zombie window and
+  on the begin message sent after teardown. Still wants the manual meeting
+  on real hardware that no unit test replaces.
+- **Wave 6**, the unproven list: all seven items settled below, two of them
+  real defects that are now fixed.
+- **Wave 7.3**, per-meeting language: closed as not needed, with the
+  start-time prompt rejected on its merits rather than deferred. Reasoning
+  in the Wave 7 section.
+
+One thing worth recording, because it changed how the race was fixed. The
+first Wave 3.2 probes timed out, and the instinct was to call it test
+scaffolding. Tracing the start path showed the production code was correct
+and the mock was wrong: `mockImplementationOnce` on `worker.start` was being
+consumed by the *second* start, because the first never reached that await.
+The stop was landing on the archive open, one await earlier than intended.
+Probes that park at a named await now do so explicitly.
 
 Two things worth recording, because neither was in the sweep:
 
@@ -191,6 +203,13 @@ the in-flight `start()` then rebuilds with no owner.
 - Tests: the lane's own race probe (`stop` during `starting`) must end
   with no live window, no `meeting-audio:begin` after teardown, and no
   phantom `complete` row.
+
+**Landed as planned**, with one addition the plan did not anticipate:
+`stop()` and the unwind both know the cancelled meeting id, so both would
+have written a finalize row and raced to decide complete versus interrupted.
+`stop()` now claims the id and the unwind skips it, and a probe asserts
+exactly one write. A meeting cancelled mid-start is always `interrupted`:
+it never recorded.
 
 ### 3.3 Archive write failure crashes the app (finding 3)
 
@@ -364,6 +383,14 @@ on every utterance to serve a case most users never have.
 - Note that UI language and speech language are independent axes
   (AGENTS.md section 16), so this step must not write `locale`.
 
+**Landed as planned.** One thing the plan did not call out: the picker's
+language list was inlined in `TranscriptionTab` while the filler-table test
+kept a hand-copied duplicate of it, and onboarding would have been a third
+copy. The list moved to `shared/settings.ts` and all three now read it.
+The preselect only ever writes over the `auto` default, never over a
+language the user already chose, so a re-run of onboarding cannot silently
+change it.
+
 ### 7.3 Meetings should honour a per-meeting language
 
 Same rationale, different surface: a meeting is long and single-language
@@ -372,36 +399,64 @@ setting, so this is a UI question (confirm or override the language when
 starting a meeting) rather than a wiring one. Lower priority than 7.1 and
 7.2; do it once those land and we can see whether it is still needed.
 
+**CLOSED as not needed**, on the evidence rather than by deferral. The
+start-time prompt this described fits badly: `Ctrl+Shift+M` has no UI
+moment, and a dialog there would steal the focus the meeting window exists
+to preserve. Meetings already honour the setting, and 7.2 means it is asked
+rather than silently `auto`, so the default is now right for the common
+case. Roy confirmed closing it.
+
+One real defect surfaced while assessing this and was fixed: the meeting
+row hardcoded `language: null` while the worker was handed the real hint,
+so nothing recorded which language a meeting was decoded under. Both now
+read one resolved value. Null still means auto-detect, which is a real
+answer rather than a missing one.
+
+If a per-meeting override is ever wanted, the shape to build is a row in
+the Meetings settings tab defaulting to "same as dictation", not a prompt
+on start.
+
 **Wave 7 gate:** T2 for 7.1 and 7.3, T2 for 7.2. Worth a manual check in
 Dutch and English before merging, since the whole point is output quality
 that no unit test can assert.
 
 ---
 
-## Wave 6: the unproven list
+## Wave 6: the unproven list, now proven
 
-Do not write code against these. Convert each into a cheap experiment,
-then either promote it into a wave or close it.
+Each item was a cheap experiment rather than code. Outcomes:
 
-- **Model files without a published hash** (lane 7): check whether
-  `tokens.txt` and friends are verified by existence alone. If so, a
-  truncated vocab passes as installed. Decide whether to add hashes to the
-  catalog. Likely real, cheap to establish.
-- **OpenRouter `costUsd: null`** (lane 5): one live call with a real key
-  settles it. Ask Roy to run it; it needs his key, and no agent should.
-- **Archive tail dropped at stop** (lane 6): instrument the stop boundary
-  and measure. If up to 5s of audio is genuinely lost, it promotes to
-  Wave 3 severity.
-- **Renderer death mid-recording** (lane 6): kill the meeting renderer
-  with the task manager and observe. If the session stays `recording`
-  forever, it is a real wedge.
-- **Non-atomic secrets write** (lane 1): the same fix as 2.2, in
-  `secrets.ts:59-79`. Cheap enough to just do during Wave 2 rather than
-  investigate.
-- **Dictionary concurrent writes** (lane 1): agreed, not reachable at
-  human speed. Close it.
-- **Lost key-up in the PTT hook** (lane 4): needs real-world drop data.
-  Leave open, watch for user reports.
+- **Model files without a published hash** (lane 7): **CONFIRMED, fixed.**
+  Both parakeet `tokens.txt` entries carried an all-zero placeholder, and
+  both the downloader (`downloader.ts:245`, `:496`) and the installer
+  (`installer.ts:53`) read that as "skip verification". A truncated vocab
+  passed as installed and only failed at first decode. Real hashes now come
+  from the same Hugging Face urls the catalog downloads from; both byte
+  counts already matched, and the v3 hash independently matches an intact
+  local install. The catalog sha256 test was scoped to whisper, which is how
+  the placeholders survived; it now covers every file and rejects an
+  all-zero hash outright.
+- **Renderer death mid-recording** (lane 6): **CONFIRMED, fixed.** Nothing
+  in main listened for `render-process-gone`, and the lane-live timer is
+  cleared the moment a lane goes live, so after that no watchdog covered the
+  capture renderer at all. The session sat in `recording` forever with a
+  frozen archive and a tray claiming a live meeting. The window factory now
+  reports the death into the session, which finalizes the row `interrupted`
+  and keeps whatever was recorded.
+- **Archive tail dropped at stop** (lane 6): **CLOSED, already handled.**
+  `audio.ts:379-388` rebinds `ondataavailable` before `recorder.stop()` and
+  gates the stop acknowledgement on the final flush via `maybeFinishStop`,
+  which only resolves once both lanes are gone and the recorder is inactive.
+  The 5s chunking bounds crash loss, not clean-stop loss.
+- **Non-atomic secrets write** (lane 1): **CLOSED, done in Wave 2.**
+  `secrets.ts:74-77` writes to a temp file and renames.
+- **Dictionary concurrent writes** (lane 1): **CLOSED.** Not reachable at
+  human speed, as the lane itself agreed.
+- **OpenRouter `costUsd: null`** (lane 5): **still open, needs Roy.** One
+  live call with a real key settles it; it needs his key, and no agent
+  should use it.
+- **Lost key-up in the PTT hook** (lane 4): **still open by design.** Needs
+  real-world drop data. Watch for user reports.
 
 ---
 
@@ -419,14 +474,26 @@ because every hour it stays broken is another chance for a truncated write
 to eat a profile. Wave 3 third because it is the most invasive. Waves 4
 and 5 are the long tail.
 
-None of this is committed. Every wave lands on its own branch off
-`fix/meeting-speaker-detection`, per the branch-per-change rule in
-`github-workflow`, and the gate tier stated per wave decides who merges.
+All of it is now committed on `fix/meeting-speaker-detection`, one concern
+per commit, rather than a branch per wave: the waves landed sequentially in
+one session, so splitting them across branches would have created a queue of
+PRs against each other. The gate tier stated per wave still decides who
+merges, and the branch as a whole is T3.
 
-## What I have not done
+## What has not been done
 
-The sweep's proofs are the agents', not mine. I verified the mechanism of
-findings 1 through 10 by reading the cited code, and I re-ran nothing of
-theirs. Before implementing any wave, the probe for that finding should be
-re-run locally so the fix is written against a reproduction we have seen
-ourselves.
+Two things, both deliberate:
+
+- **The manual meeting on real hardware.** Wave 3.2 rewrote the meeting
+  start/stop lifecycle. The unit probes cover the race, but a real meeting
+  with real loopback is the proof that no test replaces, and it is Roy's to
+  run.
+- **The OpenRouter cost check.** It needs a real API key. No agent should
+  use one.
+
+`pnpm test:e2e` was not run, per the standing rule that it is Roy's probe.
+
+The sweep's original proofs were the agents', not mine. Mechanisms were
+verified by reading the cited code, and where a fix landed, a probe that
+fails against the old code was written first: the two Wave 3.2 probes and
+the model-catalog hash test all reproduce their defect before fixing it.

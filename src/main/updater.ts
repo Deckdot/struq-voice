@@ -52,6 +52,17 @@ export const DEFAULT_FEED_URL =
   process.env["STRUQ_VOICE_FEED_URL"] ??
   "https://github.com/Deckdot/struq-voice/releases/latest/download";
 
+/**
+ * How often a running app re-checks the feed.
+ *
+ * The boot check only catches releases that shipped while the app was closed.
+ * A tray app can run for weeks, so a release published after boot would stay
+ * invisible until a restart or a manual click. The interval is deliberately
+ * long: a check downloads the update when one exists, and a wasted poll is
+ * one small manifest fetch.
+ */
+export const PERIODIC_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
 export interface UpdaterDeps {
   /** Fetch the manifest that rides beside the installer. */
   readonly fetch?: typeof fetch;
@@ -181,6 +192,8 @@ export interface UpdaterController {
    * can run at the first safe moment.
    */
   notifyIdle: () => void;
+  /** Stops the periodic re-check timer. Runs on will-quit. */
+  dispose: () => void;
 }
 
 export interface UpdaterOptions {
@@ -198,6 +211,11 @@ export interface UpdaterOptions {
   readonly isBusy?: () => boolean;
   /** Fires once when a verified update becomes ready, for the notification. */
   readonly onReady?: (version: string) => void;
+  /**
+   * Re-check the feed on this interval while the app runs. Only honoured on a
+   * packaged build; omit to disable the timer entirely.
+   */
+  readonly periodicCheckMs?: number;
 }
 
 export const createUpdater = (options: UpdaterOptions): UpdaterController => {
@@ -211,6 +229,8 @@ export const createUpdater = (options: UpdaterOptions): UpdaterController => {
   let pendingInstall = false;
   /** The version already announced, so a re-check does not re-notify. */
   let notifiedVersion: string | null = null;
+  /** The periodic re-check timer, only armed on a packaged build. */
+  let timer: ReturnType<typeof setInterval> | null = null;
 
   const setState = (next: UpdateState): void => {
     state = next;
@@ -333,6 +353,21 @@ export const createUpdater = (options: UpdaterOptions): UpdaterController => {
     runInstall();
   };
 
+  const dispose = (): void => {
+    if (timer === null) return;
+    clearInterval(timer);
+    timer = null;
+  };
+
+  // The boot check in index.ts runs immediately; this timer picks up releases
+  // that ship after boot. check() guards against overlap and re-notifies at
+  // most once per version, so a poll is indistinguishable from a manual one.
+  if (options.isPackaged && options.periodicCheckMs !== undefined && options.periodicCheckMs > 0) {
+    timer = setInterval(() => {
+      void check();
+    }, options.periodicCheckMs);
+  }
+
   return {
     getState: () => state,
     subscribe: (listener) => {
@@ -343,6 +378,7 @@ export const createUpdater = (options: UpdaterOptions): UpdaterController => {
     },
     check,
     install,
-    notifyIdle
+    notifyIdle,
+    dispose
   };
 };

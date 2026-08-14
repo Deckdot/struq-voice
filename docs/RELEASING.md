@@ -199,7 +199,11 @@ default. `STRUQ_VOICE_RELEASE_DIR` overrides it.
 ## What a user sees
 
 Settings has an Updates panel: the running version, a check button, and one line
-of state. On a packaged build the app also checks once at boot.
+of state. On a packaged build the app checks once at boot, then again every
+four hours while it runs, so a release shipped after boot still reaches an
+already-open app. A found update downloads in the background, is verified, and
+raises a Windows toast; nothing installs without a click on that toast's path
+or in Settings.
 
 Nothing restarts on its own. Dictation runs alongside other work, and an app
 that restarts itself mid-sentence is worse than one running last week's build

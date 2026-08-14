@@ -1,5 +1,5 @@
 import { generateKeyPairSync, createHash, sign as cryptoSign } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createUpdater,
   verifyArtifact,
@@ -405,5 +405,75 @@ describe("install timing", () => {
 
     await updater.check();
     expect(ready).not.toHaveBeenCalled();
+  });
+});
+
+describe("periodic checks", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("re-checks the feed on the interval while packaged", async () => {
+    vi.useFakeTimers();
+    const auto = fakeAutoUpdater();
+    const calls = vi.fn(auto.checkForUpdates.bind(auto));
+    auto.checkForUpdates = calls;
+    const updater = createUpdater({
+      autoUpdater: auto,
+      isPackaged: true,
+      periodicCheckMs: 1000,
+      verify: () => Promise.resolve({ ok: true })
+    });
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(calls).toHaveBeenCalledTimes(3);
+    updater.dispose();
+  });
+
+  it("starts no timer on a dev build", async () => {
+    vi.useFakeTimers();
+    const auto = fakeAutoUpdater();
+    const calls = vi.fn(auto.checkForUpdates.bind(auto));
+    auto.checkForUpdates = calls;
+    const updater = createUpdater({
+      autoUpdater: auto,
+      isPackaged: false,
+      periodicCheckMs: 1000
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls).not.toHaveBeenCalled();
+    updater.dispose();
+  });
+
+  it("starts no timer without an interval", async () => {
+    vi.useFakeTimers();
+    const auto = fakeAutoUpdater();
+    const calls = vi.fn(auto.checkForUpdates.bind(auto));
+    auto.checkForUpdates = calls;
+    const updater = createUpdater({ autoUpdater: auto, isPackaged: true });
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls).not.toHaveBeenCalled();
+    updater.dispose();
+  });
+
+  it("dispose stops the timer", async () => {
+    vi.useFakeTimers();
+    const auto = fakeAutoUpdater();
+    const calls = vi.fn(auto.checkForUpdates.bind(auto));
+    auto.checkForUpdates = calls;
+    const updater = createUpdater({
+      autoUpdater: auto,
+      isPackaged: true,
+      periodicCheckMs: 1000
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(calls).toHaveBeenCalledTimes(1);
+
+    updater.dispose();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls).toHaveBeenCalledTimes(1);
   });
 });

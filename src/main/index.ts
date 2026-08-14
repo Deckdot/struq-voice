@@ -31,7 +31,7 @@ import { createHotkeys } from "./hotkeys";
 import { registerIpcHandlers } from "./ipc";
 import { createModelsService } from "./models";
 import electronUpdater from "electron-updater";
-import { createUpdater, type AutoUpdaterLike } from "./updater";
+import { createUpdater, PERIODIC_CHECK_INTERVAL_MS, type AutoUpdaterLike } from "./updater";
 import type { AppReadiness, CapturePartialTranscriptEvent } from "../shared/ipc";
 import {
   appReadinessChangedChannel,
@@ -123,6 +123,7 @@ let meetingSession: ReturnType<typeof createMeetingSession> | null = null;
 // native memory and the database owns a WAL that wants checkpointing.
 let database: ReturnType<typeof openDatabase> = null;
 let primaryLocalEngine: TranscriptionEngine | null = null;
+let updaterController: ReturnType<typeof createUpdater> | null = null;
 let isQuitting = false;
 
 app.on("before-quit", () => {
@@ -313,10 +314,12 @@ if (!gotLock) {
           isPackaged: app.isPackaged,
           isBusy: () => captureBusy(),
           deps: { fetch: netFetch },
+          periodicCheckMs: PERIODIC_CHECK_INTERVAL_MS,
           onReady: (version) => {
             notifyUpdateReady(version);
           }
         });
+    updaterController = updater;
 
     // Hardware detection feeds the onboarding recommendation. It runs once,
     // in the background, and never blocks boot: until it resolves the
@@ -399,8 +402,10 @@ if (!gotLock) {
       }
     });
 
-    // One check at boot, best effort. An unreachable feed is not something to
-    // interrupt anyone about; a refused signature surfaces in Settings.
+    // One check at boot, best effort, then a periodic re-check while the app
+    // runs so a release shipped after boot still arrives. An unreachable feed
+    // is not something to interrupt anyone about; a refused signature
+    // surfaces in Settings.
     if (updater !== null && app.isPackaged) {
       void updater.check();
     }
@@ -870,6 +875,7 @@ if (!gotLock) {
     shutdownStep("Overlay dispose", () => overlay?.dispose());
     shutdownStep("Hotkey dispose", () => hotkeys?.dispose());
     shutdownStep("Meeting dispose", () => meetingSession?.dispose());
+    shutdownStep("Updater dispose", () => updaterController?.dispose());
     shutdownStep("Engine dispose", () => {
       void primaryLocalEngine?.dispose();
     });

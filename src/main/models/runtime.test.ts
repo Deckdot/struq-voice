@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRuntimeDownloader, WHISPER_CLI_FILE } from "./runtime";
 import {
+  isCudaZipEntry,
   isRuntimeZipEntry,
+  WHISPER_CUDA_LIBS,
   WHISPER_RUNTIME_LIBS
 } from "./whisper-runtime-files";
 
@@ -32,6 +34,13 @@ const installRuntime = (root: string): void => {
     write(root, lib);
   }
   write(root, "ggml-cpu-haswell.dll");
+};
+
+const installCudaRuntime = (root: string): void => {
+  installRuntime(root);
+  for (const lib of WHISPER_CUDA_LIBS) {
+    write(root, lib);
+  }
 };
 
 describe("runtime downloader", () => {
@@ -122,5 +131,104 @@ describe("runtime zip entries", () => {
     ]) {
       expect(isRuntimeZipEntry(entry)).toBe(false);
     }
+  });
+
+  it("adds the CUDA libraries for the cuBLAS asset", () => {
+    for (const entry of [
+      "Release/ggml-cuda.dll",
+      "Release/cudart64_12.dll",
+      "Release/cublas64_12.dll",
+      "Release/cublasLt64_12.dll",
+      "Release/whisper-cli.exe"
+    ]) {
+      expect(isCudaZipEntry(entry)).toBe(true);
+    }
+  });
+
+  /**
+   * The cuBLAS zip also carries nvrtc, nvblas and cuinj. Nothing in
+   * whisper-cli's dependency chain imports them, and they are 50MB.
+   */
+  it("skips the CUDA extras nothing imports", () => {
+    for (const entry of [
+      "Release/nvrtc64_120_0.dll",
+      "Release/nvrtc-builtins64_124.dll",
+      "Release/nvblas64_12.dll",
+      "Release/SDL2.dll"
+    ]) {
+      expect(isCudaZipEntry(entry)).toBe(false);
+    }
+  });
+});
+
+/**
+ * The GPU build is the same runtime with the CUDA backend added, installed
+ * into the same directory. It is 670MB, so nothing fetches it on its own.
+ */
+describe("cuda runtime", () => {
+  it("reports the CPU runtime installed but the GPU one missing", () => {
+    root = mkdtempSync(join(tmpdir(), "sv-rt-"));
+    installRuntime(root);
+    const downloader = createRuntimeDownloader(root, { fetch: globalThis.fetch });
+    expect(downloader.isInstalled()).toBe(true);
+    expect(downloader.isCudaInstalled()).toBe(false);
+  });
+
+  it("reports the GPU runtime installed once its libraries are present", () => {
+    root = mkdtempSync(join(tmpdir(), "sv-rt-"));
+    installCudaRuntime(root);
+    const downloader = createRuntimeDownloader(root, { fetch: globalThis.fetch });
+    expect(downloader.isCudaInstalled()).toBe(true);
+  });
+
+  it("treats a GPU install missing cuBLAS as not installed", () => {
+    root = mkdtempSync(join(tmpdir(), "sv-rt-"));
+    installRuntime(root);
+    write(root, "ggml-cuda.dll");
+    write(root, "cudart64_12.dll");
+    const downloader = createRuntimeDownloader(root, { fetch: globalThis.fetch });
+    expect(downloader.isCudaInstalled()).toBe(false);
+  });
+
+  /**
+   * The CUDA build satisfies the CPU set, so the boot-time CPU install has
+   * nothing to do. Without this it would fetch the 8MB zip and overwrite the
+   * GPU build's DLLs with CPU-only ones from a different compilation.
+   */
+  it("does not re-install the CPU runtime over a GPU one", async () => {
+    root = mkdtempSync(join(tmpdir(), "sv-rt-"));
+    installCudaRuntime(root);
+    const fetch = vi.fn(() => {
+      throw new Error("should not be called");
+    });
+    const downloader = createRuntimeDownloader(root, { fetch });
+    await expect(downloader.install()).resolves.toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("skips the GPU download when it is already installed", async () => {
+    root = mkdtempSync(join(tmpdir(), "sv-rt-"));
+    installCudaRuntime(root);
+    const fetch = vi.fn(() => {
+      throw new Error("should not be called");
+    });
+    const downloader = createRuntimeDownloader(root, { fetch });
+    await expect(downloader.installCuda()).resolves.toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("fetches the GPU build over a CPU-only install", async () => {
+    root = mkdtempSync(join(tmpdir(), "sv-rt-"));
+    installRuntime(root);
+    const fetch = vi.fn(() => Promise.reject(new Error("network reached")));
+    const downloader = createRuntimeDownloader(root, { fetch });
+    await expect(downloader.installCuda()).rejects.toThrow("network reached");
+    expect(fetch).toHaveBeenCalled();
+  });
+
+  it("reports the GPU download size so the UI can warn about it", () => {
+    root = mkdtempSync(join(tmpdir(), "sv-rt-"));
+    const downloader = createRuntimeDownloader(root, { fetch: globalThis.fetch });
+    expect(downloader.cudaBytesTotal()).toBeGreaterThan(downloader.bytesTotal());
   });
 });

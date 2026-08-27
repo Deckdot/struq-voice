@@ -13,9 +13,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findModel } from "../../shared/models";
 import {
+  hasCudaRuntime,
   missingWhisperRuntimeFiles,
-  whisperCliPath,
-  whisperRuntimeDir
+  whisperCliPath
 } from "../models/whisper-runtime-files";
 import { transcribeTimeoutMs } from "./timeouts";
 import type { Result, VoiceError, VoiceErrorCode } from "../../shared/result";
@@ -31,7 +31,6 @@ export const WHISPER_CPP_ENGINE_ID = "whisper-cpp" as const;
 
 const DEFAULT_MODEL_ID = "whisper-large-v3-turbo-q5_0";
 const DEFAULT_MODEL_FILE = "ggml-large-v3-turbo-q5_0.bin";
-const CUDA_DLL = "cudart64_13.dll";
 const SAMPLE_RATE = 16_000;
 
 const NOT_INSTALLED_MESSAGE =
@@ -169,16 +168,6 @@ const parseWhisperJson = (
 const parseTranscript = (stdout: string): string => stripNonSpeech(stdout);
 
 /**
- * Whether the whisper.cpp CUDA runtime sits next to whisper-cli.exe. The
- * presence of the DLL is the only GPU signal this app has, so hardware
- * detection reads it from here rather than probing for it a second time.
- */
-export const hasCudaRuntime = (
-  runtimeRoot: string,
-  exists: (path: string) => boolean = existsSync
-): boolean => exists(join(whisperRuntimeDir(runtimeRoot), CUDA_DLL));
-
-/**
  * Windows exit codes a broken runtime produces. 0xC0000135 is
  * STATUS_DLL_NOT_FOUND: a DLL beside whisper-cli.exe is missing, so the
  * process never starts. 0xC0000409 is the ggml abort that follows when the
@@ -224,8 +213,6 @@ const describeExecFailure = (
 export const createWhisperCppEngine = (
   options: WhisperCppEngineOptions
 ): TranscriptionEngine => {
-  let cudaCache: "cuda" | "cpu" | null = null;
-
   const exec = options.deps?.execFile ?? execFileAsync;
   const writeAudio = options.deps?.writeFile ?? writeFile;
   const removeFile = options.deps?.unlink ?? unlink;
@@ -270,16 +257,18 @@ export const createWhisperCppEngine = (
   const modelPathFor = (id: string): string =>
     join(options.modelsRoot, id, findModel(id)?.files[0]?.path ?? DEFAULT_MODEL_FILE);
 
+  /**
+   * Probed per capture rather than cached. Installing the GPU runtime is a
+   * thing the user does while the app is running, and a cached "cpu" from
+   * boot would keep every later capture on the CPU until a restart. It is four
+   * existsSync calls against a decode measured in seconds.
+   */
   const detectCuda = async (): Promise<"cuda" | "cpu"> => {
-    if (cudaCache !== null) return cudaCache;
     const detect = options.deps?.detectCuda;
-    cudaCache =
-      detect !== undefined
-        ? await detect()
-        : hasCudaRuntime(options.runtimeRoot, fileExists)
-          ? "cuda"
-          : "cpu";
-    return cudaCache;
+    if (detect !== undefined) return detect();
+    return Promise.resolve(
+      hasCudaRuntime(options.runtimeRoot, fileExists) ? "cuda" : "cpu"
+    );
   };
 
   const computeReadiness = (): EngineReadiness => {

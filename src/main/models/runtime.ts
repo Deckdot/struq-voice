@@ -25,7 +25,10 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import * as yauzl from "yauzl";
 import {
+  isCudaZipEntry,
   isRuntimeZipEntry,
+  missingCudaFilesIn,
+  missingCudaRuntimeFiles,
   missingRuntimeFilesIn,
   missingWhisperRuntimeFiles,
   whisperRuntimeDir,
@@ -35,16 +38,57 @@ import {
 
 export { WHISPER_RUNTIME_DIR, WHISPER_CLI_FILE };
 
-/** CPU build, verified against the v1.9.2 release. */
-const RUNTIME_URL =
-  "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip";
-const RUNTIME_SHA256 =
-  "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a";
-/** The whole runtime install must finish within this; it is 8MB. */
-const RUNTIME_TIMEOUT_MS = 120_000;
+/** Which build of the runtime an install is fetching. */
+export type WhisperRuntimeVariant = "cpu" | "cuda";
+
+const RELEASE_ROOT =
+  "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2";
+
+interface RuntimeAsset {
+  readonly url: string;
+  readonly sha256: string;
+  readonly zipBytes: number;
+  /** Which zip entries this variant needs on disk. */
+  readonly accepts: (fileName: string) => boolean;
+  /** What the given directory is still missing for this variant. */
+  readonly missingIn: (dir: string) => readonly string[];
+  /** Hard ceiling on the whole install, scaled to the download size. */
+  readonly timeoutMs: number;
+}
+
+/**
+ * Both assets come from the same v1.9.2 release and are sha256 pinned.
+ *
+ * The 11.8 cuBLAS asset is deliberately not offered: its ggml-cuda.dll
+ * imports cublas64_11.dll, which that zip does not ship, so the backend scan
+ * skips it and the machine quietly decodes on the CPU while reporting a GPU
+ * install. 12.4 carries every library it imports.
+ */
+const ASSETS: Record<WhisperRuntimeVariant, RuntimeAsset> = {
+  cpu: {
+    url: `${RELEASE_ROOT}/whisper-bin-x64.zip`,
+    sha256: "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a",
+    zipBytes: 8194445,
+    accepts: isRuntimeZipEntry,
+    missingIn: (dir) => missingRuntimeFilesIn(dir),
+    // It is 8MB, so a slow proxy is a failure, not a lifestyle.
+    timeoutMs: 120_000
+  },
+  cuda: {
+    url: `${RELEASE_ROOT}/whisper-cublas-12.4.0-bin-x64.zip`,
+    sha256: "443110ddaad70d4290ab2e77179e31cf712035bbc4fad56bb4519a90c917b39c",
+    zipBytes: 670611449,
+    accepts: isCudaZipEntry,
+    missingIn: (dir) => missingCudaFilesIn(dir),
+    // 670MB, and the ceiling covers the body as well as the response, so it
+    // has to clear a slow domestic line. An hour is generous on purpose: a
+    // download aborted at ninety percent is worse than one that took a while.
+    timeoutMs: 3_600_000
+  }
+};
+
 const RENAME_ATTEMPTS = 5;
 const RENAME_RETRY_DELAY_MS = 200;
-const RUNTIME_ZIP_BYTES = 8194445;
 
 export interface RuntimeDeps {
   readonly fetch: typeof fetch;
@@ -55,12 +99,20 @@ export interface RuntimeDownloader {
   isInstalled: () => boolean;
   /** What the install is still missing; empty when it is complete. */
   missingFiles: () => readonly string[];
-  /** Download and extract; resolves when the runtime is in place. */
+  /** True when the GPU backend and its libraries are installed too. */
+  isCudaInstalled: () => boolean;
+  /** Download and extract the CPU build; resolves when it is in place. */
   install: () => Promise<void>;
+  /** Download and extract the CUDA build, replacing whatever is installed. */
+  installCuda: () => Promise<void>;
   /** Latest known bytes for progress. */
   bytesTotal: () => number;
+  /** Download size of the CUDA build, for a UI that has to warn about it. */
+  cudaBytesTotal: () => number;
   /** Per-file progress callback for a progress UI. */
-  onProgress: (listener: (received: number, total: number) => void) => () => void;
+  onProgress: (
+    listener: (received: number, total: number, variant: WhisperRuntimeVariant) => void
+  ) => () => void;
 }
 
 export const createRuntimeDownloader = (
@@ -68,11 +120,17 @@ export const createRuntimeDownloader = (
   deps: RuntimeDeps
 ): RuntimeDownloader => {
   const targetDir = whisperRuntimeDir(runtimeRoot);
-  const listeners = new Set<(received: number, total: number) => void>();
+  const listeners = new Set<
+    (received: number, total: number, variant: WhisperRuntimeVariant) => void
+  >();
 
-  const emit = (received: number, total: number): void => {
+  const emit = (
+    received: number,
+    total: number,
+    variant: WhisperRuntimeVariant
+  ): void => {
     for (const listener of listeners) {
-      listener(received, total);
+      listener(received, total, variant);
     }
   };
 
@@ -106,7 +164,11 @@ export const createRuntimeDownloader = (
    * an explicit readEntry(); without that initial call nothing is ever
    * emitted, the zipfile never closes and the install hangs at 100 percent.
    */
-  const extractRuntime = (zipPath: string, into: string): Promise<void> =>
+  const extractRuntime = (
+    zipPath: string,
+    into: string,
+    accepts: (fileName: string) => boolean
+  ): Promise<void> =>
     new Promise<void>((resolve, reject) => {
       yauzl.open(
         zipPath,
@@ -123,7 +185,7 @@ export const createRuntimeDownloader = (
           zipfile.on("entry", (entry: yauzl.Entry) => {
             // Everything sits under a Release/ directory in the release zip,
             // so entries are matched on the trailing name, not the full path.
-            if (!isRuntimeZipEntry(entry.fileName)) {
+            if (!accepts(entry.fileName)) {
               zipfile.readEntry();
               return;
             }
@@ -150,39 +212,40 @@ export const createRuntimeDownloader = (
       );
     });
 
-  return {
-    isInstalled: () => missingWhisperRuntimeFiles(runtimeRoot).length === 0,
-    missingFiles: () => missingWhisperRuntimeFiles(runtimeRoot),
-    bytesTotal: () => RUNTIME_ZIP_BYTES,
-    install: async () => {
-      // An exe-only directory left by an older build reads as not installed,
-      // so this repairs it instead of reporting success over a broken runtime.
-      if (missingWhisperRuntimeFiles(runtimeRoot).length === 0) return;
+  const installVariant = async (variant: WhisperRuntimeVariant): Promise<void> => {
+    const asset = ASSETS[variant];
+    // An exe-only directory left by an older build reads as not installed, so
+    // this repairs it instead of reporting success over a broken runtime. It
+    // is also what stops a CPU install from overwriting a GPU one: the CUDA
+    // build satisfies the CPU set, so there is nothing left to do.
+    if (asset.missingIn(targetDir).length === 0) return;
 
-      const zipPath = join(targetDir, "whisper-bin-x64.zip");
-      const extractDir = join(targetDir, ".extract");
-      await mkdir(targetDir, { recursive: true });
-      // Clear anything a previous failed attempt left behind, so a retry never
-      // appends to a truncated zip or trips over a stale extract.
-      await rm(zipPath, { force: true });
-      await rm(extractDir, { recursive: true, force: true });
-      await mkdir(extractDir, { recursive: true });
+    const zipPath = join(targetDir, `whisper-runtime-${variant}.zip`);
+    const extractDir = join(targetDir, ".extract");
+    await mkdir(targetDir, { recursive: true });
+    // Clear anything a previous failed attempt left behind, so a retry never
+    // appends to a truncated zip or trips over a stale extract.
+    await rm(zipPath, { force: true });
+    await rm(extractDir, { recursive: true, force: true });
+    await mkdir(extractDir, { recursive: true });
 
-      const response = await deps.fetch(RUNTIME_URL, {
-        signal: AbortSignal.timeout(RUNTIME_TIMEOUT_MS)
+    try {
+      const response = await deps.fetch(asset.url, {
+        signal: AbortSignal.timeout(asset.timeoutMs)
       });
       if (!response.ok || response.body === null) {
         throw new Error(`whisper runtime download failed: HTTP ${String(response.status)}`);
       }
 
       const headerTotal = Number(response.headers.get("content-length") ?? "0");
-      const total = headerTotal > 0 ? headerTotal : RUNTIME_ZIP_BYTES;
+      const total = headerTotal > 0 ? headerTotal : asset.zipBytes;
       let received = 0;
       const body = response.body;
 
       // pipeline honours backpressure and destroys both ends on failure.
       // Writing straight from the read loop buffers the whole zip in memory
-      // and leaves the stream dangling when something throws.
+      // and leaves the stream dangling when something throws. That mattered
+      // little at 8MB and would be fatal at 670MB.
       await pipeline(
         (async function* emitAsRead(): AsyncGenerator<Uint8Array> {
           const reader = body.getReader();
@@ -190,7 +253,7 @@ export const createRuntimeDownloader = (
             const chunk = await reader.read();
             if (chunk.done) break;
             received += chunk.value.byteLength;
-            emit(received, total);
+            emit(received, total, variant);
             yield chunk.value;
           }
         })(),
@@ -209,35 +272,49 @@ export const createRuntimeDownloader = (
         });
         stream.on("error", reject);
       });
-      if (hash.digest("hex") !== RUNTIME_SHA256) {
-        await rm(zipPath, { force: true });
+      if (hash.digest("hex") !== asset.sha256) {
         throw new Error("whisper runtime download failed verification; retry.");
       }
 
-      await extractRuntime(zipPath, extractDir);
+      await extractRuntime(zipPath, extractDir, asset.accepts);
 
       // Judge the staging area before publishing it. A zip that no longer
       // carried a CPU backend would otherwise install an exe that starts and
       // then aborts on the first decode, which is far harder to diagnose than
-      // a failed install.
-      const missing = missingRuntimeFilesIn(extractDir);
+      // a failed install. For the GPU build the same check catches a missing
+      // cuBLAS, which would otherwise install as a GPU runtime that quietly
+      // decodes on the CPU.
+      const missing = asset.missingIn(extractDir);
       if (missing.length > 0) {
-        await rm(zipPath, { force: true });
-        await rm(extractDir, { recursive: true, force: true });
         throw new Error(
           `whisper runtime zip is missing ${missing.join(", ")}; retry the install.`
         );
       }
 
-      // Move the runtime into place and clean up. rename replaces an existing
-      // file on Windows, so this also overwrites a half-installed directory.
+      // Move the runtime into place. rename replaces an existing file on
+      // Windows, so this also overwrites a half-installed directory, and the
+      // CUDA build overwrites every CPU-build DLL with its own so the
+      // directory never ends up holding halves of two different builds.
       for (const name of await readdir(extractDir)) {
         await renameWithRetry(join(extractDir, name), join(targetDir, name));
       }
+      emit(1, 1, variant);
+    } finally {
+      // The GPU zip is 670MB and its extract is larger again. Leaving either
+      // behind after a failure would cost more disk than the runtime itself.
       await rm(zipPath, { force: true });
       await rm(extractDir, { recursive: true, force: true });
-      emit(1, 1);
-    },
+    }
+  };
+
+  return {
+    isInstalled: () => missingWhisperRuntimeFiles(runtimeRoot).length === 0,
+    missingFiles: () => missingWhisperRuntimeFiles(runtimeRoot),
+    isCudaInstalled: () => missingCudaRuntimeFiles(runtimeRoot).length === 0,
+    bytesTotal: () => ASSETS.cpu.zipBytes,
+    cudaBytesTotal: () => ASSETS.cuda.zipBytes,
+    install: () => installVariant("cpu"),
+    installCuda: () => installVariant("cuda"),
     onProgress: (listener) => {
       listeners.add(listener);
       return () => {

@@ -28,10 +28,25 @@ export type RuntimeState =
   | { readonly state: "done" }
   | { readonly state: "error"; readonly message: string };
 
+/**
+ * The GPU runtime is reported separately from the CPU one because it is a
+ * different decision for the user: the CPU build is 8MB and installs itself
+ * at boot, the CUDA build is 670MB and only makes sense on an NVIDIA card, so
+ * it is offered rather than fetched.
+ */
+export interface GpuRuntimeState {
+  /** Whether this machine has a card the CUDA build could use. */
+  readonly supported: boolean;
+  /** Download size, so the UI can say what it is asking for. */
+  readonly bytes: number;
+  readonly install: RuntimeState;
+}
+
 export interface ModelList {
   readonly items: ModelStatus[];
   readonly totalDiskUsed: number;
   readonly whisperRuntime: RuntimeState;
+  readonly whisperGpu: GpuRuntimeState;
 }
 
 export interface ModelsService {
@@ -42,6 +57,8 @@ export interface ModelsService {
   installWhisperRuntime: () => Promise<void>;
   /** Install the runtime in the background at boot if it is missing. */
   ensureWhisperRuntime: () => void;
+  /** Swap the runtime for the CUDA build. User-initiated; it is 670MB. */
+  installWhisperGpuRuntime: () => Promise<void>;
   /** Copy and verify catalog files from an existing local directory. */
   importFromDirectory: (modelId: string, sourceDir: string) => Promise<Result<void>>;
   subscribe: (listener: (listed: ModelList) => void) => () => void;
@@ -55,6 +72,12 @@ export const createModelsService = (
     emitProgress?: (event: ModelProgressEvent) => void;
     /** Injected so tests can exercise the runtime install without a network. */
     fetch?: typeof fetch;
+    /**
+     * Whether the machine has an NVIDIA card. Read at call time because
+     * hardware detection resolves after this service is built, and a GPU
+     * offer that only appears on the next launch is an offer nobody sees.
+     */
+    hasNvidiaGpu?: () => boolean;
   }
 ): ModelsService => {
   const installer: ModelInstaller = createModelInstaller(modelsRoot);
@@ -63,6 +86,7 @@ export const createModelsService = (
   });
   const listeners = new Set<(listed: ModelList) => void>();
   let runtimeState: RuntimeState = { state: "idle" };
+  let gpuState: RuntimeState = { state: "idle" };
 
   const list = (): ModelList => ({
     items: MODEL_CATALOG.map((model) => ({
@@ -72,7 +96,14 @@ export const createModelsService = (
       download: downloader.state(model.id)
     })),
     totalDiskUsed: installer.totalDiskUsed(),
-    whisperRuntime: runtimeState
+    whisperRuntime: runtimeState,
+    whisperGpu: {
+      supported: deps?.hasNvidiaGpu?.() ?? false,
+      bytes: runtimeDownloader.cudaBytesTotal(),
+      // Installed wins over whatever the last attempt reported: the runtime on
+      // disk is the fact, gpuState is only the story of this session.
+      install: runtimeDownloader.isCudaInstalled() ? { state: "done" } : gpuState
+    }
   });
 
   const notifyListeners = (): void => {
@@ -139,12 +170,18 @@ export const createModelsService = (
     return true;
   };
 
+  // CPU and CUDA installs both publish to whisper-cpp/. They must share one
+  // lock: otherwise a boot-time CPU install and a user-initiated CUDA install
+  // erase each other's staging directory and can leave a mixed runtime.
   let runtimeInstallInFlight: Promise<void> | null = null;
 
   const runRuntimeInstall = async (): Promise<void> => {
     runtimeState = { state: "downloading", receivedBytes: 0, totalBytes: runtimeDownloader.bytesTotal() };
     notifyListeners();
-    const unsubscribe = runtimeDownloader.onProgress((received, total) => {
+    // Both variants share one progress stream, so a listener has to ignore
+    // the other one's ticks or a GPU install would drive the CPU progress bar.
+    const unsubscribe = runtimeDownloader.onProgress((received, total, variant) => {
+      if (variant !== "cpu") return;
       runtimeState = { state: "downloading", receivedBytes: received, totalBytes: total };
       notifyListeners();
     });
@@ -160,6 +197,55 @@ export const createModelsService = (
       unsubscribe();
       notifyListeners();
     }
+  };
+
+  const runGpuInstall = async (): Promise<void> => {
+    gpuState = {
+      state: "downloading",
+      receivedBytes: 0,
+      totalBytes: runtimeDownloader.cudaBytesTotal()
+    };
+    notifyListeners();
+    const unsubscribe = runtimeDownloader.onProgress((received, total, variant) => {
+      if (variant !== "cuda") return;
+      gpuState = { state: "downloading", receivedBytes: received, totalBytes: total };
+      notifyListeners();
+    });
+    try {
+      await runtimeDownloader.installCuda();
+      gpuState = { state: "done" };
+      // The CUDA build replaces the CPU one wholesale, so the plain runtime is
+      // installed by definition once this succeeds.
+      runtimeState = { state: "done" };
+    } catch (error) {
+      gpuState = {
+        state: "error",
+        message: error instanceof Error ? error.message : String(error)
+      };
+    } finally {
+      unsubscribe();
+      notifyListeners();
+    }
+  };
+
+  const installWhisperGpuRuntime = async (): Promise<void> => {
+    if (runtimeDownloader.isCudaInstalled()) {
+      gpuState = { state: "done" };
+      notifyListeners();
+      return;
+    }
+    if (runtimeInstallInFlight !== null) {
+      await runtimeInstallInFlight;
+      // The preceding install may have been the CUDA build, or a CPU build
+      // that left this request still needed. Re-check against the filesystem
+      // before deciding which case we have.
+      await installWhisperGpuRuntime();
+      return;
+    }
+    runtimeInstallInFlight = runGpuInstall().finally(() => {
+      runtimeInstallInFlight = null;
+    });
+    await runtimeInstallInFlight;
   };
 
   const installWhisperRuntime = async (): Promise<void> => {
@@ -247,6 +333,7 @@ export const createModelsService = (
     deleteModel,
     installWhisperRuntime,
     ensureWhisperRuntime,
+    installWhisperGpuRuntime,
     importFromDirectory,
     subscribe,
     dispose

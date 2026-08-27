@@ -336,6 +336,12 @@ export const modelsCancelChannel = "models:cancel" as const;
 export const modelsDeleteChannel = "models:delete" as const;
 export const modelsImportChannel = "models:import" as const;
 export const modelsInstallRuntimeChannel = "models:install-runtime" as const;
+/**
+ * Replace the whisper runtime with the CUDA build. Separate from
+ * install-runtime because it is a 670MB download the user has to choose,
+ * where the CPU runtime is 8MB and installs itself at boot.
+ */
+export const modelsInstallGpuRuntimeChannel = "models:install-gpu-runtime" as const;
 export const modelsDownloadProgressChannel = "models:download-progress" as const;
 
 export interface ModelsModelRequest {
@@ -364,6 +370,21 @@ export interface ModelsListResult {
     readonly receivedBytes?: number;
     readonly totalBytes?: number;
     readonly message?: string;
+  };
+  /**
+   * The optional CUDA build of that same runtime. `supported` is false on a
+   * machine with no NVIDIA card, and the Models view hides the offer entirely
+   * rather than advertising a 670MB download that would change nothing.
+   */
+  readonly whisperGpu: {
+    readonly supported: boolean;
+    readonly bytes: number;
+    readonly install: {
+      readonly state: "idle" | "downloading" | "done" | "error";
+      readonly receivedBytes?: number;
+      readonly totalBytes?: number;
+      readonly message?: string;
+    };
   };
 }
 
@@ -796,6 +817,7 @@ export const PRELOAD_CHANNELS = {
     delete: modelsDeleteChannel,
     import: modelsImportChannel,
     installRuntime: modelsInstallRuntimeChannel,
+    installGpuRuntime: modelsInstallGpuRuntimeChannel,
     downloadProgress: modelsDownloadProgressChannel
   },
   updates: {

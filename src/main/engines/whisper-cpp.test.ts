@@ -302,6 +302,79 @@ describe("whisper-cpp engine", () => {
 });
 
 /**
+ * GPU selection. whisper-cli decodes on the CPU unless the CUDA backend and
+ * its libraries are beside it, and `--no-gpu` is what forces that. The engine
+ * decides per capture from what is on disk.
+ */
+describe("gpu selection", () => {
+  const CUDA_FILES = [
+    "ggml-cuda.dll",
+    "cudart64_12.dll",
+    "cublas64_12.dll",
+    "cublasLt64_12.dll"
+  ];
+  const withCuda = (path: string): boolean => path.includes("whisper-cpp");
+  const withoutCuda = (path: string): boolean =>
+    path.includes("whisper-cpp") && !CUDA_FILES.some((name) => path.endsWith(name));
+
+  /**
+   * The shared makeDeps pins detectCuda to "cpu" so the other suites get a
+   * stable command line. These tests are about that decision, so they leave
+   * it out and let the engine read the runtime directory itself.
+   */
+  const gpuDeps = (
+    exists: (path: string) => boolean
+  ): { deps: WhisperCppDeps; calls: { execs: Array<{ args: string[] }> } } => {
+    const calls = { execs: [] as Array<{ args: string[] }> };
+    const deps: WhisperCppDeps = {
+      exists,
+      writeFile: () => Promise.resolve(),
+      readFile: () => Promise.resolve(whisperJson([{ text: " hello" }])),
+      unlink: () => Promise.resolve(),
+      execFile: (_command: string, args: readonly string[]) => {
+        calls.execs.push({ args: [...args] });
+        return Promise.resolve({ stdout: "hello", stderr: "" });
+      }
+    };
+    return { deps, calls };
+  };
+
+  it("passes --no-gpu when only the CPU runtime is installed", async () => {
+    const { deps, calls } = gpuDeps(withoutCuda);
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    await engine.transcribe(request());
+    expect(calls.execs[0]?.args).toContain("--no-gpu");
+  });
+
+  it("lets whisper use the GPU once the CUDA runtime is installed", async () => {
+    const { deps, calls } = gpuDeps(withCuda);
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    await engine.transcribe(request());
+    expect(calls.execs[0]?.args).not.toContain("--no-gpu");
+  });
+
+  /**
+   * Installing the GPU runtime is something the user does with the app open.
+   * The probe used to be cached for the process lifetime, so every capture
+   * after the install would still have decoded on the CPU until a restart.
+   */
+  it("notices a GPU runtime installed after the first capture", async () => {
+    let cudaPresent = false;
+    const { deps, calls } = gpuDeps((path: string) =>
+      cudaPresent ? withCuda(path) : withoutCuda(path)
+    );
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    await engine.transcribe(request());
+    expect(calls.execs[0]?.args).toContain("--no-gpu");
+
+    cudaPresent = true;
+    calls.execs.length = 0;
+    await engine.transcribe(request());
+    expect(calls.execs[0]?.args).not.toContain("--no-gpu");
+  });
+});
+
+/**
  * Model selection. The engine builds modelsRoot/<modelId>/<catalog file name>,
  * so every catalog size resolves; a hardcoded file name only ever finds the
  * one model it was named after.

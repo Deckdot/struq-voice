@@ -54,6 +54,7 @@ import {
   modelsDeleteChannel,
   modelsDownloadChannel,
   modelsDownloadProgressChannel,
+  modelsInstallGpuRuntimeChannel,
   modelsInstallRuntimeChannel,
   modelsListChannel,
   modelsImportChannel,
@@ -347,17 +348,29 @@ export const registerIpcHandlers = (
   ipcMain.handle(modelsListChannel, () => {
     const listed = models?.list();
     return listed === undefined
-      ? { items: [], totalDiskUsed: 0, whisperRuntime: { state: "idle" } }
+      ? {
+          items: [],
+          totalDiskUsed: 0,
+          whisperRuntime: { state: "idle" },
+          whisperGpu: { supported: false, bytes: 0, install: { state: "idle" } }
+        }
       : {
           items: listed.items,
           totalDiskUsed: listed.totalDiskUsed,
-          whisperRuntime: listed.whisperRuntime
+          whisperRuntime: listed.whisperRuntime,
+          whisperGpu: listed.whisperGpu
         };
   });
 
   ipcMain.handle(modelsInstallRuntimeChannel, async () => {
     if (models === null) return { ok: false };
     await models.installWhisperRuntime();
+    return { ok: true };
+  });
+
+  ipcMain.handle(modelsInstallGpuRuntimeChannel, async () => {
+    if (models === null) return { ok: false };
+    await models.installWhisperGpuRuntime();
     return { ok: true };
   });
 

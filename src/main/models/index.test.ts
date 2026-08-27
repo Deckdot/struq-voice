@@ -252,3 +252,165 @@ describe("ensureWhisperRuntime", () => {
     });
   });
 });
+
+/**
+ * The GPU runtime. It is a 670MB download that only helps on an NVIDIA card,
+ * so the service reports whether to offer it at all and never fetches it on
+ * its own the way the 8MB CPU runtime does.
+ */
+describe("whisper GPU runtime", () => {
+  const installRuntime = (runtimeRoot: string, cuda: boolean): void => {
+    mkdirSync(join(runtimeRoot, "whisper-cpp"), { recursive: true });
+    const names = [
+      "whisper-cli.exe",
+      "whisper.dll",
+      "ggml.dll",
+      "ggml-base.dll",
+      "ggml-cpu-haswell.dll",
+      ...(cuda
+        ? ["ggml-cuda.dll", "cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll"]
+        : [])
+    ];
+    for (const name of names) {
+      writeFileSync(join(runtimeRoot, "whisper-cpp", name), "fake", "utf8");
+    }
+  };
+
+  it("does not offer the GPU build without an NVIDIA card", async () => {
+    await withRoot((root) => {
+      const service = createModelsService(root, join(root, "runtimes"), {
+        hasNvidiaGpu: () => false
+      });
+      expect(service.list().whisperGpu.supported).toBe(false);
+      service.dispose();
+    });
+  });
+
+  it("offers the GPU build on an NVIDIA card, with its download size", async () => {
+    await withRoot((root) => {
+      const service = createModelsService(root, join(root, "runtimes"), {
+        hasNvidiaGpu: () => true
+      });
+      const gpu = service.list().whisperGpu;
+      expect(gpu.supported).toBe(true);
+      expect(gpu.bytes).toBeGreaterThan(0);
+      expect(gpu.install.state).toBe("idle");
+      service.dispose();
+    });
+  });
+
+  /**
+   * Detection resolves after the service is built, so the flag is read at call
+   * time. Reading it once at construction would hide the offer until the next
+   * launch on every machine.
+   */
+  it("picks up the GPU after hardware detection resolves", async () => {
+    await withRoot((root) => {
+      let detected = false;
+      const service = createModelsService(root, join(root, "runtimes"), {
+        hasNvidiaGpu: () => detected
+      });
+      expect(service.list().whisperGpu.supported).toBe(false);
+      detected = true;
+      expect(service.list().whisperGpu.supported).toBe(true);
+      service.dispose();
+    });
+  });
+
+  it("reports the GPU runtime as installed from what is on disk", async () => {
+    await withRoot((root) => {
+      const runtimeRoot = join(root, "runtimes");
+      installRuntime(runtimeRoot, true);
+      const service = createModelsService(root, runtimeRoot, { hasNvidiaGpu: () => true });
+      expect(service.list().whisperGpu.install.state).toBe("done");
+      service.dispose();
+    });
+  });
+
+  it("leaves the GPU build alone when only the CPU runtime is installed", async () => {
+    await withRoot((root) => {
+      const runtimeRoot = join(root, "runtimes");
+      installRuntime(runtimeRoot, false);
+      const service = createModelsService(root, runtimeRoot, { hasNvidiaGpu: () => true });
+      expect(service.list().whisperGpu.install.state).toBe("idle");
+      service.dispose();
+    });
+  });
+
+  it("never fetches the GPU build at boot", async () => {
+    await withRoot((root) => {
+      const runtimeRoot = join(root, "runtimes");
+      installRuntime(runtimeRoot, false);
+      let fetched = 0;
+      const service = createModelsService(root, runtimeRoot, {
+        hasNvidiaGpu: () => true,
+        fetch: (() => {
+          fetched += 1;
+          throw new Error("should not fetch");
+        }) as unknown as typeof fetch
+      });
+      service.ensureWhisperRuntime();
+      expect(fetched).toBe(0);
+      expect(service.list().whisperGpu.install.state).toBe("idle");
+      service.dispose();
+    });
+  });
+
+  it("waits for the boot-time CPU install before starting the CUDA install", async () => {
+    await withRoot(async (root) => {
+      const runtimeRoot = join(root, "runtimes");
+      let releaseCpu!: () => void;
+      let signalCpuFetch!: () => void;
+      const cpuGate = new Promise<void>((resolve) => {
+        releaseCpu = resolve;
+      });
+      const cpuFetchStarted = new Promise<void>((resolve) => {
+        signalCpuFetch = resolve;
+      });
+      const urls: string[] = [];
+      const service = createModelsService(root, runtimeRoot, {
+        hasNvidiaGpu: () => true,
+        fetch: (async (input: string | URL | Request) => {
+          const url =
+            typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+          urls.push(url);
+          if (url.includes("whisper-bin-x64.zip")) {
+            signalCpuFetch();
+            await cpuGate;
+          }
+          throw new Error("offline");
+        }) as unknown as typeof fetch
+      });
+
+      const cpu = service.installWhisperRuntime();
+      await cpuFetchStarted;
+      const cuda = service.installWhisperGpuRuntime();
+      await Promise.resolve();
+      expect(urls).toHaveLength(1);
+
+      releaseCpu();
+      await Promise.all([cpu, cuda]);
+      expect(urls).toHaveLength(2);
+      expect(urls[1]).toContain("whisper-cublas-12.4.0-bin-x64.zip");
+      service.dispose();
+    });
+  });
+
+  it("records why a GPU install failed", async () => {
+    await withRoot(async (root) => {
+      const runtimeRoot = join(root, "runtimes");
+      installRuntime(runtimeRoot, false);
+      const service = createModelsService(root, runtimeRoot, {
+        hasNvidiaGpu: () => true,
+        fetch: (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch
+      });
+      await service.installWhisperGpuRuntime();
+      const install = service.list().whisperGpu.install;
+      expect(install.state).toBe("error");
+      if (install.state === "error") {
+        expect(install.message).toContain("offline");
+      }
+      service.dispose();
+    });
+  });
+});

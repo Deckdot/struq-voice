@@ -35,10 +35,6 @@ export const it: Partial<Record<MessageKey, unknown>> = {
   "notification.updateReady.title": "Aggiornamento di Struq Voice pronto",
   "notification.updateReady.body": "La versione {version} è verificata e pronta per l'installazione.",
 
-  "overlay.starting": "Avvio...",
-  "overlay.listening": "Ascolto...",
-  "overlay.working": "Elaborazione trascrizione...",
-  "overlay.errorCopied": "Copiato. Premi Ctrl + V per incollare.",
   "overlay.meetingStarting": "Avvio riunione...",
   "overlay.meetingRecording": "Riunione in registrazione",
   "overlay.meetingPaused": "Riunione in pausa",

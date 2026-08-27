@@ -44,10 +44,6 @@ export const en = {
   "notification.updateReady.body": "Version {version} is verified and ready to install.",
 
   // Capture Overlay Window
-  "overlay.starting": "Starting...",
-  "overlay.listening": "Listening...",
-  "overlay.working": "Working on the transcript...",
-  "overlay.errorCopied": "Copied. Press Ctrl + V to paste.",
   "overlay.meetingStarting": "Starting meeting...",
   "overlay.meetingRecording": "Meeting recording",
   "overlay.meetingPaused": "Meeting paused",

@@ -351,14 +351,20 @@ highest craft.
   clamps to a live display and remembers the position across restarts.
 - Five states with object continuity on the same canvas: arming,
   listening, transcribing, delivering, error.
-  - Arming: accent dot, idle baseline.
+  - Arming: accent dot, idle baseline. No label.
   - Listening: verdigris bouncing ball, matching live waveform, elapsed time.
   - Transcribing: bars decay into a thin processing line with one
-    controlled shimmer sweep, engine label on the right. No spinner.
-  - Delivering: check draws itself in the success colour. No text competes
-    with the final confirmation.
-  - Error: danger dot, cause, "Copied. Press Ctrl + V." when the
-    text survived.
+    controlled shimmer sweep. No spinner, no label.
+  - Delivering: check draws itself in the success colour when the transcript
+    reached the target, a muted clipboard glyph when it reached only the
+    clipboard. No text competes with the final confirmation.
+  - Error: danger dot and the cause, plus a clipboard glyph when the text
+    survived. The cause is the only copy the pill ever shows, because an
+    error nobody can read is an error nobody can act on.
+- **The pill states its state in marks, not sentences.** It sits over the
+  user's real work for well under a second. Instructions there ("press
+  Ctrl + V", "working on the transcript") are read as noise, and they say
+  nothing the icon has not already said.
 - The cold-start replay path in main is preserved: the broadcast
   that started the capture is replayed on `did-finish-load`, so the
   first capture of a fresh session shows the right state immediately.

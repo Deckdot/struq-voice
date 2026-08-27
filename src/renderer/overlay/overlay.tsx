@@ -145,9 +145,6 @@ export function Overlay(): JSX.Element | null {
                   <div className="h-5 min-w-0 flex-1">
                     <Waveform bands={SILENT_BANDS} idle />
                   </div>
-                  <span className="shrink-0 text-2xs text-text-muted">
-                    {t(locale, "overlay.starting")}
-                  </span>
                 </motion.div>
               )}
 
@@ -158,7 +155,6 @@ export function Overlay(): JSX.Element | null {
                   bands={bands}
                   partial={partial}
                   liveEnabled={liveEnabled}
-                  locale={locale}
                 />
               )}
 
@@ -167,16 +163,15 @@ export function Overlay(): JSX.Element | null {
                   key="transcribing"
                   partial={partial}
                   liveEnabled={liveEnabled}
-                  locale={locale}
                 />
               )}
 
               {state.phase === "delivering" && (
-                <DeliveringView key="delivering" state={state} locale={locale} />
+                <DeliveringView key="delivering" state={state} />
               )}
 
               {state.phase === "error" && (
-                <ErrorView key="error" state={state} locale={locale} />
+                <ErrorView key="error" state={state} />
               )}
             </AnimatePresence>
           )}
@@ -190,14 +185,12 @@ function ListeningView({
   state,
   bands,
   partial,
-  liveEnabled,
-  locale
+  liveEnabled
 }: {
   readonly state: Extract<CaptureState, { phase: "listening" }>;
   readonly bands: readonly number[] | null;
   readonly partial: string;
   readonly liveEnabled: boolean;
-  readonly locale: string;
 }): JSX.Element {
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -224,13 +217,9 @@ function ListeningView({
           {formatElapsed(elapsedMs)}
         </span>
       </div>
-      {liveEnabled && (
+      {liveEnabled && partial.length > 0 && (
         <div className="transcript-scroll min-h-0 flex-1 overflow-y-auto rounded-sm bg-bg-sunken px-2.5 py-1.5">
-          {partial.length > 0 ? (
-            <p className="text-2xs leading-relaxed text-text">{partial}</p>
-          ) : (
-            <p className="text-2xs text-text-muted">{t(locale, "overlay.listening")}</p>
-          )}
+          <p className="text-2xs leading-relaxed text-text">{partial}</p>
         </div>
       )}
     </>
@@ -239,25 +228,19 @@ function ListeningView({
 
 function TranscribingView({
   partial,
-  liveEnabled,
-  locale
+  liveEnabled
 }: {
   readonly partial: string;
   readonly liveEnabled: boolean;
-  readonly locale: string;
 }): JSX.Element {
   return (
     <>
       <div className="flex min-h-0 flex-1 items-center justify-center gap-2.5 px-0.5">
         <BlocksWave className="h-5 w-5 shrink-0 text-capture" />
       </div>
-      {liveEnabled && (
+      {liveEnabled && partial.length > 0 && (
         <div className="transcript-scroll min-h-0 flex-1 overflow-y-auto rounded-sm bg-bg-sunken px-2.5 py-1.5">
-          {partial.length > 0 ? (
-            <p className="text-2xs leading-relaxed text-text">{partial}</p>
-          ) : (
-            <p className="text-2xs text-text-muted">{t(locale, "overlay.working")}</p>
-          )}
+          <p className="text-2xs leading-relaxed text-text">{partial}</p>
         </div>
       )}
     </>
@@ -265,21 +248,23 @@ function TranscribingView({
 }
 
 /**
- * The end of a capture. A check mark means the transcript is in the app the
- * user was typing into; it must not be shown when nothing was inserted.
+ * The end of a capture, told in one mark and no words.
  *
- * Delivery reports `inserted: false` whenever the transcript reached the
- * clipboard but not the target: one of our own windows had focus, the target
- * was elevated and Windows dropped the synthesized keystroke, or the
- * clipboard held content we refused to overwrite. All three used to draw the
- * same check, so a dictation that went nowhere looked delivered.
+ * A check means the transcript is in the app the user was typing into. A
+ * clipboard glyph means it reached the clipboard but not the target: one of
+ * our own windows had focus, or the target was elevated and Windows dropped
+ * the synthesized keystroke. The two used to draw the same check, so a
+ * dictation that went nowhere looked delivered.
+ *
+ * The panel deliberately carries no copy. It sits over whatever the user is
+ * working in, for under a second, and instructions there are read as noise
+ * rather than help. The mark says which of the two happened; Settings is
+ * where the clipboard fallback is explained.
  */
 function DeliveringView({
-  state,
-  locale
+  state
 }: {
   readonly state: Extract<CaptureState, { phase: "delivering" }>;
-  readonly locale: string;
 }): JSX.Element {
   if (!state.inserted) {
     return (
@@ -287,12 +272,13 @@ function DeliveringView({
         initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className="flex min-h-0 flex-1 items-center gap-2.5"
+        className="flex min-h-0 flex-1 items-center justify-center"
       >
-        <Icon icon="ph:clipboard-text" className="h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
-        <p className="min-w-0 flex-1 truncate text-xs text-text">
-          {t(locale, "overlay.errorCopied")}
-        </p>
+        <Icon
+          icon="ph:clipboard-text"
+          className="h-4 w-4 shrink-0 text-text-muted"
+          aria-hidden="true"
+        />
       </motion.div>
     );
   }
@@ -323,23 +309,30 @@ function DeliveringView({
   );
 }
 
+/**
+ * The one place the panel still uses words. An error the user cannot read is
+ * an error they cannot act on, so the cause stays; only the instruction line
+ * underneath it is gone. When a transcript survived the failure the clipboard
+ * glyph says so, in the same language as the delivering view.
+ */
 function ErrorView({
-  state,
-  locale
+  state
 }: {
   readonly state: Extract<CaptureState, { phase: "error" }>;
-  readonly locale: string;
 }): JSX.Element {
+  const recovered = state.text !== null && state.text.length > 0;
   return (
     <div className="flex min-h-0 flex-1 items-center gap-2.5">
       <StateDot state="error" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs text-danger">{state.message}</p>
-        {state.text !== null && state.text.length > 0 && (
-          <p className="truncate text-2xs text-text-muted">{t(locale, "overlay.errorCopied")}</p>
-        )}
-      </div>
-      <Icon icon="ph:warning-circle" className="h-3.5 w-3.5 text-danger" aria-hidden="true" />
+      <p className="min-w-0 flex-1 truncate text-xs text-danger">{state.message}</p>
+      {recovered && (
+        <Icon
+          icon="ph:clipboard-text"
+          className="h-3.5 w-3.5 shrink-0 text-text-muted"
+          aria-hidden="true"
+        />
+      )}
+      <Icon icon="ph:warning-circle" className="h-3.5 w-3.5 shrink-0 text-danger" aria-hidden="true" />
     </div>
   );
 }

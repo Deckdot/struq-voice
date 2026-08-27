@@ -9,17 +9,24 @@
  *
  * - One of our windows is focused: return `inserted: false` and let the
  *   renderer insert into its own field.
- * - Otherwise: stash the clipboard, write the transcript, synthesize Ctrl+V
- *   via `uIOhook.keyTap` (~2ms). On failure, fall back to the StruqADE
- *   PowerShell SendKeys hop, kept verbatim. The command string is static;
- *   the transcript travels through the clipboard, never through the shell.
+ * - Otherwise: stash the clipboard, write the transcript, let the write
+ *   settle, release any modifier the user is still holding, then synthesize
+ *   Ctrl+V via `uIOhook.keyTap` (~2ms). On failure, fall back to the
+ *   StruqADE PowerShell SendKeys hop, kept verbatim. The command string is
+ *   static; the transcript travels through the clipboard, never through the
+ *   shell.
  * - Restore the stashed clipboard after a configurable delay: some apps read
  *   the clipboard asynchronously, and restoring too fast makes the paste
- *   land empty.
+ *   land empty. An image is stashed and restored the same way text is, so
+ *   delivering a transcript never costs the user what they had copied.
+ * - The transcript is written whatever the clipboard held. Refusing to write
+ *   over a format we cannot restore used to lose the dictation outright,
+ *   which is a far worse trade than replacing something the user can copy
+ *   again. Only the restore is skipped in that case.
  * - Windows UIPI silently drops synthesized input sent from a non-elevated
  *   process to an elevated window. The transcript is already on the
- *   clipboard in that case, so report `inserted: false` and let the overlay
- *   say "Copied, press Ctrl+V". Do not fight it.
+ *   clipboard in that case, so report `inserted: false` and leave it there
+ *   for the user to paste. Do not fight it.
  *
  * Everything electron-specific is injected as function dependencies: the
  * unit tests pass fakes, and index.ts calls this plainly and gets the real
@@ -29,6 +36,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { BrowserWindow, clipboard } from "electron";
+import type { NativeImage } from "electron";
 import { uIOhook, UiohookKey } from "uiohook-napi";
 import type { Result } from "../../../shared/result";
 import { fail, ok } from "../../../shared/result";
@@ -42,6 +50,36 @@ export interface PasteOptions {
   readonly pressEnterAfterPaste?: boolean;
 }
 
+/**
+ * How long to let the clipboard settle before synthesizing the keystroke.
+ *
+ * `writeText` returns as soon as Windows accepts the data, not once the
+ * foreground app can read it back. Firing Ctrl+V in the same tick raced that
+ * handover, and the app that lost the race pasted whatever the clipboard held
+ * before: the previous transcript, or nothing. It is the single most common
+ * reason a dictation "did not paste".
+ */
+const CLIPBOARD_SETTLE_MS = 40;
+
+/**
+ * Modifier keycodes, for releasing anything the user is still physically
+ * holding when delivery lands. Push-to-talk stops on the trigger key coming
+ * up, which is usually before the modifier does, so a fast decode can
+ * synthesize its Ctrl+V while Shift or Alt is still down. The target then
+ * sees Ctrl+Shift+V, which is a different command in most editors and no
+ * command at all in some.
+ */
+const MODIFIER_KEYS: readonly number[] = [
+  UiohookKey.Ctrl,
+  UiohookKey.CtrlRight,
+  UiohookKey.Shift,
+  UiohookKey.ShiftRight,
+  UiohookKey.Alt,
+  UiohookKey.AltRight,
+  UiohookKey.Meta,
+  UiohookKey.MetaRight
+];
+
 export interface PasteOutcome {
   readonly inserted: boolean;
 }
@@ -50,12 +88,20 @@ export interface PasteDeps {
   readonly getFocusedWindow: () => BrowserWindow | null;
   readonly clipboard: Pick<typeof clipboard, "readText" | "writeText">;
   /**
+   * Read and write the clipboard's image, so a copied screenshot survives a
+   * dictation. Absent on older injected fakes, which then behave as before.
+   */
+  readonly readImage?: () => NativeImage | null;
+  readonly writeImage?: (image: NativeImage) => void;
+  /**
    * What the clipboard currently holds. Writing text clears every other
    * format, so this is what tells us whether an overwrite would destroy
    * something we cannot put back.
    */
   readonly availableFormats?: () => string[];
   readonly keyTap: () => void;
+  /** Release a modifier the user may still be holding down. */
+  readonly releaseModifiers?: () => void;
   readonly keyTapEnter?: () => void;
   readonly execPowershell: () => Promise<void>;
   readonly execPowershellEnter?: () => Promise<void>;
@@ -107,6 +153,18 @@ const createDefaultDeps = (): PasteDeps => ({
     },
   },
   availableFormats: () => clipboard.availableFormats(),
+  readImage: () => {
+    const image = clipboard.readImage();
+    return image.isEmpty() ? null : image;
+  },
+  writeImage: (image: NativeImage) => {
+    clipboard.writeImage(image);
+  },
+  releaseModifiers: () => {
+    for (const key of MODIFIER_KEYS) {
+      uIOhook.keyToggle(key, "up");
+    }
+  },
   keyTap: () => {
     uIOhook.keyTap(UiohookKey.V, [UiohookKey.Ctrl]);
   },
@@ -119,23 +177,32 @@ const createDefaultDeps = (): PasteDeps => ({
 });
 
 /**
- * Whether overwriting the clipboard would destroy something we cannot put
- * back. `writeText` is the only restore tool available here, so text is the
- * only content that survives a round trip.
+ * What the clipboard holds that a plain `writeText` would destroy.
+ *
+ * `writeText` clears every other format and `readText` cannot see them, so an
+ * image or a file selection is silently lost. Text and images both round trip
+ * through this module; anything else (a file selection, an app's private
+ * flavour) does not.
  *
  * A runtime without `availableFormats` (an older injected fake) keeps the
  * previous behaviour rather than blocking delivery: unknown is treated as
  * text-only, which is what it always assumed.
  */
-const holdsUnrestorableContent = (deps: PasteDeps, stashedText: string): boolean => {
+type ClipboardContent = "text" | "image" | "unrestorable";
+
+const classifyClipboard = (deps: PasteDeps): ClipboardContent => {
   const formats = deps.availableFormats?.();
-  if (formats === undefined) return false;
-  return formats.some((format) => {
-    if (format.startsWith("text/")) return false;
-    // Some apps advertise a text flavour alongside rich content. If the text
-    // we stashed round-trips the meaningful part, the overwrite is safe.
-    return stashedText.length === 0 || !format.startsWith("public.utf8");
-  });
+  if (formats === undefined) return "text";
+  const foreign = formats.filter((format) => !format.startsWith("text/"));
+  if (foreign.length === 0) return "text";
+  if (
+    deps.readImage !== undefined &&
+    deps.writeImage !== undefined &&
+    foreign.every((format) => format.startsWith("image/"))
+  ) {
+    return "image";
+  }
+  return "unrestorable";
 };
 
 /**
@@ -161,19 +228,15 @@ export const insertTextIntoActiveApp = async (
     return ok({ inserted: false });
   }
 
-  const stashed = deps.clipboard.readText();
-  const stashedSomething = stashed.length > 0;
+  const content = classifyClipboard(deps);
+  const stashedText = content === "text" ? deps.clipboard.readText() : "";
+  const stashedImage = content === "image" ? (deps.readImage?.() ?? null) : null;
 
-  // Writing text clears every other clipboard format, and `readText` cannot
-  // see them, so an image or a file selection used to be destroyed silently
-  // and reported as a successful paste. We can only put text back, so when
-  // the clipboard holds anything else, leave it alone and let the renderer
-  // deliver instead. Losing the user's copied image to paste a transcript is
-  // not a trade the app gets to make on their behalf.
-  if (options.restoreClipboard && holdsUnrestorableContent(deps, stashed)) {
-    return ok({ inserted: false });
-  }
-
+  // An earlier version returned here without writing anything whenever the
+  // clipboard held a format it could not put back. The overlay still told the
+  // user the transcript had been copied, and it had not been: the words were
+  // gone. Delivery now always happens. What varies is whether the previous
+  // contents can be restored afterwards.
   try {
     deps.clipboard.writeText(text);
   } catch (error) {
@@ -183,6 +246,21 @@ export const insertTextIntoActiveApp = async (
     });
   }
 
+  // Windows accepts the write before the foreground app can read it back, so
+  // pasting in the same tick races the handover and lands the previous
+  // clipboard instead of this transcript.
+  await deps.delay(CLIPBOARD_SETTLE_MS);
+
+  // Push-to-talk ends on the trigger key, which usually comes up before the
+  // modifier does. Ctrl+V synthesized on top of a held Shift or Alt reaches
+  // the target as a different shortcut entirely.
+  try {
+    deps.releaseModifiers?.();
+  } catch {
+    // Best effort. A hook that cannot toggle keys can still tap them.
+  }
+
+  let inserted = true;
   try {
     deps.keyTap();
   } catch {
@@ -191,15 +269,15 @@ export const insertTextIntoActiveApp = async (
     try {
       await deps.execPowershell();
     } catch {
-      // UIPI / elevated target / missing Windows Forms. The transcript is
-      // already on the clipboard, so the overlay says "Copied, press
-      // Ctrl+V" instead of failing the whole flow. Leave the clipboard as
-      // it is so the manual paste still works.
-      return ok({ inserted: false });
+      // UIPI / elevated target / missing Windows Forms. The transcript is on
+      // the clipboard, so the user can still paste it themselves. Leave the
+      // clipboard alone in that case: restoring it would take away the only
+      // copy of what they just said.
+      inserted = false;
     }
   }
 
-  if (options.pressEnterAfterPaste === true) {
+  if (inserted && options.pressEnterAfterPaste === true) {
     await deps.delay(50);
     try {
       deps.keyTapEnter?.();
@@ -212,12 +290,20 @@ export const insertTextIntoActiveApp = async (
     }
   }
 
-  if (options.restoreClipboard && stashedSomething) {
+  const canRestore =
+    inserted &&
+    options.restoreClipboard &&
+    (stashedImage !== null || stashedText.length > 0);
+  if (canRestore) {
     // Some apps read the clipboard asynchronously; restoring too fast makes
     // the paste land empty.
     await deps.delay(options.restoreClipboardDelayMs);
     try {
-      deps.clipboard.writeText(stashed);
+      if (stashedImage !== null) {
+        deps.writeImage?.(stashedImage);
+      } else {
+        deps.clipboard.writeText(stashedText);
+      }
     } catch {
       // The restore is best effort. A throw here used to reject out of the
       // whole function with the transcript already delivered, turning a
@@ -225,5 +311,5 @@ export const insertTextIntoActiveApp = async (
     }
   }
 
-  return ok({ inserted: true });
+  return ok({ inserted });
 };

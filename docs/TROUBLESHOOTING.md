@@ -71,6 +71,23 @@ Ctrl+V, restore clipboard.
 - Escape cancels the current capture. Nothing is pasted and nothing is
   written to history on cancel.
 
+## Whisper fails with "Command failed:" and a path
+
+- Symptom: picking any whisper model returns `Command failed: C:\...\whisper-cli.exe -m ...`
+  with nothing after it. Parakeet and OpenRouter keep working.
+- Cause: the runtime directory holds `whisper-cli.exe` without the DLLs it
+  links against, so Windows refuses to start the process (0xC0000135,
+  STATUS_DLL_NOT_FOUND) and Node reports the command line as the error. A
+  runtime carrying those DLLs but no `ggml-cpu-*.dll` gets one step further
+  and aborts on `GGML_ASSERT(device) failed`, because ggml finds its CPU
+  backend by scanning that directory at runtime.
+- Fix: the runtime is judged as a set of files, not by the presence of the
+  exe, so an incomplete directory reads as not installed and the boot-time
+  install repairs it. Reinstall by hand from Settings > Models if it does not.
+- Check what is on disk: `%APPDATA%\struq-voice\runtimes\whisper-cpp` should
+  hold `whisper-cli.exe`, `whisper.dll`, `ggml.dll`, `ggml-base.dll` and at
+  least one `ggml-cpu-*.dll`.
+
 ## Downloading a model fails or stalls
 
 - Downloads are resumable across restarts and capped at three concurrent

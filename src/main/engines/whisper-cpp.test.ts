@@ -81,15 +81,84 @@ describe("whisper-cpp engine", () => {
     });
   });
 
-  it("reports download-model when only the binary exists", async () => {
+  it("reports download-model when the runtime is complete but the model is not", async () => {
     const { deps } = makeDeps({
-      exists: (path: string) => path.includes("whisper-cli.exe")
+      exists: (path: string) => path.includes("whisper-cpp")
     });
     const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     await expect(engine.readiness()).resolves.toMatchObject({
       ready: false,
       action: "download-model"
     });
+  });
+
+  /**
+   * whisper-cli.exe is dynamically linked. An install that dropped only the
+   * exe on disk passed the old readiness check, so the app said whisper was
+   * ready and then every capture died at spawn with a bare
+   * "Command failed: <path>".
+   */
+  it("is not ready when the exe is present but its DLLs are missing", async () => {
+    const { deps } = makeDeps({
+      exists: (path: string) => path.includes("whisper-cli.exe")
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    const readiness = await engine.readiness();
+    expect(readiness).toMatchObject({ ready: false, action: "install-runtime" });
+    expect(readiness.reason).toContain("incomplete");
+  });
+
+  it("is not ready when no ggml CPU backend sits beside the exe", async () => {
+    const { deps } = makeDeps({
+      exists: (path: string) => path.includes("whisper-cpp") && !path.includes("ggml-cpu")
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    await expect(engine.readiness()).resolves.toMatchObject({
+      ready: false,
+      action: "install-runtime"
+    });
+  });
+
+  it("blames the runtime, not the user, when Windows refuses to start the exe", async () => {
+    const { deps } = makeDeps({
+      exists: (path: string) => path.includes("whisper-cli.exe"),
+      execFile: () => {
+        // What promisify(execFile) rejects with for STATUS_DLL_NOT_FOUND: the
+        // command line as the message, an empty stderr, and the exit code.
+        const error = Object.assign(
+          new Error(`Command failed: ${runtimeRoot}\\whisper-cpp\\whisper-cli.exe -m ...`),
+          { code: 0xc0000135 | 0, stderr: "" }
+        );
+        return Promise.reject(error);
+      }
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    const outcome = await engine.transcribe(request());
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.error.message).toContain("Reinstall it in Settings");
+      expect(outcome.error.message).not.toContain("Command failed");
+    }
+  });
+
+  it("surfaces the last stderr line rather than the command line", async () => {
+    const { deps } = makeDeps({
+      execFile: () =>
+        Promise.reject(
+          Object.assign(new Error("Command failed: whisper-cli.exe -m C:\\a\\b.bin"), {
+            code: 1,
+            stderr: "whisper_init_from_file_with_params_no_state: failed to load model\n"
+          })
+        )
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    const outcome = await engine.transcribe(request());
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.error.message).toBe(
+        "whisper_init_from_file_with_params_no_state: failed to load model"
+      );
+    }
   });
 
   it("transcribes a capture and deletes the temp wav", async () => {

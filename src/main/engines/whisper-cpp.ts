@@ -12,6 +12,11 @@ import { readFile, writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findModel } from "../../shared/models";
+import {
+  missingWhisperRuntimeFiles,
+  whisperCliPath,
+  whisperRuntimeDir
+} from "../models/whisper-runtime-files";
 import { transcribeTimeoutMs } from "./timeouts";
 import type { Result, VoiceError, VoiceErrorCode } from "../../shared/result";
 import { fail, ok } from "../../shared/result";
@@ -33,6 +38,14 @@ const NOT_INSTALLED_MESSAGE =
   "Whisper runtime is not installed. Download it in Settings > Models.";
 const NOT_DOWNLOADED_MESSAGE =
   "Whisper model is not downloaded. Download it in Settings > Models.";
+/**
+ * whisper-cli.exe on its own cannot start: Windows fails the process with
+ * STATUS_DLL_NOT_FOUND before any of our code runs, and Node reports that as
+ * "Command failed: <path>" with nothing on stderr. Say what is actually wrong
+ * and where the repair button is instead.
+ */
+const INCOMPLETE_RUNTIME_MESSAGE =
+  "Whisper runtime is incomplete. Reinstall it in Settings > Models.";
 
 const execFileAsync = promisify(execFile);
 
@@ -163,7 +176,50 @@ const parseTranscript = (stdout: string): string => stripNonSpeech(stdout);
 export const hasCudaRuntime = (
   runtimeRoot: string,
   exists: (path: string) => boolean = existsSync
-): boolean => exists(join(runtimeRoot, "whisper-cpp", CUDA_DLL));
+): boolean => exists(join(whisperRuntimeDir(runtimeRoot), CUDA_DLL));
+
+/**
+ * Windows exit codes a broken runtime produces. 0xC0000135 is
+ * STATUS_DLL_NOT_FOUND: a DLL beside whisper-cli.exe is missing, so the
+ * process never starts. 0xC0000409 is the ggml abort that follows when the
+ * link-time DLLs are there but no ggml-cpu backend is, which surfaces as
+ * GGML_ASSERT(device) failed on stderr.
+ */
+const DLL_NOT_FOUND_EXIT = 0xc0000135 | 0;
+const STACK_BUFFER_OVERRUN_EXIT = 0xc0000409 | 0;
+
+interface ExecFailure {
+  readonly code?: number | string;
+  readonly stderr?: string;
+  readonly killed?: boolean;
+}
+
+/**
+ * A message a user can act on. The raw execFile rejection is
+ * "Command failed: <binary> <every argument>", which reads as a wall of paths
+ * and says nothing about the cause, so it is the last resort rather than the
+ * first thing shown.
+ */
+const describeExecFailure = (
+  error: unknown,
+  runtimeBroken: () => boolean
+): string => {
+  const failure = (error ?? {}) as ExecFailure;
+  const exitCode = typeof failure.code === "number" ? failure.code | 0 : null;
+  if (
+    exitCode === DLL_NOT_FOUND_EXIT ||
+    exitCode === STACK_BUFFER_OVERRUN_EXIT ||
+    runtimeBroken()
+  ) {
+    return INCOMPLETE_RUNTIME_MESSAGE;
+  }
+  const stderr = (failure.stderr ?? "").trim();
+  if (stderr.length > 0) {
+    const lastLine = stderr.split(/\r?\n/).filter((line) => line.trim().length > 0).pop();
+    if (lastLine !== undefined) return lastLine.trim();
+  }
+  return error instanceof Error ? error.message : String(error);
+};
 
 export const createWhisperCppEngine = (
   options: WhisperCppEngineOptions
@@ -193,7 +249,16 @@ export const createWhisperCppEngine = (
     }
   };
 
-  const binaryPath = join(options.runtimeRoot, "whisper-cpp", "whisper-cli.exe");
+  const binaryPath = whisperCliPath(options.runtimeRoot);
+
+  /**
+   * What the runtime directory is still missing. The engine used to accept
+   * whisper-cli.exe existing as proof of an install, but the exe is
+   * dynamically linked: without its DLLs beside it the process cannot start,
+   * so readiness reported "ready" and every capture failed at spawn time.
+   */
+  const runtimeGaps = (): readonly string[] =>
+    missingWhisperRuntimeFiles(options.runtimeRoot, fileExists);
 
   // The model lives in the catalog download tree: modelsRoot/<modelId>/<file>.
   // Resolved per call, because the user can change the model in Settings, and
@@ -218,8 +283,16 @@ export const createWhisperCppEngine = (
   };
 
   const computeReadiness = (): EngineReadiness => {
-    if (!fileExists(binaryPath)) {
-      return { ready: false, reason: NOT_INSTALLED_MESSAGE, action: "install-runtime" };
+    const gaps = runtimeGaps();
+    if (gaps.length > 0) {
+      // Both paths point at the same button in Models; the wording separates
+      // "you never installed this" from "your install is broken", because the
+      // second one used to look identical to a working runtime.
+      return {
+        ready: false,
+        reason: fileExists(binaryPath) ? INCOMPLETE_RUNTIME_MESSAGE : NOT_INSTALLED_MESSAGE,
+        action: "install-runtime"
+      };
     }
     if (!fileExists(modelPathFor(currentModelId()))) {
       return { ready: false, reason: NOT_DOWNLOADED_MESSAGE, action: "download-model" };
@@ -295,9 +368,11 @@ export const createWhisperCppEngine = (
             costUsd: null
           });
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          return fail(whisperFailure(message));
+          return fail(
+            whisperFailure(
+              describeExecFailure(error, () => runtimeGaps().length > 0)
+            )
+          );
         } finally {
           await Promise.all([
             removeFile(tempWav).catch(() => undefined),

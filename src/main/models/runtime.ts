@@ -1,11 +1,17 @@
 /**
- * Whisper.cpp runtime download: the whisper-cli.exe binary. Ships as a zip
- * on the ggml-org/whisper.cpp release; this module downloads it (sha256
- * verified) and extracts whisper-cli.exe into runtimeRoot/whisper-cpp/.
+ * Whisper.cpp runtime download. The binary ships as a zip on the
+ * ggml-org/whisper.cpp release; this module downloads it (sha256 verified) and
+ * extracts the runtime into runtimeRoot/whisper-cpp/.
  *
- * The catalog downloader handles model files; the runtime is a separate,
- * one-file concept so it lives here. The CPU build is the default: it works
- * on any Windows machine and the engine reports CPU fallback clearly.
+ * "The runtime" is whisper-cli.exe plus the DLLs it links against and the ggml
+ * CPU backend it loads at runtime, not the exe alone. Extracting only the exe
+ * produced an install that looked complete to every check in the app and then
+ * failed on first use with a bare "Command failed: <path>", because Windows
+ * could not start the process at all. See whisper-runtime-files.ts for the set.
+ *
+ * The catalog downloader handles model files; the runtime is a separate
+ * concept so it lives here. The CPU build is the default: it works on any
+ * Windows machine and the engine reports CPU fallback clearly.
  *
  * The download runs under a hard total timeout (the zip is 8MB, so a slow
  * proxy is a failure, not a lifestyle), and the final rename retries the
@@ -13,14 +19,21 @@
  */
 
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { mkdir, rename, rm } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import * as yauzl from "yauzl";
+import {
+  isRuntimeZipEntry,
+  missingRuntimeFilesIn,
+  missingWhisperRuntimeFiles,
+  whisperRuntimeDir,
+  WHISPER_CLI_FILE,
+  WHISPER_RUNTIME_DIR
+} from "./whisper-runtime-files";
 
-export const WHISPER_RUNTIME_DIR = "whisper-cpp";
-export const WHISPER_CLI_FILE = "whisper-cli.exe";
+export { WHISPER_RUNTIME_DIR, WHISPER_CLI_FILE };
 
 /** CPU build, verified against the v1.9.2 release. */
 const RUNTIME_URL =
@@ -31,15 +44,18 @@ const RUNTIME_SHA256 =
 const RUNTIME_TIMEOUT_MS = 120_000;
 const RENAME_ATTEMPTS = 5;
 const RENAME_RETRY_DELAY_MS = 200;
+const RUNTIME_ZIP_BYTES = 8194445;
 
 export interface RuntimeDeps {
   readonly fetch: typeof fetch;
 }
 
 export interface RuntimeDownloader {
-  /** True when whisper-cli.exe exists. */
+  /** True when every file the CLI needs is present, not just the exe. */
   isInstalled: () => boolean;
-  /** Download and extract; resolves when whisper-cli.exe is in place. */
+  /** What the install is still missing; empty when it is complete. */
+  missingFiles: () => readonly string[];
+  /** Download and extract; resolves when the runtime is in place. */
   install: () => Promise<void>;
   /** Latest known bytes for progress. */
   bytesTotal: () => number;
@@ -51,7 +67,7 @@ export const createRuntimeDownloader = (
   runtimeRoot: string,
   deps: RuntimeDeps
 ): RuntimeDownloader => {
-  const cliPath = join(runtimeRoot, WHISPER_RUNTIME_DIR, WHISPER_CLI_FILE);
+  const targetDir = whisperRuntimeDir(runtimeRoot);
   const listeners = new Set<(received: number, total: number) => void>();
 
   const emit = (received: number, total: number): void => {
@@ -84,15 +100,68 @@ export const createRuntimeDownloader = (
     }
   };
 
-  return {
-    isInstalled: () => existsSync(cliPath),
-    bytesTotal: () => 8194445,
-    install: async () => {
-      if (existsSync(cliPath)) return;
+  /**
+   * Pull every runtime file out of the zip into `into`. yauzl reads the
+   * central directory. With lazyEntries the first entry is only emitted after
+   * an explicit readEntry(); without that initial call nothing is ever
+   * emitted, the zipfile never closes and the install hangs at 100 percent.
+   */
+  const extractRuntime = (zipPath: string, into: string): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      yauzl.open(
+        zipPath,
+        { lazyEntries: true },
+        (openError: Error | null, zipfile?: yauzl.ZipFile) => {
+          if (openError !== null || zipfile === undefined) {
+            reject(openError ?? new Error("could not open runtime zip"));
+            return;
+          }
+          zipfile.on("error", reject);
+          zipfile.on("close", () => {
+            resolve();
+          });
+          zipfile.on("entry", (entry: yauzl.Entry) => {
+            // Everything sits under a Release/ directory in the release zip,
+            // so entries are matched on the trailing name, not the full path.
+            if (!isRuntimeZipEntry(entry.fileName)) {
+              zipfile.readEntry();
+              return;
+            }
+            zipfile.openReadStream(
+              entry,
+              (readError: Error | null, readStream?: NodeJS.ReadableStream) => {
+                if (readError !== null || readStream === undefined) {
+                  reject(readError ?? new Error("could not open runtime entry"));
+                  return;
+                }
+                const name = entry.fileName.split(/[/\\]/).pop() ?? entry.fileName;
+                const out = createWriteStream(join(into, name));
+                readStream.on("error", reject);
+                out.on("error", reject);
+                out.on("close", () => {
+                  zipfile.readEntry();
+                });
+                readStream.pipe(out);
+              }
+            );
+          });
+          zipfile.readEntry();
+        }
+      );
+    });
 
-      const zipPath = join(runtimeRoot, WHISPER_RUNTIME_DIR, "whisper-bin-x64.zip");
-      const extractDir = join(runtimeRoot, WHISPER_RUNTIME_DIR, ".extract");
-      await mkdir(join(runtimeRoot, WHISPER_RUNTIME_DIR), { recursive: true });
+  return {
+    isInstalled: () => missingWhisperRuntimeFiles(runtimeRoot).length === 0,
+    missingFiles: () => missingWhisperRuntimeFiles(runtimeRoot),
+    bytesTotal: () => RUNTIME_ZIP_BYTES,
+    install: async () => {
+      // An exe-only directory left by an older build reads as not installed,
+      // so this repairs it instead of reporting success over a broken runtime.
+      if (missingWhisperRuntimeFiles(runtimeRoot).length === 0) return;
+
+      const zipPath = join(targetDir, "whisper-bin-x64.zip");
+      const extractDir = join(targetDir, ".extract");
+      await mkdir(targetDir, { recursive: true });
       // Clear anything a previous failed attempt left behind, so a retry never
       // appends to a truncated zip or trips over a stale extract.
       await rm(zipPath, { force: true });
@@ -107,7 +176,7 @@ export const createRuntimeDownloader = (
       }
 
       const headerTotal = Number(response.headers.get("content-length") ?? "0");
-      const total = headerTotal > 0 ? headerTotal : 8194445;
+      const total = headerTotal > 0 ? headerTotal : RUNTIME_ZIP_BYTES;
       let received = 0;
       const body = response.body;
 
@@ -145,54 +214,26 @@ export const createRuntimeDownloader = (
         throw new Error("whisper runtime download failed verification; retry.");
       }
 
-      // Extract only whisper-cli.exe. yauzl reads the central directory.
-      // With lazyEntries the first entry is only emitted after an explicit
-      // readEntry(); without that initial call nothing is ever emitted, the
-      // zipfile never closes and the install hangs at 100 percent.
-      const extracted = await new Promise<string>((resolve, reject) => {
-        yauzl.open(zipPath, { lazyEntries: true }, (openError: Error | null, zipfile?: yauzl.ZipFile) => {
-          if (openError !== null || zipfile === undefined) {
-            reject(openError ?? new Error("could not open runtime zip"));
-            return;
-          }
-          let extractedPath: string | null = null;
-          zipfile.on("error", reject);
-          zipfile.on("close", () => {
-            if (extractedPath === null) {
-              reject(new Error(`${WHISPER_CLI_FILE} was not found in the runtime zip.`));
-              return;
-            }
-            resolve(extractedPath);
-          });
-          zipfile.on("entry", (entry: yauzl.Entry) => {
-            // The binary sits under a Release/ directory in the release zip,
-            // so match on the trailing name, not the full path.
-            if (!entry.fileName.endsWith(WHISPER_CLI_FILE)) {
-              zipfile.readEntry();
-              return;
-            }
-            zipfile.openReadStream(entry, (readError: Error | null, readStream?: NodeJS.ReadableStream) => {
-              if (readError !== null || readStream === undefined) {
-                reject(readError ?? new Error("could not open runtime entry"));
-                return;
-              }
-              const target = join(extractDir, WHISPER_CLI_FILE);
-              const out = createWriteStream(target);
-              readStream.on("error", reject);
-              out.on("error", reject);
-              out.on("close", () => {
-                extractedPath = target;
-                zipfile.readEntry();
-              });
-              readStream.pipe(out);
-            });
-          });
-          zipfile.readEntry();
-        });
-      });
+      await extractRuntime(zipPath, extractDir);
 
-      // Move whisper-cli.exe into place and clean up.
-      await renameWithRetry(extracted, cliPath);
+      // Judge the staging area before publishing it. A zip that no longer
+      // carried a CPU backend would otherwise install an exe that starts and
+      // then aborts on the first decode, which is far harder to diagnose than
+      // a failed install.
+      const missing = missingRuntimeFilesIn(extractDir);
+      if (missing.length > 0) {
+        await rm(zipPath, { force: true });
+        await rm(extractDir, { recursive: true, force: true });
+        throw new Error(
+          `whisper runtime zip is missing ${missing.join(", ")}; retry the install.`
+        );
+      }
+
+      // Move the runtime into place and clean up. rename replaces an existing
+      // file on Windows, so this also overwrites a half-installed directory.
+      for (const name of await readdir(extractDir)) {
+        await renameWithRetry(join(extractDir, name), join(targetDir, name));
+      }
       await rm(zipPath, { force: true });
       await rm(extractDir, { recursive: true, force: true });
       emit(1, 1);

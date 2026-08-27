@@ -148,9 +148,20 @@ describe("model service", () => {
  * runtime must not re-download.
  */
 describe("ensureWhisperRuntime", () => {
+  // The whole runtime, not just the exe: whisper-cli.exe is dynamically
+  // linked, so an exe-only directory now counts as a broken install that
+  // ensureWhisperRuntime is expected to repair.
   const installCli = (runtimeRoot: string): void => {
     mkdirSync(join(runtimeRoot, "whisper-cpp"), { recursive: true });
-    writeFileSync(join(runtimeRoot, "whisper-cpp", "whisper-cli.exe"), "fake", "utf8");
+    for (const name of [
+      "whisper-cli.exe",
+      "whisper.dll",
+      "ggml.dll",
+      "ggml-base.dll",
+      "ggml-cpu-haswell.dll"
+    ]) {
+      writeFileSync(join(runtimeRoot, "whisper-cpp", name), "fake", "utf8");
+    }
   };
 
   it("does not fetch when the runtime is already installed", async () => {

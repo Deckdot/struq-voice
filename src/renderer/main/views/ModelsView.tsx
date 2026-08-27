@@ -190,6 +190,16 @@ export function ModelsView(): JSX.Element {
     totalBytes?: number;
     message?: string;
   }>({ state: "idle" });
+  const [gpu, setGpu] = useState<{
+    supported: boolean;
+    bytes: number;
+    install: {
+      state: "idle" | "downloading" | "done" | "error";
+      receivedBytes?: number;
+      totalBytes?: number;
+      message?: string;
+    };
+  }>({ supported: false, bytes: 0, install: { state: "idle" } });
   const [measuredRtf, setMeasuredRtf] = useState<Record<string, number>>({});
   const [tier, setTier] = useState<WhisperTier>("small");
   const [showAllTier, setShowAllTier] = useState(false);
@@ -208,10 +218,11 @@ export function ModelsView(): JSX.Element {
   const [specsOpen, setSpecsOpen] = useState(false);
 
   const refresh = (): void => {
-    void api.models.list().then(({ items, totalDiskUsed, whisperRuntime }) => {
+    void api.models.list().then(({ items, totalDiskUsed, whisperRuntime, whisperGpu }) => {
       setStatuses(items);
       setDiskUsed(totalDiskUsed);
       setRuntime(whisperRuntime);
+      setGpu(whisperGpu);
     });
     void api.metrics.measuredRtf().then(({ byEngine }) => {
       setMeasuredRtf(byEngine);
@@ -395,6 +406,13 @@ export function ModelsView(): JSX.Element {
   const runtimeProgress =
     runtimeDownloading && runtime.totalBytes !== undefined && runtime.totalBytes > 0
       ? Math.min(1, Math.max(0, (runtime.receivedBytes ?? 0) / runtime.totalBytes))
+      : null;
+
+  const gpuDownloading = gpu.install.state === "downloading";
+  const gpuDone = gpu.install.state === "done";
+  const gpuProgress =
+    gpuDownloading && gpu.install.totalBytes !== undefined && gpu.install.totalBytes > 0
+      ? Math.min(1, Math.max(0, (gpu.install.receivedBytes ?? 0) / gpu.install.totalBytes))
       : null;
 
   const { t } = useTranslation();
@@ -649,6 +667,67 @@ export function ModelsView(): JSX.Element {
                   />
                   {runtimeDownloading ? t("models.helper.installingBtn") : t("models.helper.installBtn")}
                 </Button>
+              </div>
+            </Card>
+          </section>
+        )}
+
+        {/*
+          Offered only on an NVIDIA machine, because the CUDA build changes
+          nothing anywhere else and it is a 670MB download. Whisper decodes on
+          the GPU as soon as it is installed; nothing else has to be chosen.
+        */}
+        {gpu.supported && (
+          <section>
+            <div className="mb-2 flex items-center gap-2">
+              <Icon icon="ph:graphics-card" className="h-5 w-5 text-text-muted" aria-hidden="true" />
+              <div>
+                <h2 className="font-display text-lg font-normal text-text">{t("models.gpu.title")}</h2>
+                <p className="mt-0.5 text-xs text-text-muted">{t("models.gpu.subtitle")}</p>
+              </div>
+            </div>
+            <Card>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-normal text-text">
+                    {gpuDone
+                      ? t("models.gpu.ready")
+                      : gpuDownloading
+                        ? t("models.gpu.installing")
+                        : gpu.install.state === "error"
+                          ? (gpu.install.message ?? t("models.gpu.failed"))
+                          : t("models.gpu.notInstalled", { size: formatBytes(gpu.bytes) })}
+                  </p>
+                  {gpuDownloading && gpuProgress !== null && (
+                    <ProgressBar
+                      value={gpuProgress}
+                      tone="accent"
+                      className="mt-2"
+                      label={t("models.gpu.installing")}
+                    />
+                  )}
+                </div>
+                {gpuDone ? (
+                  <Icon
+                    icon="ph:check-circle"
+                    className="h-5 w-5 shrink-0 text-accent"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={gpuDownloading}
+                    onClick={() => { void api.models.installGpuRuntime().then(refresh); }}
+                  >
+                    <Icon
+                      icon={gpuDownloading ? "ph:circle-notch" : "ph:download-simple"}
+                      className={`h-3.5 w-3.5 ${gpuDownloading ? "motion-safe:animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {gpuDownloading ? t("models.gpu.installingBtn") : t("models.gpu.installBtn")}
+                  </Button>
+                )}
               </div>
             </Card>
           </section>

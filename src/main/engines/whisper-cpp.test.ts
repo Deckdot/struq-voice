@@ -81,15 +81,84 @@ describe("whisper-cpp engine", () => {
     });
   });
 
-  it("reports download-model when only the binary exists", async () => {
+  it("reports download-model when the runtime is complete but the model is not", async () => {
     const { deps } = makeDeps({
-      exists: (path: string) => path.includes("whisper-cli.exe")
+      exists: (path: string) => path.includes("whisper-cpp")
     });
     const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     await expect(engine.readiness()).resolves.toMatchObject({
       ready: false,
       action: "download-model"
     });
+  });
+
+  /**
+   * whisper-cli.exe is dynamically linked. An install that dropped only the
+   * exe on disk passed the old readiness check, so the app said whisper was
+   * ready and then every capture died at spawn with a bare
+   * "Command failed: <path>".
+   */
+  it("is not ready when the exe is present but its DLLs are missing", async () => {
+    const { deps } = makeDeps({
+      exists: (path: string) => path.includes("whisper-cli.exe")
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    const readiness = await engine.readiness();
+    expect(readiness).toMatchObject({ ready: false, action: "install-runtime" });
+    expect(readiness.reason).toContain("incomplete");
+  });
+
+  it("is not ready when no ggml CPU backend sits beside the exe", async () => {
+    const { deps } = makeDeps({
+      exists: (path: string) => path.includes("whisper-cpp") && !path.includes("ggml-cpu")
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    await expect(engine.readiness()).resolves.toMatchObject({
+      ready: false,
+      action: "install-runtime"
+    });
+  });
+
+  it("blames the runtime, not the user, when Windows refuses to start the exe", async () => {
+    const { deps } = makeDeps({
+      exists: (path: string) => path.includes("whisper-cli.exe"),
+      execFile: () => {
+        // What promisify(execFile) rejects with for STATUS_DLL_NOT_FOUND: the
+        // command line as the message, an empty stderr, and the exit code.
+        const error = Object.assign(
+          new Error(`Command failed: ${runtimeRoot}\\whisper-cpp\\whisper-cli.exe -m ...`),
+          { code: 0xc0000135 | 0, stderr: "" }
+        );
+        return Promise.reject(error);
+      }
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    const outcome = await engine.transcribe(request());
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.error.message).toContain("Reinstall it in Settings");
+      expect(outcome.error.message).not.toContain("Command failed");
+    }
+  });
+
+  it("surfaces the last stderr line rather than the command line", async () => {
+    const { deps } = makeDeps({
+      execFile: () =>
+        Promise.reject(
+          Object.assign(new Error("Command failed: whisper-cli.exe -m C:\\a\\b.bin"), {
+            code: 1,
+            stderr: "whisper_init_from_file_with_params_no_state: failed to load model\n"
+          })
+        )
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    const outcome = await engine.transcribe(request());
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.error.message).toBe(
+        "whisper_init_from_file_with_params_no_state: failed to load model"
+      );
+    }
   });
 
   it("transcribes a capture and deletes the temp wav", async () => {
@@ -229,6 +298,79 @@ describe("whisper-cpp engine", () => {
 
     expect(longTimeout).toBeGreaterThan(shortTimeout);
     expect(longTimeout).toBeGreaterThan(300_000);
+  });
+});
+
+/**
+ * GPU selection. whisper-cli decodes on the CPU unless the CUDA backend and
+ * its libraries are beside it, and `--no-gpu` is what forces that. The engine
+ * decides per capture from what is on disk.
+ */
+describe("gpu selection", () => {
+  const CUDA_FILES = [
+    "ggml-cuda.dll",
+    "cudart64_12.dll",
+    "cublas64_12.dll",
+    "cublasLt64_12.dll"
+  ];
+  const withCuda = (path: string): boolean => path.includes("whisper-cpp");
+  const withoutCuda = (path: string): boolean =>
+    path.includes("whisper-cpp") && !CUDA_FILES.some((name) => path.endsWith(name));
+
+  /**
+   * The shared makeDeps pins detectCuda to "cpu" so the other suites get a
+   * stable command line. These tests are about that decision, so they leave
+   * it out and let the engine read the runtime directory itself.
+   */
+  const gpuDeps = (
+    exists: (path: string) => boolean
+  ): { deps: WhisperCppDeps; calls: { execs: Array<{ args: string[] }> } } => {
+    const calls = { execs: [] as Array<{ args: string[] }> };
+    const deps: WhisperCppDeps = {
+      exists,
+      writeFile: () => Promise.resolve(),
+      readFile: () => Promise.resolve(whisperJson([{ text: " hello" }])),
+      unlink: () => Promise.resolve(),
+      execFile: (_command: string, args: readonly string[]) => {
+        calls.execs.push({ args: [...args] });
+        return Promise.resolve({ stdout: "hello", stderr: "" });
+      }
+    };
+    return { deps, calls };
+  };
+
+  it("passes --no-gpu when only the CPU runtime is installed", async () => {
+    const { deps, calls } = gpuDeps(withoutCuda);
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    await engine.transcribe(request());
+    expect(calls.execs[0]?.args).toContain("--no-gpu");
+  });
+
+  it("lets whisper use the GPU once the CUDA runtime is installed", async () => {
+    const { deps, calls } = gpuDeps(withCuda);
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    await engine.transcribe(request());
+    expect(calls.execs[0]?.args).not.toContain("--no-gpu");
+  });
+
+  /**
+   * Installing the GPU runtime is something the user does with the app open.
+   * The probe used to be cached for the process lifetime, so every capture
+   * after the install would still have decoded on the CPU until a restart.
+   */
+  it("notices a GPU runtime installed after the first capture", async () => {
+    let cudaPresent = false;
+    const { deps, calls } = gpuDeps((path: string) =>
+      cudaPresent ? withCuda(path) : withoutCuda(path)
+    );
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    await engine.transcribe(request());
+    expect(calls.execs[0]?.args).toContain("--no-gpu");
+
+    cudaPresent = true;
+    calls.execs.length = 0;
+    await engine.transcribe(request());
+    expect(calls.execs[0]?.args).not.toContain("--no-gpu");
   });
 });
 

@@ -286,10 +286,23 @@ if (!gotLock) {
       }, 10_000);
     }
     const runtimeRoot = join(app.getPath("userData"), "runtimes");
+
+    // Hardware detection feeds the onboarding recommendation and decides
+    // whether Models offers the GPU runtime. It runs once, in the background,
+    // and never blocks boot: until it resolves the recommendation falls back
+    // to the balanced tier and the GPU offer stays hidden.
+    let hardware: HardwareProfile | null = null;
+    void detectHardware({ runtimeRoot }).then((profile) => {
+      hardware = profile;
+    });
+
     const models = createModelsService(
       join(app.getPath("userData"), "models"),
       runtimeRoot,
-      { fetch: netFetch }
+      {
+        fetch: netFetch,
+        hasNvidiaGpu: () => hardware?.gpuVendor === "nvidia"
+      }
     );
     const autostart = createAutostart();
 
@@ -361,14 +374,6 @@ if (!gotLock) {
           }
         });
     updaterController = updater;
-
-    // Hardware detection feeds the onboarding recommendation. It runs once,
-    // in the background, and never blocks boot: until it resolves the
-    // recommendation falls back to the balanced tier.
-    let hardware: HardwareProfile | null = null;
-    void detectHardware({ runtimeRoot }).then((profile) => {
-      hardware = profile;
-    });
 
     const modelsRoot = join(app.getPath("userData"), "models");
     const meetingsRoot = join(app.getPath("userData"), "meetings");

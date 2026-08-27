@@ -12,7 +12,7 @@ import { cpus, totalmem } from "node:os";
 import { app } from "electron";
 import type { GpuVendor, HardwareProfile } from "../../shared/hardware";
 import { UNKNOWN_HARDWARE, hardwareProfileSchema, normalizeMemGb } from "../../shared/hardware";
-import { hasCudaRuntime } from "../engines/whisper-cpp";
+import { hasCudaRuntime } from "../models/whisper-runtime-files";
 
 const BYTES_PER_GB = 1024 * 1024 * 1024;
 

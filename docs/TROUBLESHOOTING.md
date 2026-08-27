@@ -71,6 +71,42 @@ Ctrl+V, restore clipboard.
 - Escape cancels the current capture. Nothing is pasted and nothing is
   written to history on cancel.
 
+## Whisper fails with "Command failed:" and a path
+
+- Symptom: picking any whisper model returns `Command failed: C:\...\whisper-cli.exe -m ...`
+  with nothing after it. Parakeet and OpenRouter keep working.
+- Cause: the runtime directory holds `whisper-cli.exe` without the DLLs it
+  links against, so Windows refuses to start the process (0xC0000135,
+  STATUS_DLL_NOT_FOUND) and Node reports the command line as the error. A
+  runtime carrying those DLLs but no `ggml-cpu-*.dll` gets one step further
+  and aborts on `GGML_ASSERT(device) failed`, because ggml finds its CPU
+  backend by scanning that directory at runtime.
+- Fix: the runtime is judged as a set of files, not by the presence of the
+  exe, so an incomplete directory reads as not installed and the boot-time
+  install repairs it. Reinstall by hand from Settings > Models if it does not.
+- Check what is on disk: `%APPDATA%\struq-voice\runtimes\whisper-cpp` should
+  hold `whisper-cli.exe`, `whisper.dll`, `ggml.dll`, `ggml-base.dll` and at
+  least one `ggml-cpu-*.dll`.
+
+## Whisper is slow, or the GPU is not being used
+
+- Whisper decodes on the CPU until the CUDA runtime is installed. Models
+  shows a "GPU acceleration" card on NVIDIA machines; it is a 670MB download
+  and 1.1GB on disk, so nothing fetches it on its own.
+- The card is hidden entirely on AMD, Intel and unknown GPUs. The cuBLAS
+  build only helps NVIDIA hardware.
+- After installing, the next capture uses the GPU. No restart, and there is
+  no setting to switch: whisper uses the card whenever the backend loads.
+- To confirm, run whisper-cli by hand from
+  `%APPDATA%\struq-voice\runtimes\whisper-cpp` and look for
+  `load_backend: loaded CUDA backend` and `using CUDA0 backend` on stderr.
+- If it still says CPU, ggml could not initialise the card and fell back.
+  The shipped build carries kernels for sm_50 to sm_90; an RTX 50-series card
+  (sm_120) is outside that range. The fallback is silent by design, so a
+  missing driver looks the same as an unsupported card.
+- Parakeet is unaffected either way. It runs on the CPU through sherpa-onnx,
+  and it is the default engine.
+
 ## Downloading a model fails or stalls
 
 - Downloads are resumable across restarts and capped at three concurrent

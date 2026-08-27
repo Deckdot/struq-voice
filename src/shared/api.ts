@@ -84,6 +84,8 @@ export interface MainWindowApi {
     cancel: (request: { modelId: string }) => Promise<ModelsModelResult>;
     remove: (request: { modelId: string }) => Promise<ModelsModelResult>;
     installRuntime: () => Promise<ModelsModelResult>;
+    /** Swap the whisper runtime for the CUDA build. NVIDIA machines only. */
+    installGpuRuntime: () => Promise<ModelsModelResult>;
     import: (request: { modelId: string }) => Promise<{
       ok: boolean;
       message?: string;

@@ -52,7 +52,17 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
 - Every catalog file carries a real hash, vocabularies included, so a
   truncated `tokens.txt` cannot pass as installed and fail at first decode.
   A test rejects an all-zero placeholder anywhere in the catalog.
-- Whisper runtime zip download (sha256 verify, extract only `whisper-cli.exe`).
+- Whisper runtime zip download (sha256 verify, staged extract, atomic move).
+  The runtime is a set of files, not one binary: `whisper-cli.exe` is
+  dynamically linked and ggml loads its compute backend by scanning that
+  directory at runtime, so the installer takes the exe, `whisper.dll`,
+  `ggml*.dll` and every `ggml-cpu-*.dll`, and judges the install complete
+  only when all of them are there.
+- Optional CUDA runtime for whisper, offered in Models on NVIDIA machines
+  only. It swaps the CPU build for the v1.9.2 cuBLAS 12.4 build (670MB
+  download, 1.1GB on disk) and whisper decodes on the GPU from the next
+  capture, with no restart and no setting to choose. A card ggml cannot use
+  falls back to the CPU backend on its own.
 - Import an existing local model directory (copies then verifies).
 - Measured realtime factor per engine, computed from real History rows.
 - The Whisper model picker in Settings separates what is on this computer
@@ -250,6 +260,13 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   `nvidia-smi` or WMI and both can hang for seconds during boot. The CUDA
   runtime check is a file probe, so a card without the whisper.cpp CUDA
   build present is classified on its cores and memory alone.
+- The cuBLAS build we ship ships kernels for sm_50 to sm_90. An RTX 50-series
+  card (sm_120) has no matching kernel in it and decodes on the CPU, silently,
+  because ggml treats a backend it cannot initialise as one that is absent.
+  Nothing detects that and says so yet.
+- Only whisper is GPU accelerated. Parakeet runs through sherpa-onnx on the
+  CPU, and it is the default engine, so most users see no change from
+  installing the CUDA runtime unless they switch to whisper.
 - The onboarding "try it" step is the one part not covered by a unit test:
   it needs a real capture. Worth an e2e spec when the user wants one.
 

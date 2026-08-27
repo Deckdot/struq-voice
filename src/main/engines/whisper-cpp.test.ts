@@ -104,7 +104,7 @@ describe("whisper-cpp engine", () => {
     // The wav and the JSON side file whisper-cli writes next to it. Only the
     // wav used to be deleted, so every capture left a file in the temp dir.
     expect(calls.deletes).toContain(calls.writes[0]);
-    expect(calls.deletes).toContain(`${(calls.writes[0] ?? "").replace(/\.wav$/, "")}.json`);
+    expect(calls.deletes).toContain(`${calls.writes[0] ?? ""}.json`);
     expect(calls.execs[0]?.args).toContain("--output-json");
     expect(calls.execs[0]?.args).toContain("auto");
   });

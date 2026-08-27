@@ -55,6 +55,11 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
 - Whisper runtime zip download (sha256 verify, extract only `whisper-cli.exe`).
 - Import an existing local model directory (copies then verifies).
 - Measured realtime factor per engine, computed from real History rows.
+- The Whisper model picker in Settings separates what is on this computer
+  from what still has to be downloaded, and says so when the selected model
+  is not there. Listing all thirty builds identically made switching to one
+  that had never been downloaded look like a normal choice, and it failed on
+  the next capture instead.
 
 ### Paste and delivery
 - Target decision (our window focused -> renderer inserts, else clipboard +

@@ -230,6 +230,10 @@ export const pl: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.whisperModel.title": "Model Whisper",
   "settings.transcription.whisperModel.subtitle": "Większe modele są wolniejsze, ale lepiej radzą sobie z akcentami.",
   "settings.transcription.whisperModel.label": "Aktywny model",
+  "settings.transcription.whisperModel.installedGroup": "Na tym komputerze",
+  "settings.transcription.whisperModel.availableGroup": "Do pobrania",
+  "settings.transcription.whisperModel.notDownloaded":
+    "{model} nie ma jeszcze na tym komputerze. Pobierz go w sekcji Modele, zanim zaczniesz dyktować.",
   "settings.transcription.openrouter.title": "Klucz API OpenRouter",
   "settings.transcription.openrouter.subtitle": "Przechowywany w postaci zaszyfrowanej na tym komputerze.",
   "settings.transcription.openrouter.configured": "Klucz API skonfigurowany.",

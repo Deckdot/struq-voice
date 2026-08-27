@@ -289,6 +289,10 @@ export const en = {
   "settings.transcription.whisperModel.title": "Whisper model",
   "settings.transcription.whisperModel.subtitle": "Bigger models are slower but handle accents better.",
   "settings.transcription.whisperModel.label": "Active model",
+  "settings.transcription.whisperModel.installedGroup": "On this computer",
+  "settings.transcription.whisperModel.availableGroup": "Needs downloading",
+  "settings.transcription.whisperModel.notDownloaded":
+    "{model} is not on this computer yet. Download it under Models before dictating with it.",
   "settings.transcription.openrouter.title": "OpenRouter API key",
   "settings.transcription.openrouter.subtitle": "Stored encrypted on this computer.",
   "settings.transcription.openrouter.configured": "API key configured.",

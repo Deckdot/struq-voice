@@ -240,14 +240,16 @@ export const createWhisperCppEngine = (
     transcribe: (
       request: TranscribeRequest
     ): Promise<Result<TranscribeResult>> => {
-      const tempBase = join(
+      const tempWav = join(
         tmpdir(),
-        `struq-voice-whisper-${String(Date.now())}-${Math.random().toString(36).slice(2)}`
+        `struq-voice-whisper-${String(Date.now())}-${Math.random().toString(36).slice(2)}.wav`
       );
-      const tempWav = `${tempBase}.wav`;
-      // whisper-cli appends .json to --output-file. Nothing used to delete it,
-      // so every whisper capture left a file behind in the temp directory.
-      const tempJson = `${tempBase}.json`;
+      // --output-json writes next to the input, appending .json to the whole
+      // input path. Nothing used to delete it, so every whisper capture left
+      // a file behind in the temp directory. Taking the default rather than
+      // passing --output-file keeps this working on older runtimes, which is
+      // worth more here than a tidier name.
+      const tempJson = `${tempWav}.json`;
       const startedAt = Date.now();
       const modelId = currentModelId();
       return (async () => {
@@ -259,7 +261,6 @@ export const createWhisperCppEngine = (
             "-f", tempWav,
             "-t", "8",
             "--output-json",
-            "--output-file", tempBase,
             "--no-timestamps"
           ];
           if (request.language !== undefined) {

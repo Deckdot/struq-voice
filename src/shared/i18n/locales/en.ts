@@ -44,10 +44,6 @@ export const en = {
   "notification.updateReady.body": "Version {version} is verified and ready to install.",
 
   // Capture Overlay Window
-  "overlay.starting": "Starting...",
-  "overlay.listening": "Listening...",
-  "overlay.working": "Working on the transcript...",
-  "overlay.errorCopied": "Copied. Press Ctrl + V to paste.",
   "overlay.meetingStarting": "Starting meeting...",
   "overlay.meetingRecording": "Meeting recording",
   "overlay.meetingPaused": "Meeting paused",
@@ -293,6 +289,10 @@ export const en = {
   "settings.transcription.whisperModel.title": "Whisper model",
   "settings.transcription.whisperModel.subtitle": "Bigger models are slower but handle accents better.",
   "settings.transcription.whisperModel.label": "Active model",
+  "settings.transcription.whisperModel.installedGroup": "On this computer",
+  "settings.transcription.whisperModel.availableGroup": "Needs downloading",
+  "settings.transcription.whisperModel.notDownloaded":
+    "{model} is not on this computer yet. Download it under Models before dictating with it.",
   "settings.transcription.openrouter.title": "OpenRouter API key",
   "settings.transcription.openrouter.subtitle": "Stored encrypted on this computer.",
   "settings.transcription.openrouter.configured": "API key configured.",

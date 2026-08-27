@@ -127,7 +127,7 @@ idle ──arm──▶ arming ──ready──▶ listening ──stop──�
 
 - `cancel` is Escape, registered only for the duration of a capture.
 - Captures under `minCaptureMs` (350ms) are discarded silently.
-- A `maxCaptureMs` (300s) watchdog force-stops a stuck-key capture.
+- A `maxCaptureMs` (300s, raisable to 600s) watchdog force-stops a stuck-key capture.
 
 ## 6b. The meeting state machine
 

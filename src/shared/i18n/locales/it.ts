@@ -35,10 +35,6 @@ export const it: Partial<Record<MessageKey, unknown>> = {
   "notification.updateReady.title": "Aggiornamento di Struq Voice pronto",
   "notification.updateReady.body": "La versione {version} è verificata e pronta per l'installazione.",
 
-  "overlay.starting": "Avvio...",
-  "overlay.listening": "Ascolto...",
-  "overlay.working": "Elaborazione trascrizione...",
-  "overlay.errorCopied": "Copiato. Premi Ctrl + V per incollare.",
   "overlay.meetingStarting": "Avvio riunione...",
   "overlay.meetingRecording": "Riunione in registrazione",
   "overlay.meetingPaused": "Riunione in pausa",
@@ -234,6 +230,10 @@ export const it: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.whisperModel.title": "Modello Whisper",
   "settings.transcription.whisperModel.subtitle": "I modelli più grandi sono più lenti ma gestiscono meglio gli accenti.",
   "settings.transcription.whisperModel.label": "Modello attivo",
+  "settings.transcription.whisperModel.installedGroup": "Su questo computer",
+  "settings.transcription.whisperModel.availableGroup": "Da scaricare",
+  "settings.transcription.whisperModel.notDownloaded":
+    "{model} non è ancora su questo computer. Scaricalo in Modelli prima di dettare con esso.",
   "settings.transcription.openrouter.title": "Chiave API OpenRouter",
   "settings.transcription.openrouter.subtitle": "Memorizzata in modo crittografato su questo computer.",
   "settings.transcription.openrouter.configured": "Chiave API configurata.",

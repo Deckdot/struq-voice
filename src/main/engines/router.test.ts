@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Result } from "../../shared/result";
 import { ok } from "../../shared/result";
 import type { TranscribeRequest, TranscriptionEngine } from "./types";
@@ -121,6 +121,71 @@ describe("engine router", () => {
     const router = setup([makeEngine("a", "cloud", "error"), makeEngine("b", "local", "ok")]);
     const result = await router.transcribe(request(), "a", "b");
     expect(isOk(result)).toBe(true);
+  });
+
+  /**
+   * The regression that lost five minute dictations. The local budget was a
+   * fixed 20 seconds whatever the recording's length, so a decode that was
+   * merely long was aborted as if it had hung, and the transcript was gone.
+   */
+  describe("budgets scale with the length of the recording", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const slowEngine = (decodeMs: number): TranscriptionEngine => ({
+      ...makeEngine("slow", "local", "ok"),
+      transcribe: (req: TranscribeRequest) =>
+        new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            resolve(
+              ok({
+                text: "the whole five minutes",
+                language: null,
+                engineId: "slow",
+                modelId: "slow-model",
+                inferenceMs: decodeMs,
+                realtimeFactor: 0.1,
+                costUsd: null
+              })
+            );
+          }, decodeMs);
+          req.signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new Error("aborted"));
+          });
+        })
+    });
+
+    const runWith = async (durationMs: number, decodeMs: number) => {
+      vi.useFakeTimers();
+      const engine = slowEngine(decodeMs);
+      const router = createEngineRouter({
+        getEngine: () => engine,
+        cloudFallbackOptIn: () => false
+      });
+      const pending = router.transcribe(
+        { pcm: new Int16Array(8), durationMs },
+        "slow",
+        null
+      );
+      await vi.advanceTimersByTimeAsync(decodeMs + 1_000);
+      return pending;
+    };
+
+    it("lets a five minute capture decode for well past the old 20 seconds", async () => {
+      const result = await runWith(300_000, 90_000);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.result.text).toBe("the whole five minutes");
+      }
+    });
+
+    it("still gives up on an engine that is genuinely stuck", async () => {
+      const result = await runWith(300_000, 60 * 60_000);
+      expect(isOk(result)).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("TIMEOUT");
+    });
   });
 
   it("enforces the timeout by aborting the engine request", async () => {

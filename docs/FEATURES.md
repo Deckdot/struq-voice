@@ -55,18 +55,27 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
 - Whisper runtime zip download (sha256 verify, extract only `whisper-cli.exe`).
 - Import an existing local model directory (copies then verifies).
 - Measured realtime factor per engine, computed from real History rows.
+- The Whisper model picker in Settings separates what is on this computer
+  from what still has to be downloaded, and says so when the selected model
+  is not there. Listing all thirty builds identically made switching to one
+  that had never been downloaded look like a normal choice, and it failed on
+  the next capture instead.
 
 ### Paste and delivery
 - Target decision (our window focused -> renderer inserts, else clipboard +
   synthesized Ctrl+V).
 - `uIOhook.keyTap` primary (~2ms) with a PowerShell SendKeys fallback.
-- Optional clipboard save/restore with configurable delay. A clipboard
-  holding anything other than text (an image, a file selection) is never
-  overwritten: only text survives the restore round trip, so delivery falls
-  back to the manual path rather than destroying it.
-- The overlay reports the outcome honestly: a check mark only when the
-  transcript reached the target app, and "Copied. Press Ctrl + V" whenever
-  it reached the clipboard but not the field.
+- The clipboard write settles before the keystroke is synthesized, and any
+  modifier the user is still physically holding is released first. Both were
+  silent causes of a dictation that never landed.
+- Optional clipboard save/restore with configurable delay. Text and images
+  both round trip, so delivering a transcript does not cost the user a copied
+  screenshot. A format that cannot be restored (a file selection) is still
+  written over: losing the dictation is the worse trade, and refusing to
+  write used to lose it while reporting success.
+- The overlay reports the outcome honestly, in marks rather than words: a
+  check when the transcript reached the target app, a clipboard glyph when it
+  reached the clipboard but not the field.
 
 ### Data
 - History: better-sqlite3 + Drizzle + FTS5 search, virtualized reader,
@@ -199,7 +208,9 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   processing line during transcribing, so the user sees the audio
   being worked on without a generic spinner. Listening uses a green
   animated bouncing-ball mark and waveform. Delivery resolves to a drawn
-  check only.
+  check only. The pill carries no status copy at all: it sits over whatever
+  the user is working in, for under a second, where instructions read as
+  noise rather than help. Only an error names its cause.
 - Theme is System, Light, or Dark. System follows the Windows setting
   live. Both themes are designed: light uses warm porcelain and evergreen,
   while dark uses opaque graphite surfaces and terracotta emphasis. Verdigris

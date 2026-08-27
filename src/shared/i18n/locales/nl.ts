@@ -36,10 +36,6 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "notification.updateReady.title": "Struq Voice update gereed",
   "notification.updateReady.body": "Versie {version} is geverifieerd en gereed om te installeren.",
 
-  "overlay.starting": "Starten...",
-  "overlay.listening": "Luisteren...",
-  "overlay.working": "Transcriptie verwerken...",
-  "overlay.errorCopied": "Gekopieerd. Druk op Ctrl + V om te plakken.",
   "overlay.meetingStarting": "Vergadering starten...",
   "overlay.meetingRecording": "Vergadering wordt opgenomen",
   "overlay.meetingPaused": "Vergadering gepauzeerd",
@@ -256,6 +252,10 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.transcription.whisperModel.subtitle":
     "Grotere modellen zijn trager maar verwerken accenten beter.",
   "settings.transcription.whisperModel.label": "Actief model",
+  "settings.transcription.whisperModel.installedGroup": "Op deze computer",
+  "settings.transcription.whisperModel.availableGroup": "Moet nog gedownload worden",
+  "settings.transcription.whisperModel.notDownloaded":
+    "{model} staat nog niet op deze computer. Download het onder Modellen voordat je ermee dicteert.",
   "settings.transcription.openrouter.title": "OpenRouter API-sleutel",
   "settings.transcription.openrouter.subtitle": "Gecodeerd opgeslagen op deze computer.",
   "settings.transcription.openrouter.configured": "API-sleutel ingesteld.",

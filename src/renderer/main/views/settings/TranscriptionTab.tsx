@@ -6,7 +6,7 @@ import type { Settings } from "../../../../shared/settings";
 import { SPEECH_LANGUAGES } from "../../../../shared/settings";
 import { ENGINE_OPTIONS } from "../../../../shared/engines";
 import type { EngineOption } from "../../../../shared/engines";
-import { MODEL_CATALOG } from "../../../../shared/models";
+import { findModel, MODEL_CATALOG } from "../../../../shared/models";
 import { Button, Card, Field, RadioGroup, Select, SettingsGroup, SettingsRow, TextInput, formatBytes } from "../../components/ui";
 import type { RadioOption } from "../../components/ui";
 
@@ -32,6 +32,9 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
   const [keyEditing, setKeyEditing] = useState(false);
   const [keyMessage, setKeyMessage] = useState<string | null>(null);
   const [savePending, setSavePending] = useState(false);
+  const [installedModelIds, setInstalledModelIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
 
   useEffect(() => {
     void api.openRouterKey.status().then((status) => {
@@ -39,6 +42,20 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
       setKeyStored(status.stored);
     });
   }, [api, keyEditing]);
+
+  /**
+   * Which models are actually on disk. The picker used to list all thirty
+   * whisper builds identically, so choosing one that had never been
+   * downloaded looked like a normal switch and then failed on the next
+   * capture with "model is not downloaded".
+   */
+  useEffect(() => {
+    void api.models.list().then(({ items }) => {
+      setInstalledModelIds(
+        new Set(items.filter((item) => item.installed).map((item) => item.model.id))
+      );
+    });
+  }, [api]);
 
   const saveKey = (): void => {
     const trimmed = keyInput.trim();
@@ -99,6 +116,16 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
   const cloudEngines = ENGINE_OPTIONS.filter((option) => option.kind === "cloud");
   const localEngines = ENGINE_OPTIONS.filter((option) => option.kind === "local");
   const isCloud = settings.engine.primary === "openrouter";
+  const installedWhisper = WHISPER_MODELS.filter((model) =>
+    installedModelIds.has(model.id)
+  );
+  const downloadableWhisper = WHISPER_MODELS.filter(
+    (model) => !installedModelIds.has(model.id)
+  );
+  // Only once the list has actually arrived: an empty set at first paint is
+  // "not loaded yet", not "nothing is installed".
+  const whisperNeedsDownload =
+    installedModelIds.size > 0 && !installedModelIds.has(settings.whisperModelId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -178,15 +205,38 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
                     update({ whisperModelId: event.target.value });
                   }}
                 >
-                  {WHISPER_MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} ({formatBytes(model.bytes)})
-                    </option>
-                  ))}
+                  <optgroup label={t("settings.transcription.whisperModel.installedGroup")}>
+                    {installedWhisper.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} ({formatBytes(model.bytes)})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label={t("settings.transcription.whisperModel.availableGroup")}>
+                    {downloadableWhisper.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} ({formatBytes(model.bytes)})
+                      </option>
+                    ))}
+                  </optgroup>
                 </Select>
               </div>
             }
           />
+          {whisperNeedsDownload && (
+            <div className="flex items-start gap-2.5 border-t border-border px-4 py-3">
+              <Icon
+                icon="ph:warning"
+                className="mt-0.5 h-4 w-4 shrink-0 text-warning"
+                aria-hidden="true"
+              />
+              <p className="min-w-0 flex-1 text-xs text-text-secondary">
+                {t("settings.transcription.whisperModel.notDownloaded", {
+                  model: findModel(settings.whisperModelId)?.name ?? settings.whisperModelId
+                })}
+              </p>
+            </div>
+          )}
         </SettingsGroup>
       )}
 

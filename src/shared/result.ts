@@ -8,7 +8,16 @@ export interface VoiceError {
   readonly message: string;
 }
 
-export type VoiceErrorCode = "UNKNOWN" | "INVALID_REQUEST" | "APP_NOT_READY";
+/**
+ * TIMEOUT is separate from UNKNOWN because it is the one failure the user can
+ * act on without knowing anything about engines: the decode ran out of budget
+ * rather than breaking.
+ */
+export type VoiceErrorCode =
+  | "UNKNOWN"
+  | "INVALID_REQUEST"
+  | "APP_NOT_READY"
+  | "TIMEOUT";
 
 export type Result<TValue> =
   | {

@@ -2,9 +2,16 @@
  * OpenRouter STT engine, ported from StruqADE voice-service.ts:199-365 and
  * adapted to plan section 5.5: OpenAI-compatible transcriptions endpoint,
  * openai/whisper-large-v3 primary with openai/whisper-1 retry on retryable
- * statuses, 25MB cap enforced up front, cost reported per transcription.
+ * statuses, cost reported per transcription.
+ *
+ * Length is not a limit here. The endpoint caps the size of one request, not
+ * the length of a dictation, so a recording past that size is cut into pieces
+ * at its own pauses and sent as several requests whose transcripts are joined
+ * back together. The old hard refusal above sixty seconds was ours, not the
+ * provider's, and it turned any real dictation into an error message.
  */
 
+import { DEFAULT_CHUNK_PLAN, planChunks } from "../audio/chunking";
 import { buildWav } from "../audio/wav";
 import type { Result } from "../../shared/result";
 import { fail, ok } from "../../shared/result";
@@ -18,8 +25,15 @@ import type {
 const OPENROUTER_STT_URL = "https://openrouter.ai/api/v1/audio/transcriptions";
 const PRIMARY_MODEL = "openai/whisper-large-v3";
 const FALLBACK_MODEL = "openai/whisper-1";
+/** The provider's own per-request ceiling. */
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
-const MAX_AUDIO_SECONDS = 60;
+const SAMPLE_RATE = 16_000;
+/**
+ * 16kHz mono Int16 is 32kB per second, so 25MB is roughly thirteen minutes.
+ * Chunks are planned well under that: a smaller upload fails faster, retries
+ * cheaper, and leaves headroom for the base64 the request body carries.
+ */
+const CHUNK_PLAN = DEFAULT_CHUNK_PLAN;
 
 const isRetryable = (status: number): boolean =>
   [408, 409, 429, 500, 502, 503, 504].includes(status);
@@ -81,6 +95,13 @@ const callOpenRouter = async (
   return (await response.json()) as OpenRouterResponse;
 };
 
+/** Matches what `fetch` throws on an aborted request, so one branch reads both. */
+const abortError = (): Error => {
+  const error = new Error("Transcription was cancelled.");
+  error.name = "AbortError";
+  return error;
+};
+
 class OpenRouterError extends Error {
   constructor(
     message: string,
@@ -90,32 +111,54 @@ class OpenRouterError extends Error {
   }
 }
 
-const toResult = (
-  payload: OpenRouterResponse,
-  engineId: string,
-  modelId: string,
-  fallbackUsed: boolean,
-  durationMs: number,
+interface ChunkOutcome {
+  readonly text: string;
+  readonly language: string | null;
+  readonly modelId: string;
+  readonly costUsd: number | null;
+}
+
+/**
+ * One request. The retryable-status retry with the smaller model stays per
+ * chunk rather than per recording: a 429 on the fourth chunk of six should
+ * cost that chunk a retry, not re-upload everything that already succeeded.
+ */
+const transcribeChunk = async (
+  apiKey: string,
+  pcm: Int16Array,
   language: string | undefined,
-  startedAt: number
-): Result<TranscribeResult> => {
-  const text = payload.text?.trim() ?? "";
-  if (text.length === 0) {
-    return fail({
-      code: "UNKNOWN",
-      message: "Transcription returned empty text. Check your audio and try again."
-    });
+  signal: AbortSignal
+): Promise<ChunkOutcome> => {
+  const wav = buildWav(pcm, SAMPLE_RATE);
+  if (wav.byteLength > MAX_AUDIO_BYTES) {
+    // The chunk plan keeps every request an order of magnitude under this, so
+    // reaching it means the plan and the provider limit have drifted apart.
+    throw new OpenRouterError(
+      "This part of the recording is too large for OpenRouter to accept.",
+      413
+    );
   }
-  const inferenceMs = Date.now() - startedAt;
-  return ok({
-    text,
+  const read = (payload: OpenRouterResponse, modelId: string): ChunkOutcome => ({
+    text: payload.text?.trim() ?? "",
     language: payload.detected_language ?? payload.language ?? language ?? null,
-    engineId,
     modelId,
-    inferenceMs,
-    realtimeFactor: durationMs > 0 ? inferenceMs / durationMs : 0,
     costUsd: payload.usage?.cost ?? null
   });
+
+  try {
+    return read(
+      await callOpenRouter(apiKey, PRIMARY_MODEL, wav, language, signal),
+      PRIMARY_MODEL
+    );
+  } catch (primaryError) {
+    if (primaryError instanceof OpenRouterError && isRetryable(primaryError.status)) {
+      return read(
+        await callOpenRouter(apiKey, FALLBACK_MODEL, wav, language, signal),
+        FALLBACK_MODEL
+      );
+    }
+    throw primaryError;
+  }
 };
 
 export const createOpenRouterEngine = (
@@ -150,73 +193,74 @@ export const createOpenRouterEngine = (
         });
       }
 
-      if (request.pcm.byteLength > MAX_AUDIO_BYTES) {
+      const chunks = planChunks(request.pcm, {
+        sampleRate: SAMPLE_RATE,
+        ...CHUNK_PLAN
+      });
+      if (chunks.length === 0) {
         return fail({
           code: "INVALID_REQUEST",
-          message:
-            "This recording exceeds the 25MB OpenRouter limit. Record a shorter take."
-        });
-      }
-      if (request.durationMs > MAX_AUDIO_SECONDS * 1000) {
-        return fail({
-          code: "INVALID_REQUEST",
-          message:
-            "This recording exceeds the 60 second OpenRouter limit. Record a shorter take."
+          message: "There is no audio to transcribe."
         });
       }
 
-      const wav = buildWav(request.pcm, 16_000);
       const startedAt = Date.now();
+      const parts: string[] = [];
+      let language: string | null = null;
+      let costUsd: number | null = null;
+      let modelId = PRIMARY_MODEL;
+      let failure: unknown = null;
 
-      try {
-        const payload = await callOpenRouter(
-          apiKey,
-          PRIMARY_MODEL,
-          wav,
-          request.language,
-          request.signal
-        );
-        return toResult(
-          payload,
-          OPENROUTER_ENGINE_ID,
-          PRIMARY_MODEL,
-          false,
-          request.durationMs,
-          request.language,
-          startedAt
-        );
-      } catch (primaryError) {
-        // Retry with the fallback model on retryable failures.
-        if (primaryError instanceof OpenRouterError && isRetryable(primaryError.status)) {
-          try {
-            const fallbackPayload = await callOpenRouter(
-              apiKey,
-              FALLBACK_MODEL,
-              wav,
-              request.language,
-              request.signal
-            );
-            return toResult(
-              fallbackPayload,
-              OPENROUTER_ENGINE_ID,
-              FALLBACK_MODEL,
-              true,
-              request.durationMs,
-              request.language,
-              startedAt
-            );
-          } catch (fallbackError) {
-            return fail({
-              code: "UNKNOWN",
-              message: humaniseError(fallbackError)
-            });
-          }
+      for (const chunk of chunks) {
+        if (request.signal.aborted) {
+          failure = abortError();
+          break;
         }
-        return fail({
-          code: "UNKNOWN",
-          message: humaniseError(primaryError)
-        });
+        try {
+          const outcome = await transcribeChunk(
+            apiKey,
+            request.pcm.subarray(chunk.start, chunk.end),
+            request.language,
+            request.signal
+          );
+          if (outcome.text.length > 0) parts.push(outcome.text);
+          language ??= outcome.language;
+          if (outcome.costUsd !== null) costUsd = (costUsd ?? 0) + outcome.costUsd;
+          modelId = outcome.modelId;
+        } catch (error) {
+          failure = error;
+          break;
+        }
       }
+
+      // A chunk that fails partway through a long recording used to discard
+      // every chunk that had already come back. Four minutes of a five minute
+      // dictation is worth far more than an error message, so what did arrive
+      // is delivered and only a total loss is reported as a failure.
+      const text = parts.join(" ").trim();
+      if (text.length === 0) {
+        return fail(
+          failure !== null
+            ? { code: "UNKNOWN", message: humaniseError(failure) }
+            : {
+                code: "UNKNOWN",
+                message:
+                  "Transcription returned empty text. Check your audio and try again."
+              }
+        );
+      }
+
+      const inferenceMs = Date.now() - startedAt;
+      return ok({
+        text,
+        language,
+        engineId: OPENROUTER_ENGINE_ID,
+        modelId,
+        inferenceMs,
+        realtimeFactor:
+          request.durationMs > 0 ? inferenceMs / request.durationMs : 0,
+        costUsd
+      });
     },
     dispose: async (): Promise<void> => {}
   };

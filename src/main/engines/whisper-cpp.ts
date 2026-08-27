@@ -8,10 +8,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { writeFile, unlink } from "node:fs/promises";
+import { readFile, writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findModel } from "../../shared/models";
+import { transcribeTimeoutMs } from "./timeouts";
 import type { Result, VoiceError, VoiceErrorCode } from "../../shared/result";
 import { fail, ok } from "../../shared/result";
 import type {
@@ -27,7 +28,6 @@ const DEFAULT_MODEL_ID = "whisper-large-v3-turbo-q5_0";
 const DEFAULT_MODEL_FILE = "ggml-large-v3-turbo-q5_0.bin";
 const CUDA_DLL = "cudart64_13.dll";
 const SAMPLE_RATE = 16_000;
-const EXEC_TIMEOUT_MS = 60_000;
 
 const NOT_INSTALLED_MESSAGE =
   "Whisper runtime is not installed. Download it in Settings > Models.";
@@ -45,6 +45,7 @@ export interface WhisperCppDeps {
     opts: object
   ) => Promise<ExecFileResult>;
   readonly writeFile?: (path: string, data: Uint8Array) => Promise<void>;
+  readonly readFile?: (path: string) => Promise<string>;
   readonly unlink?: (path: string) => Promise<void>;
   readonly exists?: (path: string) => boolean;
   readonly detectCuda?: () => Promise<"cuda" | "cpu">;
@@ -105,27 +106,54 @@ const buildWav = (pcm: Int16Array): Buffer => {
   return buffer;
 };
 
-/** Extract the transcript from whisper-cli --output-json stdout. */
-const parseTranscript = (stdout: string): string => {
+/**
+ * Whisper labels what it hears but cannot transcribe: `[BLANK_AUDIO]` for a
+ * silent stretch, `[MUSIC]`, `*laughs*`, and parenthesised room noise. Those
+ * are notes about the recording, not words the user said, and pasting them
+ * into a document is the single most visible whisper glitch. Only a
+ * parenthesised group that is the whole of what a segment says is dropped,
+ * because parentheses do occur in real dictation and bracket marks do not.
+ */
+const stripNonSpeech = (text: string): string =>
+  text
+    .replace(/\[[^\]\n]{0,60}\]/g, " ")
+    .replace(/\*[^*\n]{0,60}\*/g, " ")
+    .replace(/^\s*\([^)\n]{0,60}\)\s*$/gm, " ")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/\s*\n\s*/g, " ")
+    .trim();
+
+interface WhisperJson {
+  readonly result?: { readonly language?: string };
+  readonly transcription?: ReadonlyArray<{ readonly text?: string }>;
+}
+
+/**
+ * whisper-cli's `--output-json` file, which is the only place the run reports
+ * the language it actually decoded in. Reading the transcript from stdout
+ * instead meant history and post-processing believed every whisper capture
+ * was in whatever language the settings named, and English whenever that was
+ * "auto".
+ */
+const parseWhisperJson = (
+  raw: string
+): { text: string; language: string | null } | null => {
   try {
-    const payload = JSON.parse(stdout) as {
-      text?: string;
-      segments?: Array<{ text?: string }>;
-    };
-    if (typeof payload.text === "string" && payload.text.length > 0) {
-      return payload.text;
-    }
-    if (Array.isArray(payload.segments)) {
-      return payload.segments
-        .map((segment) => segment.text ?? "")
-        .join(" ")
-        .trim();
-    }
+    const payload = JSON.parse(raw) as WhisperJson;
+    const segments = payload.transcription;
+    if (segments === undefined) return null;
+    const text = stripNonSpeech(
+      segments.map((segment) => segment.text ?? "").join("")
+    );
+    const language = payload.result?.language ?? null;
+    return { text, language: language !== null && language.length > 0 ? language : null };
   } catch {
-    // Fall through: the output was not the expected JSON shape.
+    return null;
   }
-  return stdout.trim();
 };
+
+/** Last resort when the JSON side file is missing or unreadable. */
+const parseTranscript = (stdout: string): string => stripNonSpeech(stdout);
 
 /**
  * Whether the whisper.cpp CUDA runtime sits next to whisper-cli.exe. The
@@ -146,6 +174,24 @@ export const createWhisperCppEngine = (
   const writeAudio = options.deps?.writeFile ?? writeFile;
   const removeFile = options.deps?.unlink ?? unlink;
   const fileExists = options.deps?.exists ?? existsSync;
+  const readOutput =
+    options.deps?.readFile ?? ((path: string) => readFile(path, "utf8"));
+
+  /**
+   * The JSON side file, when the run produced one. A missing or malformed
+   * file is not a failure: stdout still carries the transcript, so the caller
+   * falls back to it rather than losing a decode that actually succeeded.
+   */
+  const readJsonOutput = async (
+    path: string
+  ): Promise<{ text: string; language: string | null } | null> => {
+    try {
+      const parsed = parseWhisperJson(await readOutput(path));
+      return parsed !== null && parsed.text.length > 0 ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
 
   const binaryPath = join(options.runtimeRoot, "whisper-cpp", "whisper-cli.exe");
 
@@ -194,10 +240,14 @@ export const createWhisperCppEngine = (
     transcribe: (
       request: TranscribeRequest
     ): Promise<Result<TranscribeResult>> => {
-      const tempWav = join(
+      const tempBase = join(
         tmpdir(),
-        `struq-voice-whisper-${String(Date.now())}-${Math.random().toString(36).slice(2)}.wav`
+        `struq-voice-whisper-${String(Date.now())}-${Math.random().toString(36).slice(2)}`
       );
+      const tempWav = `${tempBase}.wav`;
+      // whisper-cli appends .json to --output-file. Nothing used to delete it,
+      // so every whisper capture left a file behind in the temp directory.
+      const tempJson = `${tempBase}.json`;
       const startedAt = Date.now();
       const modelId = currentModelId();
       return (async () => {
@@ -209,6 +259,7 @@ export const createWhisperCppEngine = (
             "-f", tempWav,
             "-t", "8",
             "--output-json",
+            "--output-file", tempBase,
             "--no-timestamps"
           ];
           if (request.language !== undefined) {
@@ -222,16 +273,20 @@ export const createWhisperCppEngine = (
           }
 
           const { stdout } = await exec(binaryPath, args, {
-            timeout: EXEC_TIMEOUT_MS,
+            // The sidecar must outlive the router's budget rather than kill
+            // itself first: a fixed 60s here cut every long capture short
+            // whatever the router allowed. Both now scale with the audio.
+            timeout: transcribeTimeoutMs("local", request.durationMs) + 5_000,
             windowsHide: true,
-            // The router aborts at 20s; without this the sidecar runs on to
-            // its own 60s timeout and lingers as an orphaned GPU process.
+            // Without this the sidecar runs on after the router gives up and
+            // lingers as an orphaned GPU process.
             signal: request.signal
           });
           const inferenceMs = Date.now() - startedAt;
+          const parsed = await readJsonOutput(tempJson);
           return ok({
-            text: parseTranscript(stdout),
-            language: request.language ?? null,
+            text: parsed?.text ?? parseTranscript(stdout),
+            language: parsed?.language ?? request.language ?? null,
             engineId: WHISPER_CPP_ENGINE_ID,
             modelId,
             inferenceMs,
@@ -243,7 +298,10 @@ export const createWhisperCppEngine = (
             error instanceof Error ? error.message : String(error);
           return fail(whisperFailure(message));
         } finally {
-          await removeFile(tempWav).catch(() => {});
+          await Promise.all([
+            removeFile(tempWav).catch(() => undefined),
+            removeFile(tempJson).catch(() => undefined)
+          ]);
         }
       })();
     },

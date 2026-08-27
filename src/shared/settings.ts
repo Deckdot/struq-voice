@@ -115,8 +115,14 @@ export const settingsSchema = z.object({
   speechLanguage: z.string().default("auto"),
   /** Captures shorter than this (ms) are discarded silently. */
   minCaptureMs: z.number().int().min(100).max(5000).default(350),
-  /** Force-stop a capture that ran this long (ms). Defaults to 5 minutes (300,000 ms). */
-  maxCaptureMs: z.number().int().min(5000).max(600000).default(300_000),
+  /**
+   * Force-stop a capture that ran this long (ms). A stuck-key watchdog, not a
+   * length limit on dictation: raise it to 600,000 in Settings for long-form
+   * takes. The default stays at five minutes because the recorder worklet
+   * preallocates the whole window, and 10 minutes of 16kHz float samples is
+   * 38MB held for a capability most captures never reach.
+   */
+  maxCaptureMs: z.number().int().min(5000).max(600_000).default(300_000),
   /** Pre-roll: audio kept from before the key was pressed (ms). */
   prerollMs: z.number().int().min(0).max(1000).default(250),
   /** Insert completed dictation into the active application. */

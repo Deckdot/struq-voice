@@ -17,6 +17,12 @@ const request = (): { pcm: Int16Array; durationMs: number; signal: AbortSignal }
   signal: new AbortController().signal
 });
 
+/** The shape whisper-cli writes to `<output-file>.json`. */
+const whisperJson = (
+  segments: ReadonlyArray<{ text: string }>,
+  language = "en"
+): string => JSON.stringify({ result: { language }, transcription: segments });
+
 const makeDeps = (
   overrides: Partial<WhisperCppDeps> = {}
 ): {
@@ -30,6 +36,10 @@ const makeDeps = (
       calls.writes.push(path);
       await Promise.resolve();
     },
+    readFile: async () => {
+      await Promise.resolve();
+      return whisperJson([{ text: " hello world" }]);
+    },
     unlink: async (path: string) => {
       calls.deletes.push(path);
       await Promise.resolve();
@@ -37,7 +47,7 @@ const makeDeps = (
     execFile: async (_command: string, args: readonly string[]) => {
       calls.execs.push({ args: [...args] });
       await Promise.resolve();
-      return { stdout: JSON.stringify({ text: "hello world" }), stderr: "" };
+      return { stdout: "hello world", stderr: "" };
     },
     detectCuda: async () => {
       await Promise.resolve();
@@ -91,10 +101,47 @@ describe("whisper-cpp engine", () => {
     expect(outcome.value.text).toBe("hello world");
     expect(outcome.value.engineId).toBe(WHISPER_CPP_ENGINE_ID);
     expect(calls.writes).toHaveLength(1);
-    expect(calls.deletes).toHaveLength(1);
-    expect(calls.deletes[0]).toBe(calls.writes[0]);
+    // The wav and the JSON side file whisper-cli writes next to it. Only the
+    // wav used to be deleted, so every capture left a file in the temp dir.
+    expect(calls.deletes).toContain(calls.writes[0]);
+    expect(calls.deletes).toContain(`${(calls.writes[0] ?? "").replace(/\.wav$/, "")}.json`);
     expect(calls.execs[0]?.args).toContain("--output-json");
     expect(calls.execs[0]?.args).toContain("auto");
+  });
+
+  it("reports the language whisper actually decoded, not the requested one", async () => {
+    const { deps } = makeDeps({
+      readFile: async () => {
+        await Promise.resolve();
+        return whisperJson([{ text: " goedemorgen" }], "nl");
+      }
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    const outcome = await engine.transcribe(request());
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.value.language).toBe("nl");
+      expect(outcome.value.text).toBe("goedemorgen");
+    }
+  });
+
+  it("drops the non-speech markers whisper writes for silence and noise", async () => {
+    const { deps } = makeDeps({
+      readFile: async () => {
+        await Promise.resolve();
+        return whisperJson([
+          { text: " [BLANK_AUDIO]" },
+          { text: " Send the invoice today." },
+          { text: " *keyboard clicking*" }
+        ]);
+      }
+    });
+    const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
+    const outcome = await engine.transcribe(request());
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.value.text).toBe("Send the invoice today.");
+    }
   });
 
   it("passes the request language instead of auto", async () => {
@@ -119,16 +166,15 @@ describe("whisper-cpp engine", () => {
     expect(outcome.ok).toBe(false);
   });
 
-  it("falls back to segment text when the top-level text key is absent", async () => {
+  it("falls back to stdout when the json side file is unreadable", async () => {
     const { deps } = makeDeps({
+      readFile: async () => {
+        await Promise.resolve();
+        throw new Error("ENOENT");
+      },
       execFile: async () => {
         await Promise.resolve();
-        return {
-          stdout: JSON.stringify({
-            segments: [{ text: "first" }, { text: "second" }]
-          }),
-          stderr: ""
-        };
+        return { stdout: "first second\n", stderr: "" };
       }
     });
     const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
@@ -139,7 +185,7 @@ describe("whisper-cpp engine", () => {
     }
   });
 
-  it("still cleans up the temp wav when transcription fails", async () => {
+  it("still cleans up the temp files when transcription fails", async () => {
     const { deps, calls } = makeDeps({
       execFile: async () => {
         await Promise.resolve();
@@ -148,7 +194,41 @@ describe("whisper-cpp engine", () => {
     });
     const engine = createWhisperCppEngine({ runtimeRoot, modelsRoot, deps });
     await engine.transcribe(request());
-    expect(calls.deletes).toHaveLength(1);
+    expect(calls.deletes).toHaveLength(2);
+  });
+
+  /**
+   * The sidecar used to kill itself at a fixed sixty seconds whatever the
+   * router allowed, so a long capture died inside whisper before the router's
+   * budget was anywhere near spent.
+   */
+  it("gives the sidecar a budget that grows with the recording", async () => {
+    let shortTimeout = 0;
+    let longTimeout = 0;
+    const capture = (into: (ms: number) => void): Partial<WhisperCppDeps> => ({
+      execFile: async (_command: string, _args: readonly string[], opts: object) => {
+        into((opts as { timeout?: number }).timeout ?? 0);
+        await Promise.resolve();
+        return { stdout: "ok", stderr: "" };
+      }
+    });
+
+    const shortEngine = createWhisperCppEngine({
+      runtimeRoot,
+      modelsRoot,
+      deps: makeDeps(capture((ms) => (shortTimeout = ms))).deps
+    });
+    await shortEngine.transcribe({ ...request(), durationMs: 2_000 });
+
+    const longEngine = createWhisperCppEngine({
+      runtimeRoot,
+      modelsRoot,
+      deps: makeDeps(capture((ms) => (longTimeout = ms))).deps
+    });
+    await longEngine.transcribe({ ...request(), durationMs: 300_000 });
+
+    expect(longTimeout).toBeGreaterThan(shortTimeout);
+    expect(longTimeout).toBeGreaterThan(300_000);
   });
 });
 

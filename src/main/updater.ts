@@ -211,6 +211,8 @@ export interface UpdaterOptions {
   readonly isBusy?: () => boolean;
   /** Fires once when a verified update becomes ready, for the notification. */
   readonly onReady?: (version: string) => void;
+  /** Flush app-owned resources before electron-updater starts the installer. */
+  readonly beforeInstall?: () => Promise<void>;
   /**
    * Re-check the feed on this interval while the app runs. Only honoured on a
    * packaged build; omit to disable the timer entirely.
@@ -326,7 +328,17 @@ export const createUpdater = (options: UpdaterOptions): UpdaterController => {
    * installs correctly and never comes back, which looks exactly like a crash.
    */
   const runInstall = (): void => {
-    options.autoUpdater.quitAndInstall(true, true);
+    if (options.beforeInstall === undefined) {
+      options.autoUpdater.quitAndInstall(true, true);
+      return;
+    }
+    void options.beforeInstall()
+      .catch((error: unknown) => {
+        console.warn("[quit] Pre-install cleanup failed.", error);
+      })
+      .finally(() => {
+        options.autoUpdater.quitAndInstall(true, true);
+      });
   };
 
   const install = (): boolean => {

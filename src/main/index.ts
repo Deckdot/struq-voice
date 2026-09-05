@@ -23,7 +23,11 @@ import {
   createParakeetEngine,
   PARAKEET_ENGINE_ID
 } from "./engines/parakeet";
-import { createOpenRouterEngine, OPENROUTER_ENGINE_ID } from "./engines/openrouter";
+import {
+  createOpenRouterEngine,
+  OPENROUTER_ENGINE_ID,
+  OPENROUTER_PRIMARY_MODEL_ID
+} from "./engines/openrouter";
 import { createWhisperCppEngine } from "./engines/whisper-cpp";
 import { slicePcm, trimSilence } from "./audio/wav";
 import type { TranscriptionEngine } from "./engines/types";
@@ -125,12 +129,79 @@ let meetingSession: ReturnType<typeof createMeetingSession> | null = null;
 // Held at module scope so will-quit can release them: the sherpa session owns
 // native memory and the database owns a WAL that wants checkpointing.
 let database: ReturnType<typeof openDatabase> = null;
-let primaryLocalEngine: TranscriptionEngine | null = null;
+let enginesForShutdown: TranscriptionEngine[] = [];
 let updaterController: ReturnType<typeof createUpdater> | null = null;
 let isQuitting = false;
+let shutdownPromise: Promise<void> | null = null;
+let shutdownComplete = false;
 
-app.on("before-quit", () => {
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
+  let timer!: ReturnType<typeof setTimeout>;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => {
+          resolve(null);
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const requestShutdown = (): Promise<void> => {
   isQuitting = true;
+  if (shutdownPromise !== null) return shutdownPromise;
+  shutdownPromise = (async () => {
+    const asyncStep = async (name: string, run: () => Promise<void>): Promise<void> => {
+      try {
+        await run();
+      } catch (error) {
+        console.warn(`[quit] ${name} failed.`, error);
+      }
+    };
+    const syncStep = (name: string, run: () => void): void => {
+      try {
+        run();
+      } catch (error) {
+        console.warn(`[quit] ${name} failed.`, error);
+      }
+    };
+
+    await asyncStep("Meeting stop", async () => {
+      if (meetingSession === null || !isMeetingActive(meetingSession.state)) return;
+      const stopped = await withTimeout(meetingSession.stop(), 35_000);
+      if (stopped === null) {
+        console.warn("[quit] Meeting stop reached its bounded shutdown timeout.");
+      }
+    });
+    syncStep("Overlay dispose", () => overlay?.dispose());
+    syncStep("Hotkey dispose", () => hotkeys?.dispose());
+    syncStep("Meeting dispose", () => meetingSession?.dispose());
+    syncStep("Updater dispose", () => updaterController?.dispose());
+    await asyncStep("Engine dispose", async () => {
+      for (const engine of enginesForShutdown) {
+        await engine.dispose();
+      }
+      enginesForShutdown = [];
+    });
+    syncStep("Database close", () => database?.close());
+    database = null;
+    shutdownComplete = true;
+  })();
+  return shutdownPromise;
+};
+
+app.on("before-quit", (event) => {
+  isQuitting = true;
+  if (shutdownComplete) return;
+  event.preventDefault();
+  void requestShutdown().then(() => {
+    if (!shutdownComplete) return;
+    app.quit();
+  });
 });
 
 // The most recent capture, kept for verification until Phase 3 persists
@@ -371,7 +442,8 @@ if (!gotLock) {
           periodicCheckMs: PERIODIC_CHECK_INTERVAL_MS,
           onReady: (version) => {
             notifyUpdateReady(version);
-          }
+          },
+          beforeInstall: requestShutdown
         });
     updaterController = updater;
 
@@ -390,6 +462,10 @@ if (!gotLock) {
           : join(app.getAppPath(), "resources", "meeting-assets")
       }
     );
+    const openrouterEngine = createOpenRouterEngine({
+      getApiKey: () => secrets.readOpenRouterKey()
+    });
+    let meetingWindow: BrowserWindow | null = null;
     const meetings = createMeetingSession({
       settings: () => settingsStore.get().meeting,
       speechLanguage: () => settingsStore.get().speechLanguage,
@@ -398,6 +474,10 @@ if (!gotLock) {
       window: {
         create: () => {
           const window = createMeetingWindow();
+          meetingWindow = window;
+          window.once("closed", () => {
+            if (meetingWindow === window) meetingWindow = null;
+          });
           // A capture renderer that dies (crash, OOM, killed from the task
           // manager) stops reporting silently: the lane-live timer is already
           // cleared by then, so nothing else would ever notice and the meeting
@@ -410,15 +490,15 @@ if (!gotLock) {
           return Promise.resolve(window);
         },
         destroy: () => {
-          // Runs during quit as well as on stop, and by then Electron may have
-          // torn windows down already. Reading webContents off a destroyed
-          // window throws "Object has been destroyed", which on the quit path
-          // aborted the rest of shutdown and surfaced as a JavaScript error
-          // dialog during an update install.
-          for (const window of BrowserWindow.getAllWindows()) {
-            if (window.isDestroyed()) continue;
-            if (window.webContents.getURL().includes("meeting/index.html")) {
+          // The session owns one meeting window. Scanning every window during
+          // quit races Electron's destruction and can throw from getURL().
+          const window = meetingWindow;
+          meetingWindow = null;
+          if (window !== null && !window.isDestroyed()) {
+            try {
               window.destroy();
+            } catch (error) {
+              console.warn("[meeting] Destroying the meeting window failed.", error);
             }
           }
         }
@@ -429,7 +509,10 @@ if (!gotLock) {
       resolveModelId: (engine) =>
         engine === "parakeet"
           ? settingsStore.get().parakeetModelId
-          : settingsStore.get().whisperModelId,
+          : engine === "openrouter"
+            ? OPENROUTER_PRIMARY_MODEL_ID
+            : settingsStore.get().meeting.whisperModelId,
+      cloudEngine: openrouterEngine,
       cores: availableParallelism()
     });
     meetingSession = meetings;
@@ -513,10 +596,6 @@ if (!gotLock) {
       modelsRoot,
       getModelId: () => settingsStore.get().parakeetModelId
     });
-    primaryLocalEngine = parakeetEngine;
-    const openrouterEngine = createOpenRouterEngine({
-      getApiKey: () => secrets.readOpenRouterKey()
-    });
     const whisperCppEngine = createWhisperCppEngine({
       runtimeRoot,
       modelsRoot,
@@ -535,6 +614,7 @@ if (!gotLock) {
       const mockEngine = createMockEngine();
       engines.set(mockEngine.id, mockEngine);
     }
+    enginesForShutdown = [...engines.values()];
     const router = createEngineRouter({
       getEngine: (id) => engines.get(id),
       cloudFallbackOptIn: () => settingsStore.get().engine.fallback === "openrouter",
@@ -1006,34 +1086,4 @@ if (!gotLock) {
     }
   });
 
-  /**
-   * Shutdown steps are independent, so one failure must not skip the rest.
-   *
-   * Every step here is hygiene: the OS reclaims windows, hooks, native memory
-   * and file handles regardless. What is NOT recoverable is an exception
-   * escaping will-quit, because Electron surfaces that as a JavaScript error
-   * dialog. On the update path that dialog appears instead of the installer
-   * running, so a throw in a cleanup step turns a working update into a
-   * visible crash. Each step is therefore isolated and merely logged.
-   */
-  const shutdownStep = (name: string, run: () => void): void => {
-    try {
-      run();
-    } catch (error) {
-      console.warn(`[quit] ${name} failed.`, error);
-    }
-  };
-
-  app.on("will-quit", () => {
-    shutdownStep("Overlay dispose", () => overlay?.dispose());
-    shutdownStep("Hotkey dispose", () => hotkeys?.dispose());
-    shutdownStep("Meeting dispose", () => meetingSession?.dispose());
-    shutdownStep("Updater dispose", () => updaterController?.dispose());
-    shutdownStep("Engine dispose", () => {
-      void primaryLocalEngine?.dispose();
-    });
-    primaryLocalEngine = null;
-    shutdownStep("Database close", () => database?.close());
-    database = null;
-  });
 }

@@ -5,7 +5,7 @@
  * empty results, never a rejected invoke.
  */
 
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import { writeFile } from "node:fs/promises";
 import type { MeetingStore } from "../db/meeting-store";
 import type { MeetingAssetService } from "./assets";
@@ -15,6 +15,8 @@ import type { MeetingSession } from "./meeting-session";
 import type {
   MeetingAudioFrames,
   MeetingAudioStateEvent,
+  MeetingCopyRequest,
+  MeetingCopyResult,
   MeetingExportRequest,
   MeetingExportResult,
   MeetingGetRequest,
@@ -37,6 +39,7 @@ import {
   meetingAudioFramesChannel,
   meetingAudioLevelsChannel,
   meetingAudioStateChannel,
+  meetingCopyChannel,
   meetingDeleteChannel,
   meetingExportChannel,
   meetingGetChannel,
@@ -55,20 +58,37 @@ import {
 
 const PAGE_SIZE = 50;
 
+const safeUrl = (window: BrowserWindow): string | null => {
+  if (window.isDestroyed() || window.webContents.isDestroyed()) return null;
+  try {
+    return window.webContents.getURL();
+  } catch {
+    return null;
+  }
+};
+
 const sendToMainWindow = (channel: string, payload: unknown): void => {
-  const window = BrowserWindow.getAllWindows().find((candidate) =>
-    candidate.webContents.getURL().includes("main/index.html")
+  const window = BrowserWindow.getAllWindows().find(
+    (candidate) => safeUrl(candidate)?.includes("main/index.html") === true
   );
   if (window !== undefined) {
-    window.webContents.send(channel, payload);
+    try {
+      window.webContents.send(channel, payload);
+    } catch {
+      // The window can close between the URL check and send during shutdown.
+    }
   }
 };
 
 const sendToFeedbackWindows = (channel: string, payload: unknown): void => {
   for (const window of BrowserWindow.getAllWindows()) {
-    const url = window.webContents.getURL();
-    if (url.includes("main/index.html") || url.includes("overlay/index.html")) {
-      window.webContents.send(channel, payload);
+    const url = safeUrl(window);
+    if (url?.includes("main/index.html") === true || url?.includes("overlay/index.html") === true) {
+      try {
+        window.webContents.send(channel, payload);
+      } catch {
+        // A closing feedback window is not a meeting failure.
+      }
     }
   }
 };
@@ -79,7 +99,13 @@ const sendToFeedbackWindows = (channel: string, payload: unknown): void => {
  * than trusted by virtue of being in-process.
  */
 const isMeetingWindow = (sender: Electron.WebContents): boolean =>
-  sender.getURL().includes("meeting/index.html");
+  !sender.isDestroyed() && (() => {
+    try {
+      return sender.getURL().includes("meeting/index.html");
+    } catch {
+      return false;
+    }
+  })();
 
 export const registerMeetingIpcHandlers = (
   store: MeetingStore | null,
@@ -212,6 +238,27 @@ export const registerMeetingIpcHandlers = (
         const message = error instanceof Error ? error.message : String(error);
         void message;
         return { ok: false, code: "write-failed" };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    meetingCopyChannel,
+    (_event, request: MeetingCopyRequest): MeetingCopyResult => {
+      if (store === null) return { ok: false, code: "database-unavailable" };
+      const meeting = store.getMeeting(request.meetingId);
+      if (meeting === null) return { ok: false, code: "not-found" };
+      const content = exportMeeting({
+        meeting,
+        segments: store.listSegments(request.meetingId, 1_000_000, 0),
+        speakers: store.listSpeakers(request.meetingId),
+        format: "text"
+      });
+      try {
+        clipboard.writeText(content);
+        return { ok: true };
+      } catch {
+        return { ok: false, code: "copy-failed" };
       }
     }
   );

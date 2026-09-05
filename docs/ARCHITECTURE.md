@@ -23,7 +23,8 @@ MAIN PROCESS
     |                  starts, destroyed when it stops.
     |
     +-- MEETING WORKER  utilityProcess (struq-meeting), forked on start,
-                       killed on stop. VAD -> ASR -> speaker clustering.
+                       killed on stop. VAD -> local ASR or typed cloud
+                       utterances -> speaker clustering.
 
 ## Why meeting transcription runs out of process
 
@@ -36,6 +37,17 @@ ONNX ends the meeting, not the app) and memory that is genuinely released on
 kill. The cost is a second copy of the model in RAM while a meeting runs,
 which is the correct trade and why the process is spawned per meeting rather
 than kept warm.
+
+Meeting engine selection is separate from dictation. Local meetings decode in
+the worker. For OpenRouter meetings the worker still owns VAD and speaker
+attribution, then emits ordered PCM utterances to main. Main alone reads the
+stored API key and serializes cloud requests before writing timestamped rows.
+No secret crosses IPC or the worker boundary.
+
+Shutdown is coordinated in main by one idempotent async path. Tray Quit and
+updater installation stop the meeting, flush the archive, wait for the bounded
+worker drain, then dispose windows, hotkeys, updater timers, engines and the
+database. A failed stage is logged and does not prevent later cleanup.
 
 Phase 0 creates only the main window. The overlay and recorder windows land in
 Phase 1, the audio pipeline in Phase 2.

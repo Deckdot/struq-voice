@@ -322,6 +322,11 @@ export const createWhisperCppEngine = (
             "-m", modelPathFor(modelId),
             "-f", tempWav,
             "-t", "8",
+            // Meetings favor stable, high quality decoding over the lowest
+            // possible latency. These are supported whisper.cpp CLI flags.
+            "--beam-size", "5",
+            "--best-of", "5",
+            "--temperature", "0",
             "--output-json",
             "--no-timestamps"
           ];

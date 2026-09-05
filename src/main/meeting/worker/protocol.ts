@@ -9,7 +9,7 @@
 
 export interface WorkerInit {
   readonly type: "init";
-  readonly engineId: "parakeet" | "whisper-cpp";
+  readonly engineId: "parakeet" | "whisper-cpp" | "openrouter";
   readonly modelsRoot: string;
   readonly runtimeRoot: string;
   readonly modelId: string;
@@ -83,6 +83,19 @@ export interface WorkerGap {
 }
 
 /**
+ * Cloud meetings keep VAD and speaker attribution in the worker, but send
+ * typed utterances to main so the API key never crosses a process boundary.
+ */
+export interface WorkerCloudUtterance {
+  readonly type: "cloud-utterance";
+  readonly source: "system" | "microphone";
+  readonly startMs: number;
+  readonly endMs: number;
+  readonly speakerKey: string;
+  readonly pcm: ArrayBuffer;
+}
+
+/**
  * Two speakers turned out to be one voice. Segments already emitted under
  * `from` belong to `into`, so main rewrites what it has persisted rather than
  * leaving a transcript that refers to a speaker who no longer exists.
@@ -113,6 +126,7 @@ export type WorkerEvent =
   | WorkerReady
   | WorkerSegment
   | WorkerGap
+  | WorkerCloudUtterance
   | WorkerSpeakersMerged
   | WorkerHeartbeat
   | WorkerFailure

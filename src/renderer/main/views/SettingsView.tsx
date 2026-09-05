@@ -162,7 +162,7 @@ export function SettingsView(): JSX.Element {
             {category === "delivery" && <DeliveryTab settings={settings} update={update} />}
             {category === "text" && <TextTab api={api} settings={settings} update={update} />}
             {category === "appearance" && <AppearanceTab api={api} settings={settings} update={update} />}
-            {category === "meetings" && <MeetingsTab settings={settings} update={update} />}
+            {category === "meetings" && <MeetingsTab api={api} settings={settings} update={update} />}
         </div>
       </div>
     </div>

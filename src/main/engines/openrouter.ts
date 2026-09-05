@@ -23,7 +23,8 @@ import type {
 } from "./types";
 
 const OPENROUTER_STT_URL = "https://openrouter.ai/api/v1/audio/transcriptions";
-const PRIMARY_MODEL = "openai/whisper-large-v3";
+export const OPENROUTER_PRIMARY_MODEL_ID = "openai/whisper-large-v3" as const;
+const PRIMARY_MODEL = OPENROUTER_PRIMARY_MODEL_ID;
 const FALLBACK_MODEL = "openai/whisper-1";
 /** The provider's own per-request ceiling. */
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -208,7 +209,7 @@ export const createOpenRouterEngine = (
       const parts: string[] = [];
       let language: string | null = null;
       let costUsd: number | null = null;
-      let modelId = PRIMARY_MODEL;
+      let modelId: string = PRIMARY_MODEL;
       let failure: unknown = null;
 
       for (const chunk of chunks) {

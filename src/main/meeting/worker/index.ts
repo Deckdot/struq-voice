@@ -80,6 +80,7 @@ export interface SherpaMeetingModule {
 
 let sherpa: SherpaMeetingModule | null = null;
 let engine: TranscriptionEngine | null = null;
+let cloudMode = false;
 const vads: Partial<Record<"system" | "microphone", VadLane>> = {};
 const vadInstances: Partial<Record<"system" | "microphone", VadLike>> = {};
 let extractor: EmbeddingExtractorLike | null = null;
@@ -187,7 +188,7 @@ const buildVad = (config: object): VadLike => {
 
 const transcribeUtterance = async (utterance: QueuedUtterance): Promise<void> => {
   const activeEngine = engine;
-  if (activeEngine === null) {
+  if (activeEngine === null && !cloudMode) {
     postFailureOnce("engine-not-ready", "The ASR engine never initialised.");
     return;
   }
@@ -223,6 +224,20 @@ const transcribeUtterance = async (utterance: QueuedUtterance): Promise<void> =>
       // Too little speech survives the trim (a cough). Drop silently.
       continue;
     }
+    const startMs = sampleCountToMs(segment.startSample);
+    const endMs = sampleCountToMs(segment.startSample + segment.samples.length);
+    if (cloudMode) {
+      post({
+        type: "cloud-utterance",
+        source: utterance.source,
+        startMs,
+        endMs,
+        speakerKey: segment.key,
+        pcm: audio.slice().buffer
+      });
+      continue;
+    }
+    if (activeEngine === null) return;
     const controller = new AbortController();
     const outcome = await activeEngine.transcribe({
       pcm: audio,
@@ -238,8 +253,6 @@ const transcribeUtterance = async (utterance: QueuedUtterance): Promise<void> =>
     if (text.length === 0) {
       continue;
     }
-    const startMs = sampleCountToMs(segment.startSample);
-    const endMs = sampleCountToMs(segment.startSample + segment.samples.length);
     post({
       type: "segment",
       source: utterance.source,
@@ -340,8 +353,11 @@ const onInit = (init: Extract<WorkerCommand, { type: "init" }>): void => {
     return;
   }
 
+  cloudMode = init.engineId === "openrouter";
   engine =
-    init.engineId === "parakeet"
+    init.engineId === "openrouter"
+      ? null
+      : init.engineId === "parakeet"
       ? createParakeetEngine({
           modelsRoot: init.modelsRoot,
           modelId: init.modelId,
@@ -354,15 +370,17 @@ const onInit = (init: Extract<WorkerCommand, { type: "init" }>): void => {
         });
 
   void (async () => {
-    const readiness = await engine.readiness();
-    if (!readiness.ready) {
-      postFailureOnce(
-        "engine-not-ready",
-        readiness.reason ?? "The ASR engine is not ready."
-      );
-      return;
+    if (engine !== null) {
+      const readiness = await engine.readiness();
+      if (!readiness.ready) {
+        postFailureOnce(
+          "engine-not-ready",
+          readiness.reason ?? "The ASR engine is not ready."
+        );
+        return;
+      }
+      await engine.warmup();
     }
-    await engine.warmup();
 
     const vadConfig = {
       model: init.assetPaths.vad,

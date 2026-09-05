@@ -512,6 +512,7 @@ export const meetingDeleteChannel = "meeting:delete" as const;
 export const meetingRenameChannel = "meeting:rename" as const;
 export const meetingRenameSpeakerChannel = "meeting:rename-speaker" as const;
 export const meetingExportChannel = "meeting:export" as const;
+export const meetingCopyChannel = "meeting:copy" as const;
 export const meetingRevealRecordingChannel = "meeting:reveal-recording" as const;
 
 /**
@@ -618,6 +619,15 @@ export interface MeetingExportResult {
   readonly ok: boolean;
   readonly path?: string;
   readonly code?: string;
+}
+
+export interface MeetingCopyRequest {
+  readonly meetingId: number;
+}
+
+export interface MeetingCopyResult {
+  readonly ok: boolean;
+  readonly code?: "database-unavailable" | "not-found" | "copy-failed";
 }
 
 export interface MeetingSegmentAppendedEvent {
@@ -844,6 +854,7 @@ export const PRELOAD_CHANNELS = {
     rename: meetingRenameChannel,
     renameSpeaker: meetingRenameSpeakerChannel,
     export: meetingExportChannel,
+    copy: meetingCopyChannel,
     revealRecording: meetingRevealRecordingChannel,
     segmentAppended: meetingSegmentAppendedChannel,
     speakersMerged: meetingSpeakersMergedChannel,

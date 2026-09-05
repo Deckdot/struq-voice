@@ -141,6 +141,7 @@ describe("tray click", () => {
       startedAtMs: Date.now(),
       system: { live: true },
       microphone: { live: true },
+      transcriber: { engineId: "whisper-cpp", modelId: "whisper-large-v3-turbo-q5_0", kind: "local" },
       backlogSeconds: 0,
       segmentCount: 0,
       speakerCount: 1
@@ -168,9 +169,10 @@ describe("tray click", () => {
         phase: "recording",
         meetingId: 1,
         startedAtMs: 1000,
-        system: { live: true },
-        microphone: { live: true },
-        backlogSeconds: 0,
+      system: { live: true },
+      microphone: { live: true },
+      transcriber: { engineId: "whisper-cpp", modelId: "whisper-large-v3-turbo-q5_0", kind: "local" },
+      backlogSeconds: 0,
         segmentCount: 0,
         speakerCount: 1
       });

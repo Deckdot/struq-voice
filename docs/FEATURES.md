@@ -107,6 +107,14 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   archive; created on demand, destroyed on stop.
 - ASR runs in a `utilityProcess` (`struq-meeting`), spawned per meeting and
   killed on stop, so the synchronous sherpa decode never stalls main.
+- Meeting transcription is independent from dictation. New and untouched
+  legacy meeting profiles use local whisper.cpp Whisper Large v3 Turbo q5_0,
+  with deterministic beam-size, best-of and temperature settings for stable
+  long-form decoding. Parakeet remains selectable for meetings.
+- OpenRouter Whisper Large v3 is an explicit online option, never an implicit
+  fallback. The key stays in main, the worker sends typed VAD utterances to
+  main, and requests are serialized so timing and speaker labels stay ordered.
+  Settings calls out that meeting audio leaves the computer.
 - Silero VAD cuts utterances per lane; silence is never decoded. The mic
   lane is always "You"; the system lane is attributed by incremental speaker
   clustering with a CAM++ embedding model, refined per long turn by a
@@ -118,9 +126,11 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   one second and 0.89 at eight, so short remarks carry no identity. Speakers
   that turn out to be one voice are merged, and main rewrites the segments it
   already stored.
-- Live transcript view (virtualized, pinned to live with jump-to-live),
-  searchable library, renameable speakers, Markdown/Text/SRT export, playable
-  recording revealed in Explorer.
+- Live transcript view (virtualized, pinned to live with jump-to-live) shows
+  timer, engine, model, meters, speaker count, line count and backlog status.
+  The floating overlay shows the same model and lane health at a glance.
+  Meeting details make Copy all and Save Markdown primary, while plain text,
+  SRT and recording reveal actions live under More.
 - Dictation always wins: main yields the worker while a capture is live, and
   the worker's queue is hard-capped with honest gap markers.
 - Support models (VAD, embedding, segmentation) install once from the
@@ -136,6 +146,15 @@ green when run as `pnpm test:e2e`). The risk-weighted test policy lives in
   it recording forever: main watches `render-process-gone`, because the
   lane-live timer is cleared once a lane goes live and nothing else would
   notice. Whatever was recorded before the death is kept.
+
+### Shutdown and updates
+- Tray Quit and updater installation use one idempotent async coordinator. It
+  stops meetings, flushes the archive, drains the worker with a bound, then
+  disposes hotkeys, updater timers, engines and the database. Each cleanup
+  stage logs and continues after its own failure.
+- Meeting teardown uses its tracked window reference and guarded URL access,
+  avoiding the destroyed-window error that could interrupt Quit or update
+  installation.
 
 ### Onboarding and hardware
 - Machine profiling: cores and memory from Node `os`, GPU vendor from

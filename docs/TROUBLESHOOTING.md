@@ -107,6 +107,35 @@ Ctrl+V, restore clipboard.
 - Parakeet is unaffected either way. It runs on the CPU through sherpa-onnx,
   and it is the default engine.
 
+## Meeting transcripts are poor or mostly unreadable
+
+- Meetings have their own engine and model setting. Dictation settings do not
+  change an active meeting, and old profiles that still have the original
+  Parakeet default migrate to local Whisper Large Turbo.
+- In Settings > Meetings, choose Whisper Large Turbo for the recommended
+  local path, then download `whisper-large-v3-turbo-q5_0` and the whisper
+  runtime in Models. A missing model or runtime is reported before capture
+  begins.
+- The OpenRouter option is deliberately online. It requires an API key in
+  Settings > Transcription and sends meeting audio off the computer. It is
+  useful when the local runtime cannot keep up, but it is not a silent fallback.
+- If audio is clear but the text is fragmented, increase the meeting closing
+  silence or longest utterance values only after checking the selected model.
+  The shipped defaults already use a slightly longer silence window and
+  30-second monologue boundary to reduce unnecessary sentence splits.
+
+## Windows shows an error while closing or installing an update
+
+- Normal window close still hides the main window to the tray. Use Tray > Quit
+  for a full exit.
+- Quit and update installation now share an idempotent shutdown coordinator.
+  It marks the app as quitting, stops any meeting, closes the archive, drains
+  the worker with a bound, and continues through hotkey, updater, engine and
+  database cleanup even if one step reports an error.
+- If the error returns, capture the last log lines around the `[quit]` stage.
+  A meeting window closing at the same time as Electron is shutting down is a
+  known race handled by guarded window references and URL reads.
+
 ## Downloading a model fails or stalls
 
 - Downloads are resumable across restarts and capped at three concurrent

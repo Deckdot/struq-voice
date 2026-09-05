@@ -442,7 +442,13 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "settings.meetings.transcription.title": "Transcriptie",
   "settings.meetings.transcription.engine.label": "Vergadermotor",
   "settings.meetings.transcription.engine.hint":
-    "Alleen lokaal: uren audio verlaten deze computer nooit.",
+    "Kies de engine voor vergaderingen onafhankelijk van dicteren.",
+  "settings.meetings.transcription.model.label": "Whisper-model",
+  "settings.meetings.transcription.model.hint":
+    "Large Turbo is het aanbevolen lokale model. Download het bij Modellen voordat je start.",
+  "settings.meetings.transcription.cloud.title": "Online transcriptie",
+  "settings.meetings.transcription.cloud.hint":
+    "OpenRouter verstuurt audio van vergaderingen buiten deze computer. Voeg eerst een API-sleutel toe bij Transcriptie.",
   "settings.meetings.speakers.title": "Sprekers",
   "settings.meetings.speakers.label.label": "Sprekers labelen",
   "settings.meetings.speakers.label.hint":
@@ -511,6 +517,10 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "meetings.live.systemAudio": "Systeemaudio",
   "meetings.live.microphone": "Microfoon",
   "meetings.live.backlog": "Transcriberen, {seconds}s achter",
+  "meetings.live.speakersCount": "{count} sprekers",
+  "meetings.live.transcriptCount": "{count} transcriptieregels",
+  "meetings.live.catchingUp": "Bijwerken, {seconds}s in wachtrij",
+  "meetings.live.upToDate": "Transcriptie loopt gelijk",
   "meetings.live.pause": "Pauze",
   "meetings.live.resume": "Hervatten",
   "meetings.live.stop": "Stoppen",
@@ -538,6 +548,12 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "meetings.detail.noSpeakers": "Nog geen sprekers.",
   "meetings.detail.renameSpeaker": "Spreker hernoemen",
   "meetings.detail.revealRecording": "Opname tonen",
+  "meetings.detail.copyAll": "Alles kopiëren",
+  "meetings.detail.copied": "Gekopieerd",
+  "meetings.detail.saveMarkdown": "Markdown opslaan",
+  "meetings.detail.more": "Meer",
+  "meetings.detail.saveText": "Platte tekst opslaan",
+  "meetings.detail.saveSrt": "Ondertitels opslaan (SRT)",
   "meetings.bar.open": "Vergadering openen",
   "meetings.bar.stop": "Stoppen",
 };

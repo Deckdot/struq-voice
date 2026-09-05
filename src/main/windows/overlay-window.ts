@@ -55,7 +55,7 @@ import {
 export const OVERLAY_WIDTH = 280;
 export const OVERLAY_HEIGHT_COMPACT = 48;
 export const OVERLAY_HEIGHT_TRANSCRIPT = 150;
-export const OVERLAY_HEIGHT_MEETING = 96;
+export const OVERLAY_HEIGHT_MEETING = 132;
 
 export const overlayHeight = (liveTranscription: boolean): number =>
   liveTranscription ? OVERLAY_HEIGHT_TRANSCRIPT : OVERLAY_HEIGHT_COMPACT;

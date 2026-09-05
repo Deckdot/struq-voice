@@ -175,6 +175,9 @@ describe("whisper-cpp engine", () => {
     expect(calls.deletes).toContain(calls.writes[0]);
     expect(calls.deletes).toContain(`${calls.writes[0] ?? ""}.json`);
     expect(calls.execs[0]?.args).toContain("--output-json");
+    expect(calls.execs[0]?.args).toEqual(
+      expect.arrayContaining(["--beam-size", "5", "--best-of", "5", "--temperature", "0"])
+    );
     expect(calls.execs[0]?.args).toContain("auto");
   });
 

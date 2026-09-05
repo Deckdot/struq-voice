@@ -9,6 +9,8 @@ import type { WorkerEvent } from "./worker/protocol";
 import type { MeetingAudioStateEvent } from "../../shared/ipc";
 import type { MeetingState } from "../../shared/meeting";
 import type { Result } from "../../shared/result";
+import type { TranscriptionEngine } from "../engines/types";
+import type { MeetingSettings } from "../../shared/settings";
 
 interface FakeStore extends MeetingStore {
   readonly created: { title: string; engineId: string; language: string | null }[];
@@ -139,6 +141,7 @@ const makeSession = (
       includeMicrophone: true,
       accelerator: "CommandOrControl+Shift+M",
       engineId: "parakeet",
+      whisperModelId: "whisper-large-v3-turbo-q5_0",
       diarization: true,
       diarizationRefineOverMs: 15_000,
       speakerThreshold: 0.55,
@@ -148,8 +151,8 @@ const makeSession = (
       archiveAudio: true,
       archiveBitrateKbps: 32,
       vadMinSpeechMs: 250,
-      vadMinSilenceMs: 500,
-      vadMaxSpeechMs: 20_000,
+      vadMinSilenceMs: 650,
+      vadMaxSpeechMs: 30_000,
       autoStopSilentMinutes: 0,
       retentionDays: 0
     }),
@@ -183,7 +186,121 @@ const liveAudioState = (): MeetingAudioStateEvent => ({
   finished: false
 });
 
+const makeSessionSettings = (engineId: MeetingSettings["engineId"]): MeetingSettings => ({
+  includeMicrophone: true,
+  accelerator: "CommandOrControl+Shift+M",
+  engineId,
+  whisperModelId: "whisper-large-v3-turbo-q5_0",
+  diarization: true,
+  diarizationRefineOverMs: 15_000,
+  speakerThreshold: 0.55,
+  speakerMergeThreshold: 0.55,
+  minSpeakerAudioMs: 3000,
+  maxSpeakers: 0,
+  archiveAudio: true,
+  archiveBitrateKbps: 32,
+  vadMinSpeechMs: 250,
+  vadMinSilenceMs: 650,
+  vadMaxSpeechMs: 30_000,
+  autoStopSilentMinutes: 0,
+  retentionDays: 0
+});
+
+const defaultCloudTranscribe: TranscriptionEngine["transcribe"] = () =>
+  Promise.resolve({
+    ok: true,
+    value: {
+      text: "line",
+      language: "en",
+      engineId: "openrouter",
+      modelId: "openai/whisper-large-v3",
+      inferenceMs: 1,
+      realtimeFactor: 0.1,
+      costUsd: 0.01
+    }
+  });
+
+const makeCloudEngine = (input: {
+  readonly readiness?: TranscriptionEngine["readiness"];
+  readonly transcribe?: TranscriptionEngine["transcribe"];
+}): TranscriptionEngine => ({
+  id: "openrouter",
+  displayName: "OpenRouter Whisper",
+  kind: "cloud",
+  readiness: input.readiness ?? (() => Promise.resolve({ ready: true })),
+  warmup: () => Promise.resolve(),
+  transcribe: input.transcribe ?? defaultCloudTranscribe,
+  dispose: () => Promise.resolve()
+});
+
 describe("meeting session", () => {
+  it("refuses an OpenRouter meeting when the cloud engine is not ready", async () => {
+    const { session, worker } = makeSession({
+      settings: () => ({
+        ...makeSessionSettings("openrouter"),
+        whisperModelId: "whisper-large-v3-turbo-q5_0"
+      }),
+      cloudEngine: makeCloudEngine({
+        readiness: () => Promise.resolve({ ready: false, reason: "missing key" })
+      })
+    });
+
+    await expect(session.start()).resolves.toEqual({ ok: false, code: "engine-not-ready" });
+    expect(worker.start).not.toHaveBeenCalled();
+  });
+
+  it("serializes cloud utterances while preserving their arrival order", async () => {
+    const calls: number[] = [];
+    let releaseFirst = (): void => undefined;
+    const firstFinished = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const { session, worker } = makeSession({
+      settings: () => makeSessionSettings("openrouter"),
+      cloudEngine: makeCloudEngine({ transcribe: async (request) => {
+        calls.push(request.pcm[0] ?? 0);
+        if (calls.length === 1) await firstFinished;
+        return {
+          ok: true,
+          value: {
+            text: `line-${String(calls.length)}`,
+            language: "en",
+            engineId: "openrouter",
+            modelId: "openai/whisper-large-v3",
+            inferenceMs: 1,
+            realtimeFactor: 0.1,
+            costUsd: 0.01
+          }
+        };
+      }})
+    });
+
+    await expect(session.start()).resolves.toMatchObject({ ok: true });
+    session.handleAudioState(liveAudioState());
+    worker.emit({
+      type: "cloud-utterance",
+      source: "system",
+      startMs: 0,
+      endMs: 1000,
+      speakerKey: "s1",
+      pcm: new Int16Array([1, 2]).buffer
+    });
+    worker.emit({
+      type: "cloud-utterance",
+      source: "system",
+      startMs: 1000,
+      endMs: 2000,
+      speakerKey: "s2",
+      pcm: new Int16Array([2, 3]).buffer
+    });
+    await Promise.resolve();
+    expect(calls).toEqual([1]);
+    releaseFirst();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toEqual([1, 2]);
+    await session.stop();
+  });
+
   it("refuses to start twice", async () => {
     const { session } = makeSession();
     const first = await session.start();
@@ -720,6 +837,7 @@ describe("meeting session", () => {
           includeMicrophone: true,
           accelerator: "CommandOrControl+Shift+M",
           engineId: "parakeet",
+          whisperModelId: "whisper-large-v3-turbo-q5_0",
           diarization: true,
           diarizationRefineOverMs: 15_000,
           speakerThreshold: 0.55,
@@ -729,8 +847,8 @@ describe("meeting session", () => {
           archiveAudio: true,
           archiveBitrateKbps: 32,
           vadMinSpeechMs: 250,
-          vadMinSilenceMs: 500,
-          vadMaxSpeechMs: 20_000,
+          vadMinSilenceMs: 650,
+          vadMaxSpeechMs: 30_000,
           autoStopSilentMinutes: 1,
           retentionDays: 0
         })

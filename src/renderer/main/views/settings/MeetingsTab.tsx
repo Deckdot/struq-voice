@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import type { Settings } from "../../../../shared/settings";
+import type { MainWindowApi } from "../../../../shared/api";
+import { MODEL_CATALOG } from "../../../../shared/models";
 import {
   Disclosure,
   HotkeyRecorder,
@@ -21,13 +24,26 @@ import { useTranslation } from "../../lib/useTranslation";
  * shallow merge.
  */
 export interface MeetingsTabProps {
+  readonly api: MainWindowApi;
   readonly settings: Settings;
   readonly update: (patch: Partial<Settings>) => void;
 }
 
-export function MeetingsTab({ settings, update }: MeetingsTabProps): JSX.Element {
+export function MeetingsTab({ api, settings, update }: MeetingsTabProps): JSX.Element {
   const { t } = useTranslation();
   const meeting = settings.meeting;
+  const whisperModels = MODEL_CATALOG.filter((model) => model.engine === "whisper-cpp");
+  const [installedModelIds, setInstalledModelIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+
+  useEffect(() => {
+    void api.models.list().then(({ items }) => {
+      setInstalledModelIds(
+        new Set(items.filter((item) => item.installed).map((item) => item.model.id))
+      );
+    });
+  }, [api]);
 
   const updateMeeting = (patch: Partial<typeof meeting>): void => {
     update({ meeting: { ...meeting, ...patch } });
@@ -105,15 +121,47 @@ export function MeetingsTab({ settings, update }: MeetingsTabProps): JSX.Element
                 aria-label="Meeting transcription engine"
                 value={meeting.engineId}
                 onChange={(event) => {
-                  updateMeeting({ engineId: event.target.value as "parakeet" | "whisper-cpp" });
+                  updateMeeting({
+                    engineId: event.target.value as "parakeet" | "whisper-cpp" | "openrouter"
+                  });
                 }}
               >
-                <option value="parakeet">Parakeet</option>
-                <option value="whisper-cpp">Whisper.cpp</option>
+                <option value="whisper-cpp">Whisper Large Turbo, local</option>
+                <option value="parakeet">Parakeet, local</option>
+                <option value="openrouter">OpenRouter Whisper, online</option>
               </Select>
             </div>
           }
         />
+        {meeting.engineId === "whisper-cpp" && (
+          <SettingsRow
+            label={t("settings.meetings.transcription.model.label")}
+            hint={t("settings.meetings.transcription.model.hint")}
+            control={
+              <div className="w-72">
+                <Select
+                  aria-label="Meeting Whisper model"
+                  value={meeting.whisperModelId}
+                  onChange={(event) => {
+                    updateMeeting({ whisperModelId: event.target.value });
+                  }}
+                >
+                  {whisperModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}{installedModelIds.has(model.id) ? "" : " (not downloaded)"}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            }
+          />
+        )}
+        {meeting.engineId === "openrouter" && (
+          <div className="rounded-md border border-warning bg-warning-soft px-4 py-3 text-sm text-text">
+            <p className="font-medium">{t("settings.meetings.transcription.cloud.title")}</p>
+            <p className="mt-1 text-text-muted">{t("settings.meetings.transcription.cloud.hint")}</p>
+          </div>
+        )}
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.meetings.speakers.title")}>

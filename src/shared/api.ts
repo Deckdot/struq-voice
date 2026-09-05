@@ -16,6 +16,8 @@ import type {
   MeetingAudioStateEvent,
   MeetingExportRequest,
   MeetingExportResult,
+  MeetingCopyRequest,
+  MeetingCopyResult,
   MeetingGetRequest,
   MeetingGetResult,
   MeetingLevelsEvent,
@@ -145,6 +147,7 @@ export interface MainWindowApi {
       request: MeetingRenameSpeakerRequest
     ) => Promise<MeetingSimpleResult>;
     export: (request: MeetingExportRequest) => Promise<MeetingExportResult>;
+    copy: (request: MeetingCopyRequest) => Promise<MeetingCopyResult>;
     revealRecording: (request: MeetingGetRequest) => Promise<MeetingSimpleResult>;
     assets: () => Promise<MeetingAssetsResult>;
     installAssets: () => Promise<MeetingSimpleResult>;

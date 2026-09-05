@@ -25,6 +25,7 @@ import {
   Badge,
   Button,
   Card,
+  DropdownMenu,
   EmptyState,
   IconButton,
   Kbd,
@@ -393,11 +394,12 @@ function LiveMeeting({
   };
 
   const backlog = meeting.phase === "recording" ? meeting.backlogSeconds : 0;
+  const transcriber = "transcriber" in meeting ? meeting.transcriber : null;
 
   return (
     <div className="flex h-full flex-col" data-selectable>
       <div className="flex items-center gap-3 border-b border-border px-5 py-3">
-        <StatusDot state="listening" />
+        <StatusDot state={paused ? "warning" : "listening"} />
         <span className="w-16 shrink-0 text-end text-sm font-medium tabular-nums text-text">
           {formatClock(elapsed)}
         </span>
@@ -441,6 +443,18 @@ function LiveMeeting({
             {t("meetings.live.stop")}
           </Button>
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border bg-surface px-5 py-2 text-xs text-text-muted">
+        {transcriber !== null && (
+          <span>
+            {transcriber.kind === "cloud" ? "Online" : "Local"}: {transcriber.modelId}
+          </span>
+        )}
+        <span>{t("meetings.live.speakersCount", { count: String("speakerCount" in meeting ? meeting.speakerCount : speakers.length) })}</span>
+        <span>{t("meetings.live.transcriptCount", { count: String("segmentCount" in meeting ? meeting.segmentCount : totalAppended) })}</span>
+        <span className={backlog > 5 ? "text-warning" : ""}>
+          {backlog > 0 ? t("meetings.live.catchingUp", { seconds: String(Math.ceil(backlog)) }) : t("meetings.live.upToDate")}
+        </span>
       </div>
       {totalAppended > segments.length && (
         <div className="border-b border-border px-5 py-1.5 text-xs text-text-muted">
@@ -833,6 +847,7 @@ function MeetingDetail({
   const [speakers, setSpeakers] = useState<readonly MeetingSpeaker[]>([]);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -882,6 +897,16 @@ function MeetingDetail({
     return [...keys];
   }, [segments]);
 
+  const copyAll = (): void => {
+    void api.meetings.copy({ meetingId }).then((result) => {
+      if (!result.ok) return;
+      setCopied(true);
+      window.setTimeout(() => {
+        setCopied(false);
+      }, 1400);
+    });
+  };
+
   if (meeting === null) {
     return <div className="h-full bg-bg" />;
   }
@@ -924,27 +949,58 @@ function MeetingDetail({
           {formatDate(meeting.startedAtMs)} · {formatDurationLabel(meeting.durationMs)}
         </span>
         <div className="flex items-center gap-1.5">
-          {(["markdown", "text", "srt"] as const).map((format) => (
-            <Button
-              key={format}
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                void api.meetings.export({ meetingId, format });
-              }}
-            >
-              {format.toUpperCase()}
-            </Button>
-          ))}
-          {meeting.audioPath !== null && (
-            <IconButton
-              icon="ph:folder-open"
-              label={t("meetings.detail.revealRecording")}
-              onClick={() => {
-                void api.meetings.revealRecording({ meetingId });
-              }}
-            />
-          )}
+          <Button variant="primary" size="sm" onClick={copyAll}>
+            <Icon icon={copied ? "ph:check" : "ph:copy"} className="h-4 w-4" aria-hidden="true" />
+            {copied ? t("meetings.detail.copied") : t("meetings.detail.copyAll")}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              void api.meetings.export({ meetingId, format: "markdown" });
+            }}
+          >
+            <Icon icon="ph:download-simple" className="h-4 w-4" aria-hidden="true" />
+            {t("meetings.detail.saveMarkdown")}
+          </Button>
+          <DropdownMenu
+            trigger={
+              <Button variant="ghost" size="sm">
+                <Icon icon="ph:dots-three" className="h-4 w-4" aria-hidden="true" />
+                {t("meetings.detail.more")}
+              </Button>
+            }
+            items={[
+              {
+                id: "text",
+                label: t("meetings.detail.saveText"),
+                icon: "ph:clipboard-text",
+                onSelect: () => {
+                  void api.meetings.export({ meetingId, format: "text" });
+                }
+              },
+              {
+                id: "srt",
+                label: t("meetings.detail.saveSrt"),
+                icon: "ph:text-aa",
+                onSelect: () => {
+                  void api.meetings.export({ meetingId, format: "srt" });
+                }
+              },
+              ...(meeting.audioPath !== null
+                ? [
+                    {
+                      id: "recording",
+                      label: t("meetings.detail.revealRecording"),
+                      icon: "ph:folder-open",
+                      onSelect: () => {
+                        void api.meetings.revealRecording({ meetingId });
+                      }
+                    }
+                  ]
+                : [])
+            ]}
+          />
         </div>
       </div>
       <div className="flex min-h-0 flex-1">

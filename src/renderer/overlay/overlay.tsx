@@ -415,14 +415,25 @@ function MeetingRecordingView({
   }, [state.startedAtMs]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex items-center gap-2.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        <div className="flex items-center gap-2.5">
         <RecordingBall className="h-4 w-4 shrink-0 text-capture" />
         <span className="min-w-0 flex-1 text-xs font-medium text-text">
           {t(locale, "overlay.meetingRecording")}
         </span>
         <span className="shrink-0 text-2xs tabular-nums text-text-muted" data-numeric>
           {formatElapsed(elapsedMs)}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 text-2xs text-text-muted">
+        <span className="min-w-0 flex-1 truncate">
+          {state.transcriber.kind === "cloud" ? "Online" : "Local"} · {state.transcriber.modelId}
+        </span>
+        <span>{t(locale, "meetings.live.transcriptCount", { count: String(state.segmentCount) })}</span>
+        <span className={state.backlogSeconds > 5 ? "text-warning" : ""}>
+          {state.backlogSeconds > 0
+            ? t(locale, "meetings.live.catchingUp", { seconds: String(Math.ceil(state.backlogSeconds)) })
+            : t(locale, "meetings.live.upToDate")}
         </span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col justify-center gap-1.5">

@@ -13,6 +13,8 @@ import type {
   CaptureStateChangedEvent,
   MeetingAssetsResult,
   MeetingAssetProgressEvent,
+  MeetingCopyRequest,
+  MeetingCopyResult,
   MeetingExportRequest,
   MeetingExportResult,
   MeetingGetRequest,
@@ -309,6 +311,8 @@ const api: MainWindowApi = {
       ) as Promise<MeetingSimpleResult>,
     export: (request: MeetingExportRequest) =>
       ipcRenderer.invoke(channels.meeting.export, request) as Promise<MeetingExportResult>,
+    copy: (request: MeetingCopyRequest) =>
+      ipcRenderer.invoke(channels.meeting.copy, request) as Promise<MeetingCopyResult>,
     revealRecording: (request: MeetingGetRequest) =>
       ipcRenderer.invoke(
         channels.meeting.revealRecording,

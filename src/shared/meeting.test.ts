@@ -14,6 +14,7 @@ describe("isMeetingActive", () => {
       startedAtMs: 1000,
       system: { live: true },
       microphone: { live: true },
+      transcriber: { engineId: "whisper-cpp", modelId: "whisper-large-v3-turbo-q5_0", kind: "local" },
       backlogSeconds: 0,
       segmentCount: 3,
       speakerCount: 2
@@ -25,7 +26,8 @@ describe("isMeetingActive", () => {
       meetingId: 1,
       startedAtMs: 1000,
       pausedAtMs: 2000,
-      segmentCount: 3
+      segmentCount: 3,
+      transcriber: { engineId: "whisper-cpp", modelId: "whisper-large-v3-turbo-q5_0", kind: "local" }
     };
     expect(isMeetingActive(paused)).toBe(true);
     expect(isMeetingActive({ phase: "finalizing", meetingId: 1, remaining: 2 })).toBe(true);

@@ -227,6 +227,9 @@ export const WHISPER_TIER_ORDER: readonly WhisperTier[] = [
  */
 export const DEFAULT_WHISPER_MODEL_ID = "whisper-base-q5_1";
 
+/** Higher quality default kept separate from dictation's lightweight choice. */
+export const MEETING_DEFAULT_WHISPER_MODEL_ID = "whisper-large-v3-turbo-q5_0";
+
 /**
  * The parakeet catalog id a fresh profile loads. The engine reads the
  * selected parakeet model from settings; this is what a new profile lands on

@@ -90,7 +90,8 @@ describe("settings migration", () => {
     const settings = migrateSettings(legacySettings);
     expect(settings.meeting.includeMicrophone).toBe(true);
     expect(settings.meeting.accelerator).toBe(DEFAULT_MEETING_ACCELERATOR);
-    expect(settings.meeting.engineId).toBe("parakeet");
+    expect(settings.meeting.engineId).toBe("whisper-cpp");
+    expect(settings.meeting.whisperModelId).toBe("whisper-large-v3-turbo-q5_0");
     expect(settings.meeting.diarization).toBe(true);
     expect(settings.meeting.diarizationRefineOverMs).toBe(15_000);
     expect(settings.meeting.speakerThreshold).toBe(0.55);
@@ -100,14 +101,31 @@ describe("settings migration", () => {
     expect(settings.meeting.archiveAudio).toBe(true);
     expect(settings.meeting.archiveBitrateKbps).toBe(32);
     expect(settings.meeting.vadMinSpeechMs).toBe(250);
-    expect(settings.meeting.vadMinSilenceMs).toBe(500);
-    expect(settings.meeting.vadMaxSpeechMs).toBe(20_000);
+    expect(settings.meeting.vadMinSilenceMs).toBe(650);
+    expect(settings.meeting.vadMaxSpeechMs).toBe(30_000);
     expect(settings.meeting.autoStopSilentMinutes).toBe(0);
     expect(settings.meeting.retentionDays).toBe(0);
   });
 
-  it("rejects a cloud engine for meetings", () => {
-    expect(meetingSettingsSchema.safeParse({ engineId: "openrouter" }).success).toBe(false);
+  it("accepts OpenRouter as an explicit meeting engine", () => {
+    expect(meetingSettingsSchema.safeParse({ engineId: "openrouter" }).success).toBe(true);
+  });
+
+  it("moves the old Parakeet meeting default to Whisper Turbo", () => {
+    const settings = migrateSettings({
+      ...legacySettings,
+      meeting: { engineId: "parakeet" }
+    });
+    expect(settings.meeting.engineId).toBe("whisper-cpp");
+    expect(settings.meeting.whisperModelId).toBe("whisper-large-v3-turbo-q5_0");
+  });
+
+  it("preserves a meeting with an explicit model choice", () => {
+    const settings = migrateSettings({
+      ...legacySettings,
+      meeting: { engineId: "parakeet", whisperModelId: "whisper-large-v3-turbo-q5_1" }
+    });
+    expect(settings.meeting.engineId).toBe("parakeet");
   });
 });
 

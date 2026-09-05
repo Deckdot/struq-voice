@@ -30,6 +30,7 @@ import type {
   MeetingSegment,
   MeetingState
 } from "../../shared/meeting";
+import type { MeetingTranscriber } from "../../shared/meeting";
 import { INITIAL_MEETING_STATE, isMeetingActive } from "../../shared/meeting";
 import type {
   MeetingAudioFrames,
@@ -43,10 +44,12 @@ import type { MeetingAssetService } from "./assets";
 import type { MeetingStore } from "../db/meeting-store";
 import type { MeetingWorkerClient } from "./worker-client";
 import type { WorkerFrames, WorkerInit } from "./worker/protocol";
+import type { TranscriptionEngine } from "../engines/types";
 
 const LANE_LIVE_TIMEOUT_MS = 8000;
 const WINDOW_STOP_TIMEOUT_MS = 5000;
 const WORKER_DRAIN_TIMEOUT_MS = 30_000;
+const CLOUD_DRAIN_TIMEOUT_MS = 10_000;
 /**
  * A hidden window that never loads would otherwise hang start() forever with
  * the worker, the archive and the window all held open. Local file, so this
@@ -70,7 +73,11 @@ export interface MeetingSessionOptions {
     readonly runtimeRoot: string;
     readonly meetingsRoot: string;
   };
-  readonly resolveModelId: (engineId: "parakeet" | "whisper-cpp") => string;
+  readonly resolveModelId: (
+    engineId: "parakeet" | "whisper-cpp" | "openrouter"
+  ) => string;
+  /** Main owns the cloud key and serializes cloud transcription requests. */
+  readonly cloudEngine?: TranscriptionEngine;
   readonly cores: number;
   /** Filesystem seam for tests; production uses the real mkdir. */
   readonly deps?: {
@@ -123,8 +130,16 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   let autoStopTimer: ReturnType<typeof setTimeout> | null = null;
   let lastUtteranceAtMs = 0;
   let backlogSeconds = 0;
+  let cloudBacklogSeconds = 0;
+  let cloudQueue: Promise<void> = Promise.resolve();
+  let transcriber: MeetingTranscriber = {
+    engineId: "whisper-cpp",
+    modelId: "whisper-large-v3-turbo-q5_0",
+    kind: "local"
+  };
   let meetingFailed = false;
   let disposed = false;
+  let stopInFlight: Promise<void> | null = null;
   /**
    * start() awaits four times (storage, worker, window load, capture gesture)
    * and each await is a point where a stop() can land. Without an ownership
@@ -169,6 +184,18 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     }
   };
 
+  const totalBacklogSeconds = (): number =>
+    Math.max(0, backlogSeconds + cloudBacklogSeconds);
+
+  const waitForCloudQueue = async (): Promise<void> => {
+    let timer!: ReturnType<typeof setTimeout>;
+    const timedOut = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, CLOUD_DRAIN_TIMEOUT_MS);
+    });
+    await Promise.race([cloudQueue, timedOut]);
+    clearTimeout(timer);
+  };
+
   const broadcastSegment = (segment: MeetingSegment): void => {
     segmentCount += 1;
     lastUtteranceAtMs = Date.now();
@@ -182,8 +209,92 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       listener(event);
     }
     if (state.phase === "recording") {
-      setState({ ...state, segmentCount, backlogSeconds });
+      setState({ ...state, segmentCount, backlogSeconds: totalBacklogSeconds() });
     }
+  };
+
+  const appendSegment = (input: {
+    readonly source: "system" | "microphone";
+    readonly startMs: number;
+    readonly endMs: number;
+    readonly speakerKey: string;
+    readonly text: string;
+  }): void => {
+    const meetingId = activeMeetingId;
+    const store = options.store;
+    if (meetingId === null || store === null || input.text.trim().length === 0) return;
+    const id = store.appendSegment({
+      meetingId,
+      startMs: input.startMs,
+      endMs: input.endMs,
+      source: input.source,
+      speakerKey: input.speakerKey,
+      text: input.text.trim(),
+      gap: false
+    });
+    broadcastSegment({
+      id,
+      meetingId,
+      startMs: input.startMs,
+      endMs: input.endMs,
+      source: input.source,
+      speakerKey: input.speakerKey,
+      text: input.text.trim(),
+      gap: false
+    });
+  };
+
+  const enqueueCloudUtterance = (payload: {
+    readonly source: "system" | "microphone";
+    readonly startMs: number;
+    readonly endMs: number;
+    readonly speakerKey: string;
+    readonly pcm: ArrayBuffer;
+  }): void => {
+    const engine = options.cloudEngine;
+    const meetingId = activeMeetingId;
+    if (engine === undefined || meetingId === null) return;
+    const durationMs = Math.max(1, payload.endMs - payload.startMs);
+    cloudBacklogSeconds += durationMs / 1000;
+    if (state.phase === "recording") {
+      setState({ ...state, backlogSeconds: totalBacklogSeconds() });
+    }
+    cloudQueue = cloudQueue
+      .then(async () => {
+        const outcome = await engine.transcribe({
+          pcm: new Int16Array(payload.pcm),
+          durationMs,
+          ...(speechLanguageHint(options.speechLanguage()) !== null
+            ? { language: speechLanguageHint(options.speechLanguage()) as string }
+            : {}),
+          signal: new AbortController().signal
+        });
+        if (!outcome.ok) {
+          logError("[meeting] Cloud utterance transcription failed.", new Error(outcome.error.message));
+          return;
+        }
+        if (activeMeetingId !== meetingId || disposed) return;
+        appendSegment({
+          source: payload.source,
+          startMs: payload.startMs,
+          endMs: payload.endMs,
+          speakerKey: payload.speakerKey,
+          text: outcome.value.text
+        });
+      })
+      .catch((error: unknown) => {
+        logError("[meeting] Cloud utterance queue failed.", error);
+      })
+      .finally(() => {
+        cloudBacklogSeconds = Math.max(0, cloudBacklogSeconds - durationMs / 1000);
+        if (state.phase === "recording" || state.phase === "finalizing") {
+          setState(
+            state.phase === "recording"
+              ? { ...state, backlogSeconds: totalBacklogSeconds() }
+              : { ...state, remaining: Math.ceil(totalBacklogSeconds()) }
+          );
+        }
+      });
   };
 
   const handleWorkerEvent = (event: unknown): void => {
@@ -191,6 +302,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     const workerEvent = event as {
       readonly type:
         | "segment"
+        | "cloud-utterance"
         | "gap"
         | "speakers-merged"
         | "heartbeat"
@@ -202,7 +314,6 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     const store = options.store;
     switch (workerEvent.type) {
       case "segment": {
-        if (meetingId === null || store === null) return;
         const payload = event as {
           readonly type: "segment";
           readonly source: "system" | "microphone";
@@ -211,25 +322,19 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
           readonly speakerKey: string;
           readonly text: string;
         };
-        const id = store.appendSegment({
-          meetingId,
-          startMs: payload.startMs,
-          endMs: payload.endMs,
-          source: payload.source,
-          speakerKey: payload.speakerKey,
-          text: payload.text,
-          gap: false
-        });
-        broadcastSegment({
-          id,
-          meetingId,
-          startMs: payload.startMs,
-          endMs: payload.endMs,
-          source: payload.source,
-          speakerKey: payload.speakerKey,
-          text: payload.text,
-          gap: false
-        });
+        appendSegment(payload);
+        break;
+      }
+      case "cloud-utterance": {
+        const payload = event as {
+          readonly type: "cloud-utterance";
+          readonly source: "system" | "microphone";
+          readonly startMs: number;
+          readonly endMs: number;
+          readonly speakerKey: string;
+          readonly pcm: ArrayBuffer;
+        };
+        enqueueCloudUtterance(payload);
         break;
       }
       case "gap": {
@@ -290,7 +395,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         // this tracks it rather than ratcheting to the high-water mark.
         speakerCount = payload.speakerCount;
         if (state.phase === "recording") {
-          setState({ ...state, backlogSeconds, speakerCount });
+          setState({ ...state, backlogSeconds: totalBacklogSeconds(), speakerCount });
         }
         break;
       }
@@ -413,6 +518,30 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     setState({ phase: "starting" });
     const settings = options.settings();
     const engine = engineId(settings);
+    const modelId = options.resolveModelId(engine);
+    transcriber = {
+      engineId: engine,
+      modelId,
+      kind: engine === "openrouter" ? "cloud" : "local"
+    };
+    if (engine === "openrouter") {
+      const cloudEngine = options.cloudEngine;
+      if (cloudEngine === undefined) {
+        startInFlight = false;
+        setState({ phase: "error", code: "engine-not-ready" });
+        return { ok: false, code: "engine-not-ready" };
+      }
+      const readiness = await cloudEngine.readiness();
+      if (!readiness.ready) {
+        startInFlight = false;
+        logError(
+          "[meeting] OpenRouter meeting engine is not ready.",
+          new Error(readiness.reason ?? "Configure OpenRouter before starting a cloud meeting.")
+        );
+        setState({ phase: "error", code: "engine-not-ready" });
+        return { ok: false, code: "engine-not-ready" };
+      }
+    }
     // The same hint the worker decodes with, recorded on the row. Null means
     // the decoder auto-detected, which is a real answer rather than a missing
     // one: a meeting transcribed under a pinned language and one that was
@@ -422,7 +551,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     const meetingId = store.createMeeting({
       title: defaultTitle(new Date()),
       engineId: engine,
-      modelId: options.resolveModelId(engine),
+      modelId,
       language,
       audioPath: null
     });
@@ -431,6 +560,8 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     segmentCount = 0;
     speakerCount = 0;
     backlogSeconds = 0;
+    cloudBacklogSeconds = 0;
+    cloudQueue = Promise.resolve();
 
     const meetingDir = join(options.paths.meetingsRoot, String(meetingId));
     const audioPath = settings.archiveAudio ? join(meetingDir, "recording.webm") : null;
@@ -463,7 +594,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
       engineId: engine,
       modelsRoot: options.paths.modelsRoot,
       runtimeRoot: options.paths.runtimeRoot,
-      modelId: options.resolveModelId(engine),
+      modelId,
       assetPaths: {
         vad: options.assets.pathFor("vad") ?? "",
         embedding: options.assets.pathFor("embedding") ?? "",
@@ -610,6 +741,8 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   };
 
   const stop = async (): Promise<void> => {
+    if (stopInFlight !== null) return stopInFlight;
+    const run = async (): Promise<void> => {
     if (!isMeetingActive(state)) return;
     // Invalidate first. An in-flight start observes this at its next resume
     // point and unwinds itself instead of rebuilding what is torn down below.
@@ -625,7 +758,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     if (cancelledMidStart) {
       finalizedByCanceller.add(meetingId);
     }
-    setState({ phase: "finalizing", meetingId, remaining: backlogSeconds });
+    setState({ phase: "finalizing", meetingId, remaining: Math.ceil(totalBacklogSeconds()) });
 
     if (laneLiveTimer !== null) {
       clearTimeout(laneLiveTimer);
@@ -638,7 +771,11 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
 
     const window = meetingWindow;
     if (window !== null && !window.isDestroyed()) {
-      window.webContents.send("meeting-audio:stop");
+      try {
+        window.webContents.send("meeting-audio:stop");
+      } catch (error) {
+        logError("[meeting] Sending the stop signal failed.", error);
+      }
       await new Promise<void>((resolve) => {
         windowStopTimer = setTimeout(() => {
           windowStopTimer = null;
@@ -659,7 +796,12 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
     let audioBytes = 0;
     let archiveFailed = false;
     if (options.archive.isOpen()) {
-      const closed = await options.archive.close();
+      let closed: number | null = null;
+      try {
+        closed = await options.archive.close();
+      } catch (error) {
+        logError("[meeting] Closing the archive failed.", error);
+      }
       // Null means the recording failed: the file is missing or truncated.
       // Reporting the bytes that happen to be there would file a corrupt
       // recording as a complete one.
@@ -669,26 +811,50 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         audioBytes = closed;
       }
     }
-    options.window.destroy();
+    try {
+      options.window.destroy();
+    } catch (error) {
+      logError("[meeting] Destroying the meeting window failed.", error);
+    }
     meetingWindow = null;
 
-    await options.worker.drain(WORKER_DRAIN_TIMEOUT_MS);
-    options.worker.kill();
+    try {
+      await options.worker.drain(WORKER_DRAIN_TIMEOUT_MS);
+    } catch (error) {
+      logError("[meeting] Draining the worker failed.", error);
+    }
+    await waitForCloudQueue();
+    try {
+      options.worker.kill();
+    } catch (error) {
+      logError("[meeting] Killing the worker failed.", error);
+    }
 
     if (options.store !== null) {
-      options.store.finalizeMeeting(meetingId, {
-        endedAtMs: Date.now(),
-        durationMs: Math.max(0, Date.now() - (startedAtMs ?? Date.now())),
-        audioBytes,
-        speakerCount,
-        state:
-          meetingFailed || archiveFailed || cancelledMidStart ? "interrupted" : "complete"
-      });
+      try {
+        options.store.finalizeMeeting(meetingId, {
+          endedAtMs: Date.now(),
+          durationMs: Math.max(0, Date.now() - (startedAtMs ?? Date.now())),
+          audioBytes,
+          speakerCount,
+          state:
+            meetingFailed || archiveFailed || cancelledMidStart ? "interrupted" : "complete"
+        });
+      } catch (error) {
+        logError("[meeting] Finalizing the meeting failed.", error);
+      }
     }
     activeMeetingId = null;
     startedAtMs = null;
     meetingFailed = false;
     setState({ phase: "idle" });
+    };
+    stopInFlight = run();
+    try {
+      await stopInFlight;
+    } finally {
+      stopInFlight = null;
+    }
   };
 
   const togglePause = (): boolean => {
@@ -703,7 +869,8 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         meetingId: state.meetingId,
         startedAtMs: state.startedAtMs,
         pausedAtMs: Date.now(),
-        segmentCount
+        segmentCount,
+        transcriber
       });
       return true;
     }
@@ -715,9 +882,10 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         startedAtMs: state.startedAtMs,
         system: lastLaneHealth.system,
         microphone: lastLaneHealth.microphone,
-        backlogSeconds,
+        backlogSeconds: totalBacklogSeconds(),
         segmentCount,
-        speakerCount
+        speakerCount,
+        transcriber
       };
       setState(recording);
       lastUtteranceAtMs = Date.now();
@@ -795,9 +963,10 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         startedAtMs: startedAtMs ?? Date.now(),
         system: lastLaneHealth.system,
         microphone: lastLaneHealth.microphone,
-        backlogSeconds,
+        backlogSeconds: totalBacklogSeconds(),
         segmentCount,
-        speakerCount
+        speakerCount,
+        transcriber
       };
       setState(recording);
       setAutoStopTimer();
@@ -952,7 +1121,9 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
   };
 };
 
-const engineId = (settings: MeetingSettings): "parakeet" | "whisper-cpp" =>
+const engineId = (
+  settings: MeetingSettings
+): "parakeet" | "whisper-cpp" | "openrouter" =>
   settings.engineId;
 
 const defaultTitle = (date: Date): string => {

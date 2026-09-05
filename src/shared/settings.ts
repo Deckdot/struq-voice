@@ -8,7 +8,11 @@ import { z } from "zod";
 import { hardwareProfileSchema } from "./hardware";
 import { DEFAULT_ENGINE_ID } from "./engines";
 import { DEFAULT_PTT_ACCELERATOR, DEFAULT_MEETING_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
-import { DEFAULT_WHISPER_MODEL_ID, PARAKEET_DEFAULT_MODEL_ID } from "./models";
+import {
+  DEFAULT_WHISPER_MODEL_ID,
+  MEETING_DEFAULT_WHISPER_MODEL_ID,
+  PARAKEET_DEFAULT_MODEL_ID
+} from "./models";
 
 export const dictionaryEntrySchema = z.object({
   from: z.string().min(1),
@@ -53,11 +57,12 @@ export const meetingSettingsSchema = z.object({
   /** Toggle accelerator for starting and stopping a meeting. */
   accelerator: z.string().min(1).default(DEFAULT_MEETING_ACCELERATOR),
   /**
-   * Which engine transcribes meetings. Local only: a meeting is hours of
-   * audio and sending it to a cloud engine is both a bill and a disclosure
-   * nobody agreed to. The router is not involved and there is no fallback.
+   * Which engine transcribes meetings. This is independent from dictation,
+   * and cloud processing is always an explicit choice with no fallback.
    */
-  engineId: z.enum(["parakeet", "whisper-cpp"]).default("parakeet"),
+  engineId: z.enum(["parakeet", "whisper-cpp", "openrouter"]).default("whisper-cpp"),
+  /** Catalog id used when the meeting engine is whisper.cpp. */
+  whisperModelId: z.string().min(1).default(MEETING_DEFAULT_WHISPER_MODEL_ID),
   /** Label speakers on the system lane. Off makes every remote line "Speaker". */
   diarization: z.boolean().default(true),
   /**
@@ -94,9 +99,9 @@ export const meetingSettingsSchema = z.object({
   /** Silero: speech shorter than this is not an utterance (ms). */
   vadMinSpeechMs: z.number().int().min(100).max(2000).default(250),
   /** Silero: silence this long closes an utterance (ms). */
-  vadMinSilenceMs: z.number().int().min(200).max(3000).default(500),
+  vadMinSilenceMs: z.number().int().min(200).max(3000).default(650),
   /** Silero: force a boundary in a monologue (ms). */
-  vadMaxSpeechMs: z.number().int().min(5000).max(60_000).default(20_000),
+  vadMaxSpeechMs: z.number().int().min(5000).max(60_000).default(30_000),
   /** Stop a meeting nobody is in. 0 never auto-stops. Minutes. */
   autoStopSilentMinutes: z.number().int().min(0).max(120).default(0),
   /** Delete meetings older than this. 0 keeps them forever. Days. */
@@ -192,7 +197,8 @@ export const settingsSchema = z.object({
   meeting: meetingSettingsSchema.default({
     includeMicrophone: true,
     accelerator: DEFAULT_MEETING_ACCELERATOR,
-    engineId: "parakeet",
+    engineId: "whisper-cpp",
+    whisperModelId: MEETING_DEFAULT_WHISPER_MODEL_ID,
     diarization: true,
     diarizationRefineOverMs: 15_000,
     speakerThreshold: 0.55,
@@ -202,8 +208,8 @@ export const settingsSchema = z.object({
     archiveAudio: true,
     archiveBitrateKbps: 32,
     vadMinSpeechMs: 250,
-    vadMinSilenceMs: 500,
-    vadMaxSpeechMs: 20_000,
+    vadMinSilenceMs: 650,
+    vadMaxSpeechMs: 30_000,
     autoStopSilentMinutes: 0,
     retentionDays: 0
   })
@@ -327,11 +333,37 @@ const salvageFields = (
  */
 export const migrateSettings = (raw: unknown): Settings => {
   const parsed = settingsSchema.safeParse(raw);
-  if (parsed.success) return parsed.data;
-  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
-    return salvageFields(DEFAULT_SETTINGS, raw as Record<string, unknown>);
+  const settled = parsed.success
+    ? parsed.data
+    : typeof raw === "object" && raw !== null && !Array.isArray(raw)
+      ? salvageFields(DEFAULT_SETTINGS, raw as Record<string, unknown>)
+      : settingsSchema.parse({});
+
+  // Profiles from the first meeting release had no meeting-specific model and
+  // defaulted to Parakeet. Move only those untouched legacy defaults to the
+  // quality-first Whisper path. A profile with an explicit model selection is
+  // left alone so a deliberate Parakeet choice remains valid.
+  const rawMeeting =
+    typeof raw === "object" && raw !== null && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)["meeting"]
+      : undefined;
+  if (
+    typeof rawMeeting === "object" &&
+    rawMeeting !== null &&
+    !Array.isArray(rawMeeting) &&
+    !Object.prototype.hasOwnProperty.call(rawMeeting, "whisperModelId") &&
+    settled.meeting.engineId === "parakeet"
+  ) {
+    return {
+      ...settled,
+      meeting: {
+        ...settled.meeting,
+        engineId: "whisper-cpp",
+        whisperModelId: MEETING_DEFAULT_WHISPER_MODEL_ID
+      }
+    };
   }
-  return settingsSchema.parse({});
+  return settled;
 };
 
 /**

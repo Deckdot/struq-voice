@@ -28,6 +28,12 @@ export interface MeetingLaneHealth {
   readonly code?: MeetingLaneErrorCode;
 }
 
+export interface MeetingTranscriber {
+  readonly engineId: "parakeet" | "whisper-cpp" | "openrouter";
+  readonly modelId: string;
+  readonly kind: "local" | "cloud";
+}
+
 export type MeetingLaneErrorCode =
   | "loopback-unavailable"
   | "loopback-denied"
@@ -43,6 +49,7 @@ export type MeetingState =
       readonly startedAtMs: number;
       readonly system: MeetingLaneHealth;
       readonly microphone: MeetingLaneHealth;
+      readonly transcriber: MeetingTranscriber;
       /** Seconds of captured audio not yet transcribed. 0 when keeping up. */
       readonly backlogSeconds: number;
       readonly segmentCount: number;
@@ -54,6 +61,7 @@ export type MeetingState =
       readonly startedAtMs: number;
       readonly pausedAtMs: number;
       readonly segmentCount: number;
+      readonly transcriber: MeetingTranscriber;
     }
   | {
       readonly phase: "finalizing";

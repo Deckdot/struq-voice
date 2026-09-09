@@ -164,6 +164,25 @@ const api: MainWindowApi = {
     stats: () =>
       ipcRenderer.invoke(channels.history.stats) as Promise<HistoryStatsResult>
   },
+  notes: {
+    list: (request = {}) => ipcRenderer.invoke(channels.notes.list, request),
+    get: (id) => ipcRenderer.invoke(channels.notes.get, { id }),
+    create: (input) => ipcRenderer.invoke(channels.notes.create, input),
+    update: (id, input) => ipcRenderer.invoke(channels.notes.update, { id, ...input }),
+    setState: (id, state) => ipcRenderer.invoke(channels.notes.setState, { id, state }),
+    setPinned: (id, pinned) => ipcRenderer.invoke(channels.notes.setPinned, { id, pinned }),
+    duplicate: (id) => ipcRenderer.invoke(channels.notes.duplicate, { id }),
+    delete: (id) => ipcRenderer.invoke(channels.notes.delete, { id }),
+    promote: (sourceKind, sourceId) => ipcRenderer.invoke(channels.notes.promote, { sourceKind, sourceId }),
+    export: (id) => ipcRenderer.invoke(channels.notes.export, { id }),
+    onChange: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, event: Parameters<typeof listener>[0]): void => {
+        listener(event);
+      };
+      ipcRenderer.on(channels.notes.changed, handler);
+      return () => ipcRenderer.removeListener(channels.notes.changed, handler);
+    }
+  },
   models: {
     list: () =>
       ipcRenderer.invoke(channels.models.list) as Promise<ModelsListResult>,
@@ -252,12 +271,15 @@ const api: MainWindowApi = {
   },
   devices: {
     list: () =>
-      ipcRenderer.invoke(channels.devices.list) as Promise<{
-        devices: readonly { deviceId: string; label: string }[];
-        currentDeviceId: string | null;
-      }>,
-    setDevice: (deviceId: string) => {
-      ipcRenderer.send(channels.recorder.setDevice, { deviceId });
+      ipcRenderer.invoke(channels.devices.list),
+    setDevice: (deviceId: string | null) =>
+      ipcRenderer.invoke(channels.devices.set, { deviceId }),
+    onChange: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: unknown): void => {
+        listener(state as Parameters<typeof listener>[0]);
+      };
+      ipcRenderer.on(channels.devices.changed, handler);
+      return () => ipcRenderer.removeListener(channels.devices.changed, handler);
     }
   },
   updates: {

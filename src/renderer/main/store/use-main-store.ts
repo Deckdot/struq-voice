@@ -12,10 +12,11 @@ import type { MainWindowApi } from "../../../shared/api";
  * library.
  */
 
-export type Route = "dictate" | "meetings" | "history" | "dictionary" | "models" | "settings";
+export type Route = "dictate" | "notes" | "meetings" | "history" | "dictionary" | "models" | "settings";
 
 export const ROUTE_ORDER: readonly Route[] = [
   "dictate",
+  "notes",
   "meetings",
   "history",
   "dictionary",
@@ -25,6 +26,7 @@ export const ROUTE_ORDER: readonly Route[] = [
 
 export const ROUTE_LABELS: Record<Route, string> = {
   dictate: "Dictate",
+  notes: "Notes",
   meetings: "Meetings",
   history: "History",
   dictionary: "Dictionary",

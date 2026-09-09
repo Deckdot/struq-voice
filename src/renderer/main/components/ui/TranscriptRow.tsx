@@ -34,6 +34,7 @@ export interface TranscriptRowProps {
   readonly deleteArmed: boolean;
   readonly onToggleExpanded: (id: number) => void;
   readonly onCopy: (id: number, text: string) => void;
+  readonly onPromote: (id: number) => void;
   readonly onArmDelete: (id: number) => void;
   readonly onConfirmDelete: (id: number) => void;
   readonly onCancelArmedDelete: () => void;
@@ -47,6 +48,7 @@ export const TranscriptRow = memo(function TranscriptRow({
   deleteArmed,
   onToggleExpanded,
   onCopy,
+  onPromote,
   onArmDelete,
   onConfirmDelete,
   onCancelArmedDelete
@@ -125,7 +127,15 @@ export const TranscriptRow = memo(function TranscriptRow({
           )}
         </div>
       </button>
-      <div className="flex w-[72px] shrink-0 items-center justify-end gap-1">
+      <div className="flex w-[108px] shrink-0 items-center justify-end gap-1">
+        <IconButton
+          icon="ph:article"
+          label="Save as note"
+          size="sm"
+          onClick={() => {
+            onPromote(record.id);
+          }}
+        />
         {copyArmed ? (
           <span className="inline-flex h-7 w-7 items-center justify-center text-success">
             <Icon icon="ph:check" className="h-4 w-4" aria-hidden="true" />

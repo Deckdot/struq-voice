@@ -6,6 +6,7 @@ export const nl: Partial<Record<MessageKey, unknown>> = {
   "nav.dictate": "Dicteren",
   "nav.meetings": "Vergaderingen",
   "nav.history": "Geschiedenis",
+  "nav.notes": "Notities",
   "nav.dictionary": "Woordenboek",
   "nav.models": "Modellen",
   "nav.settings": "Instellingen",

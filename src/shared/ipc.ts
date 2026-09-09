@@ -125,7 +125,7 @@ export interface RecorderStreamState {
 export const recorderSetDeviceChannel = "recorder:set-device" as const;
 
 export interface RecorderSetDeviceRequest {
-  readonly deviceId: string;
+  readonly deviceId: string | null;
 }
 
 /** Main to recorder: ask for the current audio input device list. */
@@ -145,12 +145,22 @@ export interface RecorderDevicesEvent {
 
 /** Main window to main: request the current audio input device list. */
 export const devicesListChannel = "devices:list" as const;
+export const devicesSetChannel = "devices:set" as const;
+export const devicesChangedChannel = "devices:changed" as const;
+
+export type MicrophoneDeviceStatus = "switching" | "live" | "fallback" | "unavailable";
 
 export interface DevicesListResult {
   readonly devices: readonly RecorderDevice[];
-  /** The persisted deviceId, or null when the default is in use. */
-  readonly currentDeviceId: string | null;
+  readonly preferredDeviceId: string | null;
+  readonly preferredLabel: string | null;
+  readonly activeDeviceId: string | null;
+  readonly activeLabel: string | null;
+  readonly status: MicrophoneDeviceStatus;
+  readonly errorCode?: string;
 }
+
+export type DevicesChangedEvent = DevicesListResult;
 
 /** Push channel: live capture levels, relayed to the overlay at 60Hz. */
 export const captureLevelsChangedChannel = "capture:levels-changed" as const;
@@ -222,6 +232,58 @@ export interface TranscriptRecord {
   readonly costUsd: number | null;
   readonly language: string | null;
   readonly createdAtMs: number;
+}
+
+export type NoteFilter = "active" | "archived" | "trash";
+export type NoteSourceKind = "history" | "meeting";
+export type NoteCreatedVia = "manual" | "quick-note" | "promotion";
+
+export interface NoteSummary {
+  readonly id: number;
+  readonly title: string;
+  readonly preview: string;
+  readonly pinnedAt: number | null;
+  readonly archivedAt: number | null;
+  readonly trashedAt: number | null;
+  readonly updatedAt: number;
+}
+
+export interface NoteRecord extends NoteSummary {
+  readonly body: string;
+  readonly titleIsManual: boolean;
+  readonly sourceKind: NoteSourceKind | null;
+  readonly sourceId: number | null;
+  readonly createdVia: NoteCreatedVia;
+  readonly createdAt: number;
+}
+
+export interface NotesListRequest {
+  readonly query?: string;
+  readonly filter?: NoteFilter;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+export interface NotesListResult {
+  readonly items: readonly NoteSummary[];
+  readonly total: number;
+}
+
+export const notesListChannel = "notes:list" as const;
+export const notesGetChannel = "notes:get" as const;
+export const notesCreateChannel = "notes:create" as const;
+export const notesUpdateChannel = "notes:update" as const;
+export const notesSetStateChannel = "notes:set-state" as const;
+export const notesSetPinnedChannel = "notes:set-pinned" as const;
+export const notesDuplicateChannel = "notes:duplicate" as const;
+export const notesDeleteChannel = "notes:delete" as const;
+export const notesPromoteChannel = "notes:promote" as const;
+export const notesExportChannel = "notes:export" as const;
+export const notesChangedChannel = "notes:changed" as const;
+
+export interface NotesChangedEvent {
+  readonly note: NoteRecord | null;
+  readonly reason: "created" | "updated" | "deleted" | "state" | "pinned";
 }
 
 export const historyListChannel = "history:list" as const;
@@ -796,6 +858,19 @@ export const PRELOAD_CHANNELS = {
     clear: historyClearChannel,
     stats: historyStatsChannel
   },
+  notes: {
+    list: notesListChannel,
+    get: notesGetChannel,
+    create: notesCreateChannel,
+    update: notesUpdateChannel,
+    setState: notesSetStateChannel,
+    setPinned: notesSetPinnedChannel,
+    duplicate: notesDuplicateChannel,
+    delete: notesDeleteChannel,
+    promote: notesPromoteChannel,
+    export: notesExportChannel,
+    changed: notesChangedChannel
+  },
   metrics: {
     measuredRtf: metricsMeasuredRtfChannel
   },
@@ -813,7 +888,9 @@ export const PRELOAD_CHANNELS = {
     import: dictionaryImportChannel
   },
   devices: {
-    list: devicesListChannel
+    list: devicesListChannel,
+    set: devicesSetChannel,
+    changed: devicesChangedChannel
   },
   openRouterKey: {
     status: openRouterKeyStatusChannel,

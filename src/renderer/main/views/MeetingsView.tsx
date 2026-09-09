@@ -848,6 +848,7 @@ function MeetingDetail({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [copied, setCopied] = useState(false);
+  const setRoute = useMainStore((state) => state.setRoute);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -962,6 +963,18 @@ function MeetingDetail({
           >
             <Icon icon="ph:download-simple" className="h-4 w-4" aria-hidden="true" />
             {t("meetings.detail.saveMarkdown")}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              void api.notes.promote("meeting", meetingId).then((note) => {
+                if (note !== null) setRoute("notes");
+              });
+            }}
+          >
+            <Icon icon="ph:article" className="h-4 w-4" aria-hidden="true" />
+            Save as note
           </Button>
           <DropdownMenu
             trigger={

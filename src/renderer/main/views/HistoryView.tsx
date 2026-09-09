@@ -127,6 +127,7 @@ const readSelectionCandidate = (
 
 export function HistoryView(): JSX.Element {
   const api = window.struqVoice as MainWindowApi;
+  const setRoute = useMainStore((state) => state.setRoute);
   const { t } = useTranslation();
   const [records, setRecords] = useState<readonly TranscriptRecord[]>([]);
   const [query, setQuery] = useState("");
@@ -320,6 +321,12 @@ export function HistoryView(): JSX.Element {
     [api]
   );
 
+  const handlePromote = useCallback((id: number): void => {
+    void api.notes.promote("history", id).then((note) => {
+      if (note !== null) setRoute("notes");
+    });
+  }, [api, setRoute]);
+
   const handleArmDelete = useCallback((id: number): void => {
     setDeleteArmed(id);
   }, []);
@@ -504,6 +511,7 @@ export function HistoryView(): JSX.Element {
                     deleteArmed={deleteArmed === record.id}
                     onToggleExpanded={handleToggleExpanded}
                     onCopy={handleCopy}
+                    onPromote={handlePromote}
                     onArmDelete={handleArmDelete}
                     onConfirmDelete={handleConfirmDelete}
                     onCancelArmedDelete={handleCancelArmedDelete}

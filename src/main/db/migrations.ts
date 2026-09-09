@@ -115,6 +115,46 @@ const MIGRATIONS: readonly Migration[] = [
         VALUES ('delete', old.id, old.text);
       END;
     `
+  },
+  {
+    version: 3,
+    sql: `
+      CREATE TABLE notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        title_is_manual INTEGER NOT NULL DEFAULT 0,
+        source_kind TEXT CHECK (source_kind IS NULL OR source_kind IN ('history', 'meeting')),
+        source_id INTEGER,
+        created_via TEXT NOT NULL CHECK (created_via IN ('manual', 'quick-note', 'promotion')),
+        pinned_at INTEGER,
+        archived_at INTEGER,
+        trashed_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE UNIQUE INDEX notes_source_unique ON notes(source_kind, source_id)
+        WHERE source_kind IS NOT NULL AND source_id IS NOT NULL;
+      CREATE INDEX notes_updated ON notes(updated_at DESC);
+
+      CREATE VIRTUAL TABLE notes_fts USING fts5(
+        title, body, content='notes', content_rowid='id'
+      );
+
+      CREATE TRIGGER notes_ai AFTER INSERT ON notes BEGIN
+        INSERT INTO notes_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
+      END;
+      CREATE TRIGGER notes_au AFTER UPDATE ON notes BEGIN
+        INSERT INTO notes_fts(notes_fts, rowid, title, body)
+          VALUES ('delete', old.id, old.title, old.body);
+        INSERT INTO notes_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
+      END;
+      CREATE TRIGGER notes_ad AFTER DELETE ON notes BEGIN
+        INSERT INTO notes_fts(notes_fts, rowid, title, body)
+          VALUES ('delete', old.id, old.title, old.body);
+      END;
+    `
   }
 ];
 

@@ -35,6 +35,50 @@ export interface EngineOption extends EngineDescriptor {
   readonly hint: string;
 }
 
+export interface OpenRouterTranscriptionModel {
+  readonly id: string;
+  readonly name: string;
+  readonly hint: string;
+  readonly endpoint: "audio-transcriptions" | "stt";
+}
+
+/** Curated STT models exposed by the OpenRouter provider. Keep this list small. */
+export const OPENROUTER_TRANSCRIPTION_MODELS: readonly OpenRouterTranscriptionModel[] = [
+  {
+    id: "openai/gpt-transcribe",
+    name: "GPT Transcribe",
+    hint: "OpenAI's latest high-accuracy speech recognition model.",
+    endpoint: "audio-transcriptions"
+  },
+  {
+    id: "microsoft/mai-transcribe-2",
+    name: "MAI-Transcribe 2",
+    hint: "Microsoft multilingual transcription with fast long-form processing.",
+    endpoint: "audio-transcriptions"
+  },
+  {
+    id: "x-ai/grok-stt-1.0",
+    name: "Grok STT 1.0",
+    hint: "Fast xAI speech-to-text with optional diarization.",
+    endpoint: "stt"
+  },
+  {
+    id: "qwen/qwen3-asr-1.7b",
+    name: "Qwen3 ASR 1.7B",
+    hint: "Accurate multilingual speech recognition with fast inference.",
+    endpoint: "audio-transcriptions"
+  },
+  {
+    id: "openai/whisper-large-v3-turbo",
+    name: "Whisper Large V3 Turbo",
+    hint: "Very fast broad-language transcription with low cost.",
+    endpoint: "audio-transcriptions"
+  }
+];
+
+export const DEFAULT_OPENROUTER_TRANSCRIPTION_MODEL =
+  OPENROUTER_TRANSCRIPTION_MODELS[0]?.id ?? "openai/gpt-transcribe";
+
 /**
  * Every engine the user can select, described once. Both Dictate and
  * Settings render from this, so an engine cannot be labelled two ways.

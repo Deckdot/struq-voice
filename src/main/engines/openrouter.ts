@@ -1,8 +1,8 @@
 /**
  * OpenRouter STT engine, ported from StruqADE voice-service.ts:199-365 and
- * adapted to plan section 5.5: OpenAI-compatible transcriptions endpoint,
- * openai/whisper-large-v3 primary with openai/whisper-1 retry on retryable
- * statuses, cost reported per transcription.
+ * adapted to the OpenRouter transcription endpoint, with the selected model
+ * and a small Whisper fallback on retryable statuses, cost reported per
+ * transcription.
  *
  * Length is not a limit here. The endpoint caps the size of one request, not
  * the length of a dictation, so a recording past that size is cut into pieces
@@ -15,6 +15,10 @@ import { DEFAULT_CHUNK_PLAN, planChunks } from "../audio/chunking";
 import { buildWav } from "../audio/wav";
 import type { Result } from "../../shared/result";
 import { fail, ok } from "../../shared/result";
+import {
+  DEFAULT_OPENROUTER_TRANSCRIPTION_MODEL,
+  OPENROUTER_TRANSCRIPTION_MODELS
+} from "../../shared/engines";
 import type {
   EngineReadiness,
   TranscribeRequest,
@@ -23,9 +27,9 @@ import type {
 } from "./types";
 
 const OPENROUTER_STT_URL = "https://openrouter.ai/api/v1/audio/transcriptions";
-export const OPENROUTER_PRIMARY_MODEL_ID = "openai/whisper-large-v3" as const;
-const PRIMARY_MODEL = OPENROUTER_PRIMARY_MODEL_ID;
-const FALLBACK_MODEL = "openai/whisper-1";
+const OPENROUTER_GROK_STT_URL = "https://openrouter.ai/api/v1/stt";
+export const OPENROUTER_PRIMARY_MODEL_ID = DEFAULT_OPENROUTER_TRANSCRIPTION_MODEL;
+const FALLBACK_MODEL = "openai/whisper-large-v3-turbo";
 /** The provider's own per-request ceiling. */
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const SAMPLE_RATE = 16_000;
@@ -41,6 +45,7 @@ const isRetryable = (status: number): boolean =>
 
 export interface OpenRouterEngineInput {
   readonly getApiKey: () => Promise<string | null>;
+  readonly getModelId?: () => string;
 }
 
 export const OPENROUTER_ENGINE_ID = "openrouter";
@@ -62,6 +67,8 @@ const callOpenRouter = async (
   language: string | undefined,
   signal: AbortSignal
 ): Promise<OpenRouterResponse> => {
+  const definition = OPENROUTER_TRANSCRIPTION_MODELS.find((item) => item.id === model);
+  const url = definition?.endpoint === "stt" ? OPENROUTER_GROK_STT_URL : OPENROUTER_STT_URL;
   const body = {
     model,
     ...(language !== undefined ? { language } : {}),
@@ -72,7 +79,7 @@ const callOpenRouter = async (
     temperature: 0
   };
 
-  const response = await fetch(OPENROUTER_STT_URL, {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -126,6 +133,7 @@ interface ChunkOutcome {
  */
 const transcribeChunk = async (
   apiKey: string,
+  model: string,
   pcm: Int16Array,
   language: string | undefined,
   signal: AbortSignal
@@ -148,8 +156,8 @@ const transcribeChunk = async (
 
   try {
     return read(
-      await callOpenRouter(apiKey, PRIMARY_MODEL, wav, language, signal),
-      PRIMARY_MODEL
+      await callOpenRouter(apiKey, model, wav, language, signal),
+      model
     );
   } catch (primaryError) {
     if (primaryError instanceof OpenRouterError && isRetryable(primaryError.status)) {
@@ -167,7 +175,7 @@ export const createOpenRouterEngine = (
 ): TranscriptionEngine => {
   return {
     id: OPENROUTER_ENGINE_ID,
-    displayName: "OpenRouter Whisper",
+    displayName: "OpenRouter Transcription",
     kind: "cloud",
     readiness: async (): Promise<EngineReadiness> => {
       const apiKey = await input.getApiKey();
@@ -206,10 +214,11 @@ export const createOpenRouterEngine = (
       }
 
       const startedAt = Date.now();
+      const selectedModel = input.getModelId?.() ?? OPENROUTER_PRIMARY_MODEL_ID;
       const parts: string[] = [];
       let language: string | null = null;
       let costUsd: number | null = null;
-      let modelId: string = PRIMARY_MODEL;
+      let modelId: string = selectedModel;
       let failure: unknown = null;
 
       for (const chunk of chunks) {
@@ -220,6 +229,7 @@ export const createOpenRouterEngine = (
         try {
           const outcome = await transcribeChunk(
             apiKey,
+            selectedModel,
             request.pcm.subarray(chunk.start, chunk.end),
             request.language,
             request.signal

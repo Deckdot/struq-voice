@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import type { MainWindowApi } from "../../../../shared/api";
 import type { Settings } from "../../../../shared/settings";
 import { SPEECH_LANGUAGES } from "../../../../shared/settings";
-import { ENGINE_OPTIONS } from "../../../../shared/engines";
+import { ENGINE_OPTIONS, OPENROUTER_TRANSCRIPTION_MODELS } from "../../../../shared/engines";
 import type { EngineOption } from "../../../../shared/engines";
 import { findModel, MODEL_CATALOG } from "../../../../shared/models";
 import { Button, Card, Field, RadioGroup, Select, SettingsGroup, SettingsRow, TextInput, formatBytes } from "../../components/ui";
@@ -141,6 +141,44 @@ export function TranscriptionTab({ api, settings, update }: TranscriptionTabProp
           options={options}
         />
       </SettingsGroup>
+
+      {isCloud && (
+        <SettingsGroup
+          title="OpenRouter model"
+          description="Choose the speech-to-text model used for cloud transcription."
+        >
+          <SettingsRow
+            label="Transcription model"
+            control={
+              <div className="w-80">
+                <Select
+                  aria-label="OpenRouter transcription model"
+                  value={settings.engine.openrouterModelId}
+                  onChange={(event) => {
+                    update({
+                      engine: {
+                        ...settings.engine,
+                        openrouterModelId: event.target.value
+                      }
+                    });
+                  }}
+                >
+                  {OPENROUTER_TRANSCRIPTION_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </Select>
+                <p className="mt-1 text-xs text-text-muted">
+                  {OPENROUTER_TRANSCRIPTION_MODELS.find(
+                    (model) => model.id === settings.engine.openrouterModelId
+                  )?.hint}
+                </p>
+              </div>
+            }
+          />
+        </SettingsGroup>
+      )}
 
       {isCloud && (
         <Card className="border-border bg-surface">

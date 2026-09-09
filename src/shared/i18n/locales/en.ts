@@ -12,6 +12,7 @@ export const en = {
   "nav.dictate": "Dictate",
   "nav.meetings": "Meetings",
   "nav.history": "History",
+  "nav.notes": "Notes",
   "nav.dictionary": "Dictionary",
   "nav.models": "Models",
   "nav.settings": "Settings",

@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { BrowserWindow, app, clipboard, dialog, ipcMain } from "electron";
 import type { HistoryStore } from "./db/history-store";
+import type { NotesStore } from "./db/notes-store";
 import type { ModelsService } from "./models";
 import type { SecretsStore } from "./store/secrets";
 import type { SettingsStore } from "./store/settings-store";
@@ -14,6 +15,7 @@ import type { HardwareProfile, ModelRecommendation } from "../shared/hardware";
 import { UNKNOWN_HARDWARE, recommendModel } from "../shared/hardware";
 import type {
   AppReadiness,
+  DevicesChangedEvent,
   DevicesListResult,
   DictionaryExportResult,
   DictionaryFile,
@@ -22,6 +24,8 @@ import type {
   HistoryListRequest,
   HistorySearchRequest,
   HistoryStatsResult,
+  NotesChangedEvent,
+  NotesListRequest,
   ModelsModelRequest,
   OnboardingCompleteResult,
   OnboardingProfileResult,
@@ -45,11 +49,24 @@ import {
   clipboardCopyChannel,
   clipboardReadChannel,
   devicesListChannel,
+  devicesSetChannel,
+  devicesChangedChannel,
   historyClearChannel,
   historyDeleteChannel,
   historyListChannel,
   historySearchChannel,
   historyStatsChannel,
+  notesChangedChannel,
+  notesCreateChannel,
+  notesDeleteChannel,
+  notesDuplicateChannel,
+  notesExportChannel,
+  notesGetChannel,
+  notesListChannel,
+  notesPromoteChannel,
+  notesSetPinnedChannel,
+  notesSetStateChannel,
+  notesUpdateChannel,
   modelsCancelChannel,
   modelsDeleteChannel,
   modelsDownloadChannel,
@@ -99,6 +116,11 @@ export interface ReadinessDeps {
   readonly getReadiness: () => AppReadiness;
 }
 
+export interface RecorderDeps {
+  readonly getWindow: () => BrowserWindow | null;
+  readonly isCaptureActive?: () => boolean;
+}
+
 const SAFE_EMPTY_READINESS: AppReadiness = {
   microphone: { live: false },
   hotkeysActive: false
@@ -124,7 +146,9 @@ export const registerIpcHandlers = (
   updater: UpdaterController | null = null,
   onboarding: OnboardingDeps | null = null,
   overlay: OverlayDeps | null = null,
-  readiness: ReadinessDeps | null = null
+  readiness: ReadinessDeps | null = null,
+  recorder: RecorderDeps | null = null,
+  notes: NotesStore | null = null
 ): void => {
   const currentVersion = app.getVersion();
 
@@ -294,6 +318,63 @@ export const registerIpcHandlers = (
     return { byEngine: history?.measuredRtf() ?? {} };
   });
 
+  const broadcastNote = (event: NotesChangedEvent): void => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed()) continue;
+      try {
+        if (!window.webContents.isDestroyed()) window.webContents.send(notesChangedChannel, event);
+      } catch {
+        // A renderer can close while a note mutation is being delivered.
+      }
+    }
+  };
+
+  ipcMain.handle(notesListChannel, (_event, request: NotesListRequest = {}) => {
+    return notes?.list(request) ?? { items: [], total: 0 };
+  });
+  ipcMain.handle(notesGetChannel, (_event, request: { id: number }) => notes?.get(request.id) ?? null);
+  ipcMain.handle(notesCreateChannel, (_event, input: Parameters<NonNullable<NotesStore>["create"]>[0]) => {
+    const note = notes?.create(input) ?? null;
+    if (note !== null) broadcastNote({ note, reason: "created" });
+    return note;
+  });
+  ipcMain.handle(notesUpdateChannel, (_event, request: { id: number; title?: string; body?: string; titleIsManual?: boolean }) => {
+    const note = notes?.update(request.id, request) ?? null;
+    if (note !== null) broadcastNote({ note, reason: "updated" });
+    return note;
+  });
+  ipcMain.handle(notesSetStateChannel, (_event, request: { id: number; state: "active" | "archived" | "trash" }) => {
+    const note = notes?.setState(request.id, request.state) ?? null;
+    if (note !== null) broadcastNote({ note, reason: "state" });
+    return note;
+  });
+  ipcMain.handle(notesSetPinnedChannel, (_event, request: { id: number; pinned: boolean }) => {
+    const note = notes?.setPinned(request.id, request.pinned) ?? null;
+    if (note !== null) broadcastNote({ note, reason: "pinned" });
+    return note;
+  });
+  ipcMain.handle(notesDuplicateChannel, (_event, request: { id: number }) => {
+    const note = notes?.duplicate(request.id) ?? null;
+    if (note !== null) broadcastNote({ note, reason: "created" });
+    return note;
+  });
+  ipcMain.handle(notesDeleteChannel, (_event, request: { id: number }) => {
+    const ok = notes?.delete(request.id) ?? false;
+    if (ok) broadcastNote({ note: null, reason: "deleted" });
+    return { ok };
+  });
+  ipcMain.handle(notesPromoteChannel, (_event, request: { sourceKind: "history" | "meeting"; sourceId: number }) => {
+    const note = request.sourceKind === "history"
+      ? notes?.promoteHistory(request.sourceId) ?? null
+      : notes?.promoteMeeting(request.sourceId) ?? null;
+    if (note !== null) broadcastNote({ note, reason: "created" });
+    return note;
+  });
+  ipcMain.handle(notesExportChannel, (_event, request: { id: number }) => {
+    const markdown = notes?.exportMarkdown(request.id) ?? null;
+    return markdown === null ? { ok: false } : { ok: true, markdown };
+  });
+
   ipcMain.on(clipboardCopyChannel, (_event, text: string) => {
     clipboard.writeText(text);
   });
@@ -302,21 +383,56 @@ export const registerIpcHandlers = (
 
   // Device list and selection relay through the recorder window, which owns
   // the microphone and therefore the enumerated device labels.
-  const findRecorderWindow = (): BrowserWindow | undefined =>
-    BrowserWindow.getAllWindows().find((candidate) =>
-      candidate.webContents.getURL().includes("recorder/index.html"),
-    );
+  const findRecorderWindow = (): BrowserWindow | null => {
+    const candidate = recorder?.getWindow() ?? null;
+    if (candidate === null || candidate.isDestroyed()) return null;
+    try {
+      return candidate.webContents.isDestroyed() ? null : candidate;
+    } catch {
+      return null;
+    }
+  };
 
-  ipcMain.handle(devicesListChannel, async (): Promise<DevicesListResult> => {
+  const broadcastDevices = (state: DevicesChangedEvent): void => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed()) continue;
+      try {
+        if (!window.webContents.isDestroyed()) {
+          window.webContents.send(devicesChangedChannel, state);
+        }
+      } catch {
+        // Renderer teardown can race the broadcast during quit.
+      }
+    }
+  };
+
+  const emptyDeviceState = (): DevicesListResult => ({
+    devices: [],
+    preferredDeviceId: settingsStore?.get().microphone.preferredDeviceId ?? null,
+    preferredLabel: settingsStore?.get().microphone.preferredLabel ?? null,
+    activeDeviceId: null,
+    activeLabel: null,
+    status: "unavailable"
+  });
+
+  const readDeviceState = async (): Promise<DevicesListResult> => {
     const recorder = findRecorderWindow();
-    if (recorder === undefined) return { devices: [], currentDeviceId: null };
+    if (recorder === null) return emptyDeviceState();
     return await new Promise<DevicesListResult>((resolve) => {
       let settled = false;
       const finish = (result: DevicesListResult): void => {
         if (!settled) {
           settled = true;
           ipcMain.removeListener(recorderDevicesChannel, onDevices);
-          resolve(result);
+          const preferred = settingsStore?.get().microphone;
+          const active = result.devices.find((device) => device.deviceId === result.activeDeviceId);
+          resolve({
+            ...result,
+            preferredDeviceId: preferred?.preferredDeviceId ?? null,
+            preferredLabel: preferred?.preferredLabel ?? null,
+            activeLabel: active?.label ?? result.activeLabel,
+            status: result.status
+          });
         }
       };
       const onDevices = (
@@ -327,23 +443,89 @@ export const registerIpcHandlers = (
       ): void => {
         finish({
           devices: [...(payload?.devices ?? [])],
-          currentDeviceId: payload?.currentDeviceId ?? null
+          preferredDeviceId: settingsStore?.get().microphone.preferredDeviceId ?? null,
+          preferredLabel: settingsStore?.get().microphone.preferredLabel ?? null,
+          activeDeviceId: payload?.currentDeviceId ?? null,
+          activeLabel: (payload?.devices ?? []).find(
+            (device) => device.deviceId === (payload?.currentDeviceId ?? null)
+          )?.label ?? null,
+          status: "live"
         });
       };
       ipcMain.on(recorderDevicesChannel, onDevices);
-      recorder.webContents.send(recorderGetDevicesChannel);
+      try {
+        recorder.webContents.send(recorderGetDevicesChannel);
+      } catch {
+        finish(emptyDeviceState());
+        return;
+      }
       setTimeout(() => {
-        finish({ devices: [], currentDeviceId: null });
+        finish(emptyDeviceState());
       }, 1500);
     });
+  };
+
+  ipcMain.handle(devicesListChannel, async (): Promise<DevicesListResult> => {
+    const state = await readDeviceState();
+    broadcastDevices(state);
+    return state;
   });
 
-  ipcMain.on(
-    recorderSetDeviceChannel,
-    (_event, request: { deviceId: string }) => {
-      findRecorderWindow()?.webContents.send(recorderSetDeviceChannel, request.deviceId);
+  ipcMain.handle(devicesSetChannel, (_event, request: { deviceId: string | null }) => {
+    if (recorder !== null && recorder.isCaptureActive !== undefined && recorder.isCaptureActive()) {
+      return { ok: false, errorCode: "capture-active" };
     }
-  );
+    const current = settingsStore?.get();
+    const recorderWindow = findRecorderWindow();
+    if (recorderWindow === null) return { ok: false, errorCode: "recorder-unavailable" };
+    if (current !== undefined) {
+      const selected = request.deviceId === null
+        ? { preferredDeviceId: null, preferredLabel: null }
+        : {
+            preferredDeviceId: request.deviceId,
+            preferredLabel: current.microphone.preferredLabel
+          };
+      settingsStore?.update({ microphone: selected });
+    }
+    try {
+      recorderWindow.webContents.send(recorderSetDeviceChannel, request.deviceId);
+    } catch {
+      return { ok: false, errorCode: "recorder-unavailable" };
+    }
+    broadcastDevices({
+      ...emptyDeviceState(),
+      preferredDeviceId: request.deviceId,
+      preferredLabel: request.deviceId === null ? null : current?.microphone.preferredLabel ?? null,
+      status: "switching"
+    });
+    setTimeout(() => {
+      void readDeviceState().then((state) => {
+        if (request.deviceId !== null && state.activeDeviceId === request.deviceId && state.activeLabel !== null) {
+          const latest = settingsStore?.get();
+          if (latest !== undefined) {
+            settingsStore?.update({
+              microphone: {
+                preferredDeviceId: request.deviceId,
+                preferredLabel: state.activeLabel
+              }
+            });
+          }
+        }
+        broadcastDevices(state);
+      });
+    }, 250);
+    return { ok: true };
+  });
+
+  ipcMain.on(recorderSetDeviceChannel, (_event, request: { deviceId: string | null }) => {
+    const recorder = findRecorderWindow();
+    if (recorder === null) return;
+    try {
+      recorder.webContents.send(recorderSetDeviceChannel, request.deviceId);
+    } catch {
+      // The recorder can disappear during shutdown.
+    }
+  });
 
   ipcMain.handle(modelsListChannel, () => {
     const listed = models?.list();
@@ -490,36 +672,58 @@ export const registerIpcHandlers = (
 
   if (settingsStore !== null) {
     settingsStore.subscribe((settings) => {
-      const window = BrowserWindow.getAllWindows().find((candidate) =>
-        candidate.webContents.getURL().includes("main/index.html"),
-      );
+      const window = BrowserWindow.getAllWindows().find((candidate) => {
+        if (candidate.isDestroyed()) return false;
+        try {
+          return !candidate.webContents.isDestroyed() && candidate.webContents.getURL().includes("main/index.html");
+        } catch {
+          return false;
+        }
+      });
       if (window === undefined) return;
-      window.webContents.send(settingsChangedChannel, { settings });
+      try {
+        window.webContents.send(settingsChangedChannel, { settings });
+      } catch {
+        // A window may close between discovery and send.
+      }
     });
   }
 
   if (models !== null) {
     models.subscribe((listed) => {
-      const window = BrowserWindow.getAllWindows().find((candidate) =>
-        candidate.webContents.getURL().includes("main/index.html"),
-      );
+      const window = BrowserWindow.getAllWindows().find((candidate) => {
+        if (candidate.isDestroyed()) return false;
+        try {
+          return !candidate.webContents.isDestroyed() && candidate.webContents.getURL().includes("main/index.html");
+        } catch {
+          return false;
+        }
+      });
       if (window === undefined) return;
       for (const status of listed.items) {
         // Progress events stream at the downloader's throttle; the terminal
         // states are pushed exactly once each so the renderer leaves the last
         // progress tick instead of freezing on it.
         if (status.download.state === "downloading") {
-          window.webContents.send(modelsDownloadProgressChannel, {
+          try {
+            window.webContents.send(modelsDownloadProgressChannel, {
             state: "downloading",
             modelId: status.model.id,
             receivedBytes: status.download.receivedBytes,
             totalBytes: status.download.totalBytes,
-          });
+            });
+          } catch {
+            return;
+          }
         } else if (status.download.state === "done") {
-          window.webContents.send(modelsDownloadProgressChannel, {
+          try {
+            window.webContents.send(modelsDownloadProgressChannel, {
             state: "done",
             modelId: status.model.id,
-          });
+            });
+          } catch {
+            return;
+          }
         } else if (status.download.state === "error") {
           window.webContents.send(modelsDownloadProgressChannel, {
             state: "error",

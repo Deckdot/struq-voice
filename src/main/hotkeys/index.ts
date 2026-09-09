@@ -14,6 +14,7 @@ import {
   registerMeetingShortcut,
   unregisterMeetingShortcut
 } from "./meeting-shortcut";
+import { registerQuickNoteShortcut, unregisterQuickNoteShortcut } from "./quick-note-shortcut";
 import { parseAccelerator } from "../../shared/hotkeys";
 
 export interface HotkeyInput {
@@ -22,6 +23,7 @@ export interface HotkeyInput {
   readonly onPttStop: () => void;
   readonly onToggle: () => void;
   readonly onMeetingToggle: () => void;
+  readonly onQuickNoteToggle?: () => void;
 }
 
 export interface HotkeyController {
@@ -34,7 +36,8 @@ export interface HotkeyController {
   setHotkeys: (
     pttAccelerator: string,
     toggleAccelerator: string,
-    meetingAccelerator: string
+    meetingAccelerator: string,
+    quickNoteAccelerator?: string
   ) => void;
 }
 
@@ -58,6 +61,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       pttHook.stop();
       unregisterToggleShortcut();
       unregisterMeetingShortcut();
+      unregisterQuickNoteShortcut();
       const wanted = wantedEscapeHandler;
       unregisterEscape();
       wantedEscapeHandler = wanted;
@@ -66,6 +70,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
         pttHook.start();
         registerToggleShortcut(input.onToggle);
         registerMeetingShortcut(input.onMeetingToggle);
+        if (input.onQuickNoteToggle !== undefined) registerQuickNoteShortcut(input.onQuickNoteToggle);
         if (wantedEscapeHandler !== null) {
           registerEscape(wantedEscapeHandler);
         }
@@ -77,6 +82,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
     pttAccelerator: string,
     toggleAccelerator: string,
     meetingAccelerator: string
+    ,quickNoteAccelerator?: string
   ): void => {
     const chord = parseAccelerator(pttAccelerator);
     if (chord !== null) {
@@ -85,6 +91,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
     if (!paused && !input.e2e) {
       registerToggleShortcut(input.onToggle, toggleAccelerator);
       registerMeetingShortcut(input.onMeetingToggle, meetingAccelerator);
+      if (input.onQuickNoteToggle !== undefined) registerQuickNoteShortcut(input.onQuickNoteToggle, quickNoteAccelerator);
     }
   };
 
@@ -122,6 +129,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       pttHook.start();
       registerToggleShortcut(input.onToggle);
       registerMeetingShortcut(input.onMeetingToggle);
+      if (input.onQuickNoteToggle !== undefined) registerQuickNoteShortcut(input.onQuickNoteToggle);
       // Quit from the keyboard. The tray menu has the same action.
       const registered = globalShortcut.register("CommandOrControl+Q", () => {
         app.quit();
@@ -134,6 +142,7 @@ export const createHotkeys = (input: HotkeyInput): HotkeyController => {
       pttHook.stop();
       unregisterToggleShortcut();
       unregisterMeetingShortcut();
+      unregisterQuickNoteShortcut();
       unregisterEscape();
       globalShortcut.unregister("CommandOrControl+Q");
     },

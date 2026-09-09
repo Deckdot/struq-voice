@@ -9,7 +9,7 @@ import type { Route } from "../store/use-main-store";
 
 import { useTranslation } from "../lib/useTranslation";
 import type { MessageKey } from "../../../shared/i18n";
-import type { TranscriptRecord } from "../../../shared/ipc";
+import type { NoteSummary, TranscriptRecord } from "../../../shared/ipc";
 
 export interface CommandPaletteProps {
   readonly open: boolean;
@@ -18,6 +18,7 @@ export interface CommandPaletteProps {
 
 const ROUTE_ICONS: Record<Route, string> = {
   dictate: "ph:microphone",
+  notes: "ph:article",
   meetings: "ph:users-three",
   history: "ph:clock-counter-clockwise",
   dictionary: "ph:book-open-text",
@@ -27,6 +28,7 @@ const ROUTE_ICONS: Record<Route, string> = {
 
 const ROUTE_KEYS: Record<Route, MessageKey> = {
   dictate: "nav.dictate",
+  notes: "nav.notes",
   meetings: "nav.meetings",
   history: "nav.history",
   dictionary: "nav.dictionary",
@@ -59,6 +61,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
   const [copied, setCopied] = useState(false);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<readonly TranscriptRecord[]>([]);
+  const [noteHits, setNoteHits] = useState<readonly NoteSummary[]>([]);
   const [searching, setSearching] = useState(false);
   const trimmed = query.trim();
 
@@ -67,12 +70,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
     setCopied(false);
     setQuery("");
     setHits([]);
+    setNoteHits([]);
   }, [open]);
 
   useEffect(() => {
     let cancelled = false;
     if (trimmed.length === 0) {
       setHits([]);
+      setNoteHits([]);
       setSearching(false);
       return () => {
         cancelled = true;
@@ -80,11 +85,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
     }
     setSearching(true);
     const timer = window.setTimeout(() => {
-      void api.history
-        .search({ query: trimmed, limit: 5 })
-        .then(({ items }) => {
+      void Promise.all([
+        api.history.search({ query: trimmed, limit: 5 }),
+        api.notes.list({ query: trimmed, limit: 5 })
+      ]).then(([historyResult, notesResult]) => {
           if (cancelled) return;
-          setHits(items);
+          setHits(historyResult.items);
+          setNoteHits(notesResult.items);
           setSearching(false);
         })
         .catch(() => {
@@ -224,6 +231,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): JSX
                         </Command.Item>
                       );
                     })}
+                    {noteHits.map((hit) => (
+                      <Command.Item
+                        key={`note-${String(hit.id)}`}
+                        value={`note-${String(hit.id)} ${hit.title}`}
+                        keywords={[hit.title, hit.preview]}
+                        onSelect={() => {
+                          setRoute("notes");
+                          close();
+                        }}
+                        className={ITEM_CLASS}
+                      >
+                        <Icon icon="ph:article" className="h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+                        <span className="min-w-0 truncate">{hit.title || "Untitled note"}</span>
+                      </Command.Item>
+                    ))}
                   </Command.Group>
                 )}
 

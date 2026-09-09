@@ -19,6 +19,7 @@ const child = spawn(electronPath, [entryPath], {
     STRUQ_VOICE_ENGINE: "mock",
     STRUQ_VOICE_START_HIDDEN: "1",
     STRUQ_VOICE_USERDATA: userDataPath,
+    STRUQ_VOICE_SMOKE_QUIT: "1",
   },
   stdio: ["ignore", "pipe", "pipe"],
   windowsHide: true,
@@ -48,11 +49,19 @@ await rm(userDataPath, {
   retryDelay: 200,
 });
 
-if (result !== null) {
+if (result !== null && result.code !== 0) {
   const detail = output.join("").trim();
   throw new Error(
     `Struq Voice exited before the 10 second smoke window (code ${String(result.code)}, signal ${String(result.signal)}).${detail.length > 0 ? `\n${detail}` : ""}`,
   );
 }
 
-console.log("Boot smoke passed: Struq Voice stayed healthy for 10 seconds.");
+const detail = output.join("");
+if (/Object has been destroyed|uncaught exception|JavaScript error/i.test(detail)) {
+  throw new Error(`Struq Voice reported a lifecycle error during boot or quit.\n${detail}`);
+}
+if (result !== null) {
+  console.log("Boot smoke passed: Struq Voice booted and quit gracefully.");
+} else {
+  console.log("Boot smoke passed: Struq Voice stayed healthy for 10 seconds.");
+}

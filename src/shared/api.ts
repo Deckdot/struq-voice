@@ -7,6 +7,8 @@
 import type { CaptureState } from "./capture";
 import type {
   AppReadiness,
+  DevicesChangedEvent,
+  DevicesListResult,
   HistoryStatsResult,
   MeetingAssetsResult,
   MeetingAssetProgressEvent,
@@ -36,6 +38,10 @@ import type {
   MeetingSimpleResult,
   MeetingStartResult,
   ModelsDownloadProgressEvent,
+  NoteRecord,
+  NotesChangedEvent,
+  NotesListRequest,
+  NotesListResult,
   TranscriptRecord
 } from "./ipc";
 import type { ModelsListResult, ModelsModelResult, SettingsUpdateResult } from "./ipc";
@@ -118,8 +124,22 @@ export interface MainWindowApi {
     clear: () => Promise<{ ok: boolean; message?: string }>;
   };
   readonly devices: {
-    list: () => Promise<{ devices: readonly RecorderDevice[]; currentDeviceId: string | null }>;
-    setDevice: (deviceId: string) => void;
+    list: () => Promise<DevicesListResult>;
+    setDevice: (deviceId: string | null) => Promise<{ ok: boolean; errorCode?: string }>;
+    onChange: (listener: (state: DevicesChangedEvent) => void) => () => void;
+  };
+  readonly notes: {
+    list: (request?: NotesListRequest) => Promise<NotesListResult>;
+    get: (id: number) => Promise<NoteRecord | null>;
+    create: (input: { title?: string; body?: string; createdVia?: "manual" | "quick-note" | "promotion"; sourceKind?: "history" | "meeting" | null; sourceId?: number | null }) => Promise<NoteRecord | null>;
+    update: (id: number, input: { title?: string; body?: string; titleIsManual?: boolean }) => Promise<NoteRecord | null>;
+    setState: (id: number, state: "active" | "archived" | "trash") => Promise<NoteRecord | null>;
+    setPinned: (id: number, pinned: boolean) => Promise<NoteRecord | null>;
+    duplicate: (id: number) => Promise<NoteRecord | null>;
+    delete: (id: number) => Promise<{ ok: boolean }>;
+    promote: (sourceKind: "history" | "meeting", sourceId: number) => Promise<NoteRecord | null>;
+    export: (id: number) => Promise<{ ok: boolean; markdown?: string }>;
+    onChange: (listener: (event: NotesChangedEvent) => void) => () => void;
   };
   readonly updates: {
     get: () => Promise<{ state: UpdateState; currentVersion: string }>;
@@ -231,7 +251,7 @@ export interface RecorderWindowApi {
     sampleRate: number;
     sequence: number;
   }) => void;
-  readonly onSetDevice: (callback: (deviceId: string) => void) => () => void;
+  readonly onSetDevice: (callback: (deviceId: string | null) => void) => () => void;
   readonly onGetDevices: (callback: () => void) => () => void;
   readonly sendDevices: (
     devices: readonly RecorderDevice[],

@@ -10,10 +10,12 @@ import { join } from "node:path";
 import { runMigrations } from "./migrations";
 import { createHistoryStore, type HistoryStore } from "./history-store";
 import { createMeetingStore, type MeetingStore } from "./meeting-store";
+import { createNotesStore, type NotesStore } from "./notes-store";
 
 export interface DatabaseHandle {
   readonly history: HistoryStore | null;
   readonly meetings: MeetingStore | null;
+  readonly notes: NotesStore | null;
   /**
    * Checkpoint the WAL and close the connection. Without this the -wal and
    * -shm files outlive the process and the next open pays a recovery pass.
@@ -31,6 +33,7 @@ export const openDatabase = (userDataPath: string): DatabaseHandle | null => {
     return {
       history: createHistoryStore(db),
       meetings: createMeetingStore(db),
+      notes: createNotesStore(db),
       close: () => {
         if (!db.open) return;
         try {

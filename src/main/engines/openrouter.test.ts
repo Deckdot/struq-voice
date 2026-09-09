@@ -61,6 +61,24 @@ describe("openrouter engine", () => {
     if (outcome.ok) expect(outcome.value.text).toBe("hello there");
   });
 
+  it("routes the selected model to its OpenRouter endpoint", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ text: "grok result" }));
+    const selected = createOpenRouterEngine({
+      getApiKey: () => Promise.resolve("sk-or-v1-test"),
+      getModelId: () => "x-ai/grok-stt-1.0"
+    });
+
+    const outcome = await selected.transcribe(request(speech(4)));
+
+    expect(outcome.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://openrouter.ai/api/v1/stt",
+      expect.objectContaining({ method: "POST" })
+    );
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(requestInit?.body as string).toContain('"model":"x-ai/grok-stt-1.0"');
+  });
+
   it("accepts a five minute recording instead of refusing it", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ text: "part" }));
 
@@ -124,7 +142,7 @@ describe("openrouter engine", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(outcome.ok).toBe(true);
-    if (outcome.ok) expect(outcome.value.modelId).toBe("openai/whisper-1");
+    if (outcome.ok) expect(outcome.value.modelId).toBe("openai/whisper-large-v3-turbo");
   });
 
   it("stops sending chunks once the request is aborted", async () => {

@@ -89,10 +89,15 @@ export function SettingsView(): JSX.Element {
   }, [api]);
 
   useEffect(() => {
-    void api.devices.list().then(({ devices: list, currentDeviceId: id }) => {
-      setDevices(list);
-      setCurrentDeviceId(id);
-    });
+    const apply = (state: Awaited<ReturnType<typeof api.devices.list>>): void => {
+      setDevices(state.devices);
+      setCurrentDeviceId(state.preferredDeviceId ?? state.activeDeviceId);
+    };
+    void api.devices.list().then(apply);
+    const unsubscribe = api.devices.onChange(apply);
+    return () => {
+      unsubscribe();
+    };
   }, [api]);
 
   useEffect(() => {

@@ -51,10 +51,19 @@ export const createCaptureSoundPlayer = (
   const read = options.read ?? readFile;
   const findRecorder =
     options.findRecorderWindow ??
-    ((): BrowserWindow | null =>
-      BrowserWindow.getAllWindows().find((candidate) =>
-        candidate.webContents.getURL().includes("recorder/index.html")
-      ) ?? null);
+    ((): BrowserWindow | null => {
+      const candidate = BrowserWindow.getAllWindows().find((window) => {
+        if (window.isDestroyed()) return false;
+        try {
+          const contents = window.webContents;
+          const destroyed = typeof contents.isDestroyed === "function" && contents.isDestroyed();
+          return !destroyed && contents.getURL().includes("recorder/index.html");
+        } catch {
+          return false;
+        }
+      });
+      return candidate ?? null;
+    });
 
   // null marks a file we already failed to read, so a missing sound is not
   // retried on every capture for the life of the process.
@@ -85,16 +94,21 @@ export const createCaptureSoundPlayer = (
           if (bytes === null) return;
           const recorder = findRecorder();
           if (recorder === null || recorder.isDestroyed()) return;
+          if (typeof recorder.webContents.isDestroyed === "function" && recorder.webContents.isDestroyed()) return;
           // A copy of the exact bytes, so the cached Buffer is never detached
           // by the structured clone and stays reusable for the next capture.
           const copy = bytes.buffer.slice(
             bytes.byteOffset,
             bytes.byteOffset + bytes.byteLength
           );
-          recorder.webContents.send(recorderPlaySoundChannel, {
-            bytes: copy,
-            volume: options.getVolume()
-          });
+          try {
+            recorder.webContents.send(recorderPlaySoundChannel, {
+              bytes: copy,
+              volume: options.getVolume()
+            });
+          } catch {
+            // The recorder can be destroyed while the sound is loading.
+          }
         } catch {
           // Never let a sound disturb a capture.
         }

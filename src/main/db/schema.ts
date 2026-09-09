@@ -49,3 +49,18 @@ export const meetingSpeakers = sqliteTable("meeting_speakers", {
   speakerKey: text("speaker_key").notNull(),
   label: text("label").notNull()
 });
+
+export const notes = sqliteTable("notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  titleIsManual: integer("title_is_manual").notNull().default(0),
+  sourceKind: text("source_kind"),
+  sourceId: integer("source_id"),
+  createdVia: text("created_via").notNull(),
+  pinnedAt: integer("pinned_at"),
+  archivedAt: integer("archived_at"),
+  trashedAt: integer("trashed_at"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull()
+});

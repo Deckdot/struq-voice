@@ -35,6 +35,14 @@ export const createRecorderAudioSource = (
   recorderWindow: BrowserWindow,
   bridge: RecorderBridge
 ): CaptureAudioSource => {
+  const canSend = (): boolean => {
+    if (recorderWindow.isDestroyed()) return false;
+    try {
+      return !recorderWindow.webContents.isDestroyed();
+    } catch {
+      return false;
+    }
+  };
   // The overlay waveform reads levels, so the analyser loop must run for the
   // life of a capture. Held here rather than in the session because these
   // three calls are exactly the capture's boundaries.
@@ -48,7 +56,7 @@ export const createRecorderAudioSource = (
 
   return {
     beginCapture: (maxCaptureMs, prerollMs) => {
-      if (recorderWindow.isDestroyed()) return;
+      if (!canSend()) return;
       // A capture that never ended (a lost end-capture) would otherwise pin
       // the loop on, so replace rather than stack.
       dropLevelsHold();
@@ -57,20 +65,32 @@ export const createRecorderAudioSource = (
         maxCaptureMs,
         ...(prerollMs !== undefined ? { prerollMs } : {})
       };
-      recorderWindow.webContents.send(recorderBeginCaptureChannel, request);
+      try {
+        recorderWindow.webContents.send(recorderBeginCaptureChannel, request);
+      } catch {
+        dropLevelsHold();
+      }
     },
     endCapture: () => {
       dropLevelsHold();
-      if (recorderWindow.isDestroyed()) {
+      if (!canSend()) {
         return Promise.reject(new Error("Recorder window is gone"));
       }
-      recorderWindow.webContents.send(recorderEndCaptureChannel);
+      try {
+        recorderWindow.webContents.send(recorderEndCaptureChannel);
+      } catch {
+        return Promise.reject(new Error("Recorder window is gone"));
+      }
       return bridge.waitForCaptureData(CAPTURE_TIMEOUT_MS);
     },
     discardCapture: () => {
       dropLevelsHold();
-      if (recorderWindow.isDestroyed()) return;
-      recorderWindow.webContents.send(recorderDiscardCaptureChannel);
+      if (!canSend()) return;
+      try {
+        recorderWindow.webContents.send(recorderDiscardCaptureChannel);
+      } catch {
+        // The window can disappear during quit.
+      }
     },
     isLive: () => bridge.isLive()
   };

@@ -25,10 +25,10 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
-    void api.devices.list().then(({ devices: list, currentDeviceId }) => {
+    void api.devices.list().then(({ devices: list, preferredDeviceId, activeDeviceId }) => {
       if (cancelled) return;
       setDevices(list);
-      setCurrentId(currentDeviceId);
+      setCurrentId(preferredDeviceId ?? activeDeviceId);
       setLoaded(true);
       onReady(list.length > 0);
     });
@@ -106,7 +106,8 @@ export function MicrophoneStep({ onReady }: MicrophoneStepProps): JSX.Element {
               onChange={(event) => {
                 const deviceId = event.target.value;
                 setCurrentId(deviceId);
-                api.devices.setDevice(deviceId);
+                setCurrentId(deviceId);
+                void api.devices.setDevice(deviceId);
               }}
               aria-label="Choose a microphone"
             >

@@ -10,6 +10,7 @@ import { Splash } from "./components/Splash";
 import { Onboarding } from "./onboarding/Onboarding";
 import { useMainStore } from "./store/use-main-store";
 import { DictateView } from "./views/DictateView";
+import { NotesView } from "./views/NotesView";
 import { MeetingsView } from "./views/MeetingsView";
 import { HistoryView } from "./views/HistoryView";
 import { DictionaryView } from "./views/DictionaryView";
@@ -168,6 +169,7 @@ export function App(): JSX.Element {
                   className="h-full"
                 >
                   {route === "dictate" && <DictateView />}
+                  {route === "notes" && <NotesView />}
                   {route === "meetings" && <MeetingsView />}
                   {route === "history" && <HistoryView />}
                   {route === "dictionary" && <DictionaryView />}

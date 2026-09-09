@@ -102,8 +102,8 @@ const api: RecorderWindowApi = {
   }) => {
     ipcRenderer.send(channels.recorder.snapshotData, data, [data.pcm]);
   },
-  onSetDevice: (callback: (deviceId: string) => void) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, deviceId: string): void => {
+  onSetDevice: (callback: (deviceId: string | null) => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, deviceId: string | null): void => {
       callback(deviceId);
     };
     ipcRenderer.on(channels.recorder.setDevice, wrapped);

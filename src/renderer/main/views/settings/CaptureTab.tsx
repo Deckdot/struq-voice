@@ -92,6 +92,18 @@ export function CaptureTab({
             />
           }
         />
+        <SettingsRow
+          label="Quick Note"
+          hint="Toggle a voice capture that is saved directly to Notes."
+          control={
+            <HotkeyRecorder
+              label="quick note key"
+              accelerator={settings.quickNoteAccelerator}
+              size="md"
+              onChange={(quickNoteAccelerator) => { update({ quickNoteAccelerator }); }}
+            />
+          }
+        />
       </SettingsGroup>
 
       <SettingsGroup
@@ -106,11 +118,12 @@ export function CaptureTab({
                 aria-label="Microphone device"
                 value={currentDeviceId ?? ""}
                 onChange={(event) => {
-                  const deviceId = event.target.value;
-                  api.devices.setDevice(deviceId);
+                  const deviceId = event.target.value.length === 0 ? null : event.target.value;
+                  void api.devices.setDevice(deviceId);
                 }}
                 disabled={devices.length === 0}
               >
+                <option value="">Follow Windows default</option>
                 {devices.length === 0 && <option value="">{t("settings.capture.device.none")}</option>}
                 {devices.map((device) => (
                   <option key={device.deviceId} value={device.deviceId}>

@@ -12,6 +12,7 @@ import type { MessageKey } from "../../../shared/i18n";
 
 const ROUTE_ICONS: Record<Route, string> = {
   dictate: "ph:microphone",
+  notes: "ph:article",
   meetings: "ph:users-three",
   history: "ph:clock-counter-clockwise",
   dictionary: "ph:book-open-text",
@@ -21,6 +22,7 @@ const ROUTE_ICONS: Record<Route, string> = {
 
 const ROUTE_KEYS: Record<Route, MessageKey> = {
   dictate: "nav.dictate",
+  notes: "nav.notes",
   meetings: "nav.meetings",
   history: "nav.history",
   dictionary: "nav.dictionary",

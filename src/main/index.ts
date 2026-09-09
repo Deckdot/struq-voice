@@ -43,6 +43,7 @@ import {
   meetingSegmentAppendedChannel,
   meetingSpeakersMergedChannel,
   meetingStateChangedChannel,
+  recorderSetDeviceChannel,
   updatesChangedChannel
 } from "../shared/ipc";
 import { fail } from "../shared/result";
@@ -131,6 +132,10 @@ let meetingSession: ReturnType<typeof createMeetingSession> | null = null;
 let database: ReturnType<typeof openDatabase> = null;
 let enginesForShutdown: TranscriptionEngine[] = [];
 let updaterController: ReturnType<typeof createUpdater> | null = null;
+let recorderWindowForShutdown: BrowserWindow | null = null;
+let recorderBridgeForShutdown: ReturnType<typeof createRecorderBridge> | null = null;
+let captureSessionForShutdown: ReturnType<typeof createCaptureSession> | null = null;
+let delayedHotkeyStart: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
 let shutdownPromise: Promise<void> | null = null;
 let shutdownComplete = false;
@@ -177,10 +182,28 @@ const requestShutdown = (): Promise<void> => {
         console.warn("[quit] Meeting stop reached its bounded shutdown timeout.");
       }
     });
+    syncStep("Capture cancel", () => {
+      captureSessionForShutdown?.cancel();
+    });
+    syncStep("Recorder bridge dispose", () => recorderBridgeForShutdown?.dispose());
+    if (delayedHotkeyStart !== null) {
+      clearTimeout(delayedHotkeyStart);
+      delayedHotkeyStart = null;
+    }
     syncStep("Overlay dispose", () => overlay?.dispose());
     syncStep("Hotkey dispose", () => hotkeys?.dispose());
     syncStep("Meeting dispose", () => meetingSession?.dispose());
     syncStep("Updater dispose", () => updaterController?.dispose());
+    syncStep("Recorder window destroy", () => {
+      const recorder = recorderWindowForShutdown;
+      recorderWindowForShutdown = null;
+      if (recorder === null || recorder.isDestroyed()) return;
+      try {
+        if (!recorder.webContents.isDestroyed()) recorder.destroy();
+      } catch {
+        // Electron teardown can race the final destroy call.
+      }
+    });
     await asyncStep("Engine dispose", async () => {
       for (const engine of enginesForShutdown) {
         await engine.dispose();
@@ -418,8 +441,11 @@ if (!gotLock) {
       };
       currentReadiness = next;
       for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send(appReadinessChangedChannel, next);
+        if (win.isDestroyed()) continue;
+        try {
+          if (!win.webContents.isDestroyed()) win.webContents.send(appReadinessChangedChannel, next);
+        } catch {
+          // Renderer teardown can race readiness broadcasts.
         }
       }
     };
@@ -463,11 +489,13 @@ if (!gotLock) {
       }
     );
     const openrouterEngine = createOpenRouterEngine({
-      getApiKey: () => secrets.readOpenRouterKey()
+      getApiKey: () => secrets.readOpenRouterKey(),
+      getModelId: () => settingsStore.get().engine.openrouterModelId ?? OPENROUTER_PRIMARY_MODEL_ID
     });
     let meetingWindow: BrowserWindow | null = null;
     const meetings = createMeetingSession({
       settings: () => settingsStore.get().meeting,
+      microphoneDeviceId: () => settingsStore.get().microphone.preferredDeviceId,
       speechLanguage: () => settingsStore.get().speechLanguage,
       store: meetingStore,
       worker: createMeetingWorkerClient(),
@@ -532,14 +560,26 @@ if (!gotLock) {
           overlay?.moveTo(x, y);
         }
       },
-      { getReadiness: () => currentReadiness }
+      { getReadiness: () => currentReadiness },
+      {
+        getWindow: () => recorderWindowForShutdown,
+        isCaptureActive: () => {
+          const phase = captureSessionForShutdown?.state.phase;
+          return phase !== undefined && phase !== "idle" && phase !== "error";
+        }
+      },
+      database?.notes ?? null
     );
 
     updater?.subscribe((state) => {
       // The window is created on demand and can be closed while a download is
       // in flight, so send only to a live one.
       if (mainWindow !== null && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(updatesChangedChannel, state);
+        try {
+          if (!mainWindow.webContents.isDestroyed()) mainWindow.webContents.send(updatesChangedChannel, state);
+        } catch {
+          // The main window can close while an update event is delivered.
+        }
       }
     });
 
@@ -587,7 +627,23 @@ if (!gotLock) {
     }
 
     const recorderWindow = createRecorderWindow({ e2e });
-    const bridge = createRecorderBridge();
+    recorderWindowForShutdown = recorderWindow;
+    const bridge = createRecorderBridge({
+      getRecorderWindow: () => recorderWindowForShutdown
+    });
+    recorderBridgeForShutdown = bridge;
+    const preferredMicrophone = settingsStore.get().microphone.preferredDeviceId;
+    if (preferredMicrophone !== null) {
+      recorderWindow.webContents.once("did-finish-load", () => {
+        try {
+          if (!recorderWindow.webContents.isDestroyed()) {
+            recorderWindow.webContents.send(recorderSetDeviceChannel, preferredMicrophone);
+          }
+        } catch {
+          // The recorder may be closing while its first document loads.
+        }
+      });
+    }
     const source = e2e
       ? createSimulatedAudioSource(app.getAppPath())
       : createRecorderAudioSource(recorderWindow, bridge);
@@ -675,12 +731,14 @@ if (!gotLock) {
 
     const sounds = createCaptureSoundPlayer({
       isEnabled: () => settingsStore.get().captureSounds,
-      getVolume: () => settingsStore.get().captureSoundVolume
+      getVolume: () => settingsStore.get().captureSoundVolume,
+      findRecorderWindow: () => recorderWindowForShutdown
     });
     if (!e2e) {
       void sounds.warmup();
     }
 
+    let quickNoteActive = false;
     const session = createCaptureSession({
       ...DEFAULT_CAPTURE_OPTIONS,
       getMinCaptureMs: () => settingsStore.get().minCaptureMs,
@@ -752,7 +810,7 @@ if (!gotLock) {
         // above only covers a database that failed to open, not a write that
         // fails later (full disk, locked WAL, corrupt file).
         try {
-          history.insert({
+          const historyId = history.insert({
             text,
             engineId: meta.engineId,
             modelId: meta.modelId,
@@ -761,12 +819,25 @@ if (!gotLock) {
             costUsd: meta.costUsd,
             language: meta.language,
           });
+          if (quickNoteActive) {
+            const note = database?.notes?.promoteHistory(historyId) ?? null;
+            if (note === null) {
+              clipboard.writeText(text);
+              if (Notification.isSupported()) {
+                new Notification({
+                  title: "Quick Note was not saved",
+                  body: "The transcript was copied to the clipboard instead."
+                }).show();
+              }
+            }
+          }
           refreshRecentTranscripts();
         } catch (error) {
           console.warn("[history] Could not record the transcript.", error);
         }
       },
       deliver: async (text) => {
+        if (quickNoteActive) return { inserted: false };
         // Tests must never synthesize keystrokes into the real desktop.
         // A stray Ctrl+V landing in the user's focused window is hostile.
         if (e2e || hookTest) return { inserted: false };
@@ -781,6 +852,7 @@ if (!gotLock) {
         return outcome.ok ? outcome.value : { inserted: false };
       },
     });
+    captureSessionForShutdown = session;
 
     const currentLocOpt = getLocaleOptions(settingsStore.get());
 
@@ -852,8 +924,11 @@ if (!gotLock) {
       onPartial: (partial) => {
         const payload: CapturePartialTranscriptEvent = partial;
         for (const window of BrowserWindow.getAllWindows()) {
-          if (!window.isDestroyed()) {
-            window.webContents.send(capturePartialTranscriptChannel, payload);
+          if (window.isDestroyed()) continue;
+          try {
+            if (!window.webContents.isDestroyed()) window.webContents.send(capturePartialTranscriptChannel, payload);
+          } catch {
+            // Partial display is best effort during shutdown.
           }
         }
       }
@@ -889,6 +964,7 @@ if (!gotLock) {
     });
 
     const toggleCapture = (): void => {
+      if (quickNoteActive) return;
       const phase = session.state.phase;
       if (phase === "listening" || phase === "arming") {
         session.stop();
@@ -928,8 +1004,11 @@ if (!gotLock) {
     meetings.subscribe((state) => {
       tray.setMeetingState(state);
       for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed()) {
-          window.webContents.send(meetingStateChangedChannel, state);
+        if (window.isDestroyed()) continue;
+        try {
+          if (!window.webContents.isDestroyed()) window.webContents.send(meetingStateChangedChannel, state);
+        } catch {
+          // A renderer can close while meeting state is being broadcast.
         }
       }
       overlay?.updateMeeting(state);
@@ -938,8 +1017,12 @@ if (!gotLock) {
     const sendToMainWindow = (channel: string, payload: unknown): void => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (window.isDestroyed()) continue;
-        if (!window.webContents.getURL().includes("main/index.html")) continue;
-        window.webContents.send(channel, payload);
+        try {
+          if (window.webContents.isDestroyed() || !window.webContents.getURL().includes("main/index.html")) continue;
+          window.webContents.send(channel, payload);
+        } catch {
+          // A renderer may disappear while the app is quitting.
+        }
       }
     };
 
@@ -976,6 +1059,16 @@ if (!gotLock) {
         session.stop();
       },
       onToggle: toggleCapture,
+      onQuickNoteToggle: () => {
+        const phase = session.state.phase;
+        if (quickNoteActive) {
+          if (phase === "listening" || phase === "arming") session.stop();
+          return;
+        }
+        if (phase !== "idle" && phase !== "error") return;
+        quickNoteActive = true;
+        session.start();
+      },
       onMeetingToggle: () => {
         if (isMeetingActive(meetings.state)) {
           void meetings.stop();
@@ -992,12 +1085,14 @@ if (!gotLock) {
       settingsStore.get().pttAccelerator,
       settingsStore.get().toggleAccelerator,
       settingsStore.get().meeting.accelerator
+      ,settingsStore.get().quickNoteAccelerator
     );
     settingsStore.subscribe((latest) => {
       hotkeys?.setHotkeys(
         latest.pttAccelerator,
         latest.toggleAccelerator,
         latest.meeting.accelerator
+        ,latest.quickNoteAccelerator
       );
     });
 
@@ -1006,6 +1101,9 @@ if (!gotLock) {
     captureBusy = () => session.state.phase !== "idle" && session.state.phase !== "error";
 
     session.subscribe((state) => {
+      if (quickNoteActive && (state.phase === "idle" || state.phase === "error")) {
+        quickNoteActive = false;
+      }
       tray.setState(state);
       overlay?.update(state);
       if (state.phase === "idle" || state.phase === "error") {
@@ -1044,7 +1142,7 @@ if (!gotLock) {
         session.fail("Microphone lost. Check the device connection and try again.");
       }
     });
-    setTimeout(maybeStartHotkeys, 5000);
+    delayedHotkeyStart = setTimeout(maybeStartHotkeys, 5000);
 
     // Parakeet warmup: loading the int8 encoder takes 1-3 seconds, and it
     // must never land in the user's first capture. Runs in the background
@@ -1071,6 +1169,12 @@ if (!gotLock) {
         history,
         getLastCaptureAudio: () => lastCaptureAudio,
       });
+    }
+
+    if (process.env["STRUQ_VOICE_SMOKE_QUIT"] === "1") {
+      setTimeout(() => {
+        app.quit();
+      }, 5000);
     }
 
     app.on("activate", () => {

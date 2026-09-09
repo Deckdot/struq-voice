@@ -5,6 +5,7 @@
  */
 
 import { BrowserWindow, ipcMain } from "electron";
+import type { WebContents } from "electron";
 import type { CaptureAudio } from "../session/audio-source";
 import type {
   CaptureLevelsChangedEvent,
@@ -44,6 +45,7 @@ export interface RecorderBridge {
    * one holder is outstanding. Returns the release.
    */
   holdLevels: () => () => void;
+  dispose: () => void;
 }
 
 interface PendingCapture {
@@ -57,9 +59,14 @@ interface PendingSnapshot {
   readonly timer: ReturnType<typeof setTimeout>;
 }
 
-export const createRecorderBridge = (): RecorderBridge => {
+export interface RecorderBridgeOptions {
+  getRecorderWindow: () => BrowserWindow | null;
+}
+
+export const createRecorderBridge = (options: RecorderBridgeOptions): RecorderBridge => {
   let pending: PendingCapture | null = null;
   let live = false;
+  let disposed = false;
   const streamStateListeners = new Set<(state: RecorderStreamState) => void>();
 
   // Snapshots are keyed by sequence: several can be outstanding if a decode
@@ -67,33 +74,52 @@ export const createRecorderBridge = (): RecorderBridge => {
   let snapshotSequence = 0;
   const pendingSnapshots = new Map<number, PendingSnapshot>();
 
-  const findRecorderWindow = (): BrowserWindow | null =>
-    BrowserWindow.getAllWindows().find((candidate) =>
-      candidate.webContents.getURL().includes("recorder/index.html")
-    ) ?? null;
+  const getRecorderWindow = (): BrowserWindow | null => {
+    if (disposed) return null;
+    const candidate = options.getRecorderWindow();
+    if (candidate === null || candidate.isDestroyed()) return null;
+    try {
+      if (candidate.webContents.isDestroyed()) return null;
+    } catch {
+      return null;
+    }
+    return candidate;
+  };
+
+  const sendToRecorder = (channel: string, payload: unknown): boolean => {
+    const recorder = getRecorderWindow();
+    if (recorder === null) return false;
+    try {
+      recorder.webContents.send(channel, payload);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   /**
    * The capture data plane resolves the pending transcription promise, so
    * only the recorder window may speak on it. Any other renderer is ignored.
    */
-  const isRecorderWindow = (sender: Electron.WebContents): boolean =>
-    sender.getURL().includes("recorder/index.html");
+  const isRecorderWindow = (sender: WebContents): boolean => {
+    const recorder = getRecorderWindow();
+    return recorder !== null && recorder.webContents === sender;
+  };
 
-  ipcMain.on(
-    recorderSnapshotDataChannel,
-    (event, payload: RecorderSnapshotData) => {
-      if (!isRecorderWindow(event.sender)) return;
-      const waiting = pendingSnapshots.get(payload.sequence);
-      if (waiting === undefined) return;
-      pendingSnapshots.delete(payload.sequence);
-      clearTimeout(waiting.timer);
-      waiting.resolve({
-        pcm: new Int16Array(payload.pcm),
-        durationMs: payload.durationMs,
-        sampleRate: payload.sampleRate
-      });
-    }
-  );
+  const onSnapshotData = (event: Electron.IpcMainEvent, payload: RecorderSnapshotData): void => {
+    if (!isRecorderWindow(event.sender)) return;
+    const waiting = pendingSnapshots.get(payload.sequence);
+    if (waiting === undefined) return;
+    pendingSnapshots.delete(payload.sequence);
+    clearTimeout(waiting.timer);
+    waiting.resolve({
+      pcm: new Int16Array(payload.pcm),
+      durationMs: payload.durationMs,
+      sampleRate: payload.sampleRate
+    });
+  };
+
+  ipcMain.on(recorderSnapshotDataChannel, onSnapshotData);
 
   const settlePending = (audio: CaptureAudio | null, error: Error | null): void => {
     if (pending === null) return;
@@ -107,17 +133,12 @@ export const createRecorderBridge = (): RecorderBridge => {
     }
   };
 
-  ipcMain.on(
-    recorderCaptureDataChannel,
-    (event, payload: RecorderCaptureData) => {
-      if (!isRecorderWindow(event.sender)) return;
-      const pcm = new Int16Array(payload.pcm);
-      settlePending(
-        { pcm, durationMs: payload.durationMs, sampleRate: payload.sampleRate },
-        null
-      );
-    }
-  );
+  const onCaptureData = (event: Electron.IpcMainEvent, payload: RecorderCaptureData): void => {
+    if (!isRecorderWindow(event.sender)) return;
+    const pcm = new Int16Array(payload.pcm);
+    settlePending({ pcm, durationMs: payload.durationMs, sampleRate: payload.sampleRate }, null);
+  };
+  ipcMain.on(recorderCaptureDataChannel, onCaptureData);
 
   // Demand for the 60Hz analyser loop. Held by an active capture and by every
   // window showing a microphone meter. At zero the recorder stops the loop:
@@ -129,13 +150,12 @@ export const createRecorderBridge = (): RecorderBridge => {
   const levelsHoldsByWindow = new Map<number, number>();
 
   const pushLevelsEnabled = (): void => {
-    const recorder = findRecorderWindow();
-    if (recorder === null) return;
     const payload: RecorderLevelsEnabled = { enabled: levelsHolds > 0 };
-    recorder.webContents.send(recorderLevelsEnabledChannel, payload);
+    sendToRecorder(recorderLevelsEnabledChannel, payload);
   };
 
   const holdLevels = (): (() => void) => {
+    if (disposed) return () => {};
     levelsHolds++;
     if (levelsHolds === 1) pushLevelsEnabled();
     let released = false;
@@ -147,17 +167,19 @@ export const createRecorderBridge = (): RecorderBridge => {
     };
   };
 
+  const senderCleanup = new Map<number, { sender: WebContents; onGone: () => void }>();
+
   const releaseWindowHolds = (windowId: number): void => {
     const held = levelsHoldsByWindow.get(windowId);
     if (held === undefined) return;
     levelsHoldsByWindow.delete(windowId);
     levelsHolds = Math.max(0, levelsHolds - held);
-    if (levelsHolds === 0) pushLevelsEnabled();
+    senderCleanup.delete(windowId);
+    if (levelsHolds === 0 && !disposed) pushLevelsEnabled();
   };
 
-  ipcMain.on(
-    captureLevelsRequestChannel,
-    (event, payload: CaptureLevelsRequest) => {
+  const onLevelsRequest = (event: Electron.IpcMainEvent, payload: CaptureLevelsRequest): void => {
+      if (disposed) return;
       const windowId = event.sender.id;
       const held = levelsHoldsByWindow.get(windowId) ?? 0;
       if (payload.wanted) {
@@ -170,8 +192,11 @@ export const createRecorderBridge = (): RecorderBridge => {
           // reload re-runs the effects and re-asks from zero.
           const sender = event.sender;
           const onGone = (): void => {
+            sender.removeListener("destroyed", onGone);
+            sender.removeListener("did-finish-load", onGone);
             releaseWindowHolds(windowId);
           };
+          senderCleanup.set(windowId, { sender, onGone });
           sender.once("destroyed", onGone);
           // A reload tears the renderer's effects down without a release.
           // did-finish-load only fires for a real document load, so an
@@ -188,10 +213,10 @@ export const createRecorderBridge = (): RecorderBridge => {
       }
       levelsHolds = Math.max(0, levelsHolds - 1);
       if (levelsHolds === 0) pushLevelsEnabled();
-    }
-  );
+  };
+  ipcMain.on(captureLevelsRequestChannel, onLevelsRequest);
 
-  ipcMain.on(recorderLevelsChannel, (event, payload: RecorderLevels) => {
+  const onLevels = (event: Electron.IpcMainEvent, payload: RecorderLevels): void => {
     if (!isRecorderWindow(event.sender)) return;
     if (!live) return;
     const relay: CaptureLevelsChangedEvent = {
@@ -200,11 +225,18 @@ export const createRecorderBridge = (): RecorderBridge => {
     };
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.isDestroyed()) continue;
-      window.webContents.send(captureLevelsChangedChannel, relay);
+      try {
+        if (!window.webContents.isDestroyed()) {
+          window.webContents.send(captureLevelsChangedChannel, relay);
+        }
+      } catch {
+        // A renderer can disappear between the predicates and send.
+      }
     }
-  });
+  };
+  ipcMain.on(recorderLevelsChannel, onLevels);
 
-  ipcMain.on(recorderStreamStateChannel, (event, payload: RecorderStreamState) => {
+  const onStreamStateMessage = (event: Electron.IpcMainEvent, payload: RecorderStreamState): void => {
     if (!isRecorderWindow(event.sender)) return;
     live = payload.live;
     // The recorder announces a live stream once its pipeline is built, which
@@ -221,16 +253,17 @@ export const createRecorderBridge = (): RecorderBridge => {
         new Error(payload.reason ?? "Microphone stream lost")
       );
     }
-  });
+  };
+  ipcMain.on(recorderStreamStateChannel, onStreamStateMessage);
 
   return {
     requestSnapshot: (timeoutMs: number): Promise<CaptureAudio | null> => {
-      const recorder = findRecorderWindow();
+      const recorder = getRecorderWindow();
       if (recorder === null) return Promise.resolve(null);
 
       const sequence = ++snapshotSequence;
       const request: RecorderSnapshotRequest = { sequence };
-      recorder.webContents.send(recorderSnapshotRequestChannel, request);
+      if (!sendToRecorder(recorderSnapshotRequestChannel, request)) return Promise.resolve(null);
 
       return new Promise<CaptureAudio | null>((resolve) => {
         const timer = setTimeout(() => {
@@ -241,6 +274,7 @@ export const createRecorderBridge = (): RecorderBridge => {
       });
     },
     waitForCaptureData: (timeoutMs: number): Promise<CaptureAudio> => {
+      if (disposed) return Promise.reject(new Error("Recorder bridge disposed"));
       if (pending !== null) {
         pending.reject(new Error("Capture already in flight"));
         clearTimeout(pending.timer);
@@ -262,6 +296,35 @@ export const createRecorderBridge = (): RecorderBridge => {
       return () => {
         streamStateListeners.delete(listener);
       };
+    },
+    dispose: (): void => {
+      if (disposed) return;
+      disposed = true;
+      ipcMain.removeListener(recorderSnapshotDataChannel, onSnapshotData);
+      ipcMain.removeListener(recorderCaptureDataChannel, onCaptureData);
+      ipcMain.removeListener(captureLevelsRequestChannel, onLevelsRequest);
+      ipcMain.removeListener(recorderLevelsChannel, onLevels);
+      ipcMain.removeListener(recorderStreamStateChannel, onStreamStateMessage);
+      for (const { sender, onGone } of senderCleanup.values()) {
+        sender.removeListener("destroyed", onGone);
+        sender.removeListener("did-finish-load", onGone);
+      }
+      senderCleanup.clear();
+      pendingSnapshots.forEach(({ timer, resolve }) => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+      pendingSnapshots.clear();
+      if (pending !== null) {
+        clearTimeout(pending.timer);
+        const waiting = pending;
+        pending = null;
+        waiting.reject(new Error("Recorder bridge disposed"));
+      }
+      streamStateListeners.clear();
+      levelsHoldsByWindow.clear();
+      levelsHolds = 0;
+      live = false;
     }
   };
 };

@@ -6,8 +6,8 @@
 
 import { z } from "zod";
 import { hardwareProfileSchema } from "./hardware";
-import { DEFAULT_ENGINE_ID } from "./engines";
-import { DEFAULT_PTT_ACCELERATOR, DEFAULT_MEETING_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR } from "./hotkeys";
+import { DEFAULT_ENGINE_ID, DEFAULT_OPENROUTER_TRANSCRIPTION_MODEL } from "./engines";
+import { DEFAULT_PTT_ACCELERATOR, DEFAULT_MEETING_ACCELERATOR, DEFAULT_TOGGLE_ACCELERATOR, DEFAULT_QUICK_NOTE_ACCELERATOR } from "./hotkeys";
 import {
   DEFAULT_WHISPER_MODEL_ID,
   MEETING_DEFAULT_WHISPER_MODEL_ID,
@@ -108,6 +108,11 @@ export const meetingSettingsSchema = z.object({
   retentionDays: z.number().int().min(0).max(3650).default(0)
 });
 
+export const microphoneSettingsSchema = z.object({
+  preferredDeviceId: z.string().nullable().default(null),
+  preferredLabel: z.string().nullable().default(null)
+});
+
 export const settingsSchema = z.object({
   version: z.literal(1).default(1),
   /** Whether the user has been notified once that close hides to the tray. */
@@ -144,6 +149,9 @@ export const settingsSchema = z.object({
   pttAccelerator: z.string().min(1).default(DEFAULT_PTT_ACCELERATOR),
   /** Toggle accelerator ("CommandOrControl+Shift+Space"). */
   toggleAccelerator: z.string().min(1).default(DEFAULT_TOGGLE_ACCELERATOR),
+  /** Toggle shortcut for saving a transcript directly as a note. */
+  quickNoteAccelerator: z.string().min(1).default(DEFAULT_QUICK_NOTE_ACCELERATOR),
+  microphone: microphoneSettingsSchema.default({ preferredDeviceId: null, preferredLabel: null }),
   /**
    * Parakeet is the default: local, private, and needs no API key. A fresh
    * profile lands on a real engine and shows "download the model", which is a
@@ -153,9 +161,14 @@ export const settingsSchema = z.object({
   engine: z
     .object({
       primary: z.string().min(1).default(DEFAULT_ENGINE_ID),
-      fallback: z.string().nullable().default(null)
+      fallback: z.string().nullable().default(null),
+      openrouterModelId: z.string().min(1).default(DEFAULT_OPENROUTER_TRANSCRIPTION_MODEL)
     })
-    .default({ primary: DEFAULT_ENGINE_ID, fallback: null }),
+    .default({
+      primary: DEFAULT_ENGINE_ID,
+      fallback: null,
+      openrouterModelId: DEFAULT_OPENROUTER_TRANSCRIPTION_MODEL
+    }),
   /** Catalog id of the whisper.cpp model the engine loads. */
   whisperModelId: z.string().min(1).default(DEFAULT_WHISPER_MODEL_ID),
   /** Catalog id of the parakeet model the engine loads. */
@@ -291,7 +304,12 @@ export const preferredSpeechLanguage = (
   return "auto";
 };
 
-export type Settings = z.infer<typeof settingsSchema>;
+type ParsedSettings = z.infer<typeof settingsSchema>;
+export type Settings = Omit<ParsedSettings, "engine"> & {
+  readonly engine: Omit<ParsedSettings["engine"], "openrouterModelId"> & {
+    readonly openrouterModelId?: string;
+  };
+};
 export type MeetingSettings = z.infer<typeof meetingSettingsSchema>;
 export type DictionaryEntry = z.infer<typeof dictionaryEntrySchema>;
 export type OnboardingState = z.infer<typeof onboardingSchema>;

@@ -59,6 +59,7 @@ const WINDOW_LOAD_TIMEOUT_MS = 15_000;
 
 export interface MeetingSessionOptions {
   readonly settings: () => MeetingSettings;
+  readonly microphoneDeviceId?: () => string | null;
   readonly speechLanguage: () => string;
   readonly store: MeetingStore | null;
   readonly worker: MeetingWorkerClient;
@@ -693,7 +694,7 @@ export const createMeetingSession = (options: MeetingSessionOptions): MeetingSes
         includeMicrophone: settings.includeMicrophone,
         archiveAudio: settings.archiveAudio,
         archiveBitrateKbps: settings.archiveBitrateKbps,
-        microphoneDeviceId: null
+        microphoneDeviceId: options.microphoneDeviceId?.() ?? null
       });
       // getDisplayMedia needs transient user activation and a hotkey-started
       // meeting has none. executeJavaScript with userGesture is the only

@@ -6,6 +6,7 @@ export const es: Partial<Record<MessageKey, unknown>> = {
   "nav.dictate": "Dictado",
   "nav.meetings": "Reuniones",
   "nav.history": "Historial",
+  "nav.notes": "Notas",
   "nav.dictionary": "Diccionario",
   "nav.models": "Modelos",
   "nav.settings": "Ajustes",

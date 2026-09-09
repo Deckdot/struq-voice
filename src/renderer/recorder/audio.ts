@@ -89,8 +89,21 @@ export const initCaptureSounds = (api: RecorderWindowApi): void => {
 const currentDeviceId = (): string | null =>
   localStorage.getItem("struq.audio.deviceId");
 
-const persistDeviceId = (deviceId: string): void => {
-  localStorage.setItem("struq.audio.deviceId", deviceId);
+const currentDeviceLabel = (): string | null =>
+  localStorage.getItem("struq.audio.deviceLabel");
+
+const persistDeviceId = (deviceId: string | null): void => {
+  if (deviceId === null) {
+    localStorage.removeItem("struq.audio.deviceId");
+    localStorage.removeItem("struq.audio.deviceLabel");
+  } else {
+    localStorage.setItem("struq.audio.deviceId", deviceId);
+  }
+};
+
+const persistDeviceLabel = (label: string | null): void => {
+  if (label === null) localStorage.removeItem("struq.audio.deviceLabel");
+  else localStorage.setItem("struq.audio.deviceLabel", label);
 };
 
 /** Enumerate audio input devices, labels included once a stream exists. */
@@ -105,12 +118,16 @@ export const listAudioDevices = async (): Promise<RecorderDevice[]> => {
 };
 
 /** Switch to another microphone and re-acquire the warm stream. */
-const switchDevice = (api: RecorderWindowApi, deviceId: string): void => {
+const switchDevice = (api: RecorderWindowApi, deviceId: string | null): void => {
   if (currentDeviceId() === deviceId && current !== null) return;
-  persistDeviceId(deviceId);
-  api.sendStreamState({ live: false, reason: "Microphone device changed" });
-  teardown();
-  void buildPipeline(api);
+  void listAudioDevices().then((devices) => {
+    const selected = deviceId === null ? null : devices.find((device) => device.deviceId === deviceId);
+    persistDeviceId(deviceId);
+    persistDeviceLabel(selected?.label ?? (deviceId === null ? null : currentDeviceLabel()));
+    api.sendStreamState({ live: false, reason: "Microphone device changed" });
+    teardown();
+    void buildPipeline(api);
+  });
 };
 
 const teardown = (): void => {
@@ -176,7 +193,7 @@ const acquireStream = async (): Promise<MediaStream> => {
       echoCancellation: false,
       noiseSuppression: false,
       autoGainControl: true,
-      ...(deviceId !== undefined ? { deviceId } : {})
+      ...(deviceId !== undefined ? { deviceId: { exact: deviceId } } : {})
     }
   };
   return navigator.mediaDevices.getUserMedia(constraints);
@@ -411,7 +428,20 @@ const handleDeviceChange = async (api: RecorderWindowApi): Promise<void> => {
     (device) => device.deviceId === currentTrack.getSettings().deviceId
   );
   if (!stillExists) {
-    // The chosen device disappeared. Re-acquire to follow the default.
+    const savedLabel = currentDeviceLabel();
+    const matches = savedLabel === null
+      ? []
+      : inputs.filter((device) => (device.label || device.deviceId) === savedLabel);
+    if (matches.length === 1) {
+      persistDeviceId(matches[0]?.deviceId ?? null);
+      api.sendStreamState({ live: false, reason: "Microphone device reconnected" });
+      teardown();
+      void buildPipeline(api);
+      return;
+    }
+    // The chosen device disappeared. A missing or ambiguous label falls back
+    // to the Windows default while retaining the label for a future match.
+    localStorage.removeItem("struq.audio.deviceId");
     api.sendStreamState({ live: false, reason: "Microphone device changed" });
     teardown();
     void buildPipeline(api);
